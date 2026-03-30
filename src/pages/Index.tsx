@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { LayoutDashboard, Scale } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import PainelGestor from './PainelGestor';
 import PainelBalanca from './PainelBalanca';
+import CriarOrdem from './CriarOrdem';
 
 const tabs = [
   { id: 'gestor', label: 'Painel do Gestor', icon: LayoutDashboard },
+  { id: 'criar', label: 'Nova Ordem', icon: PlusCircle },
   { id: 'balanca1', label: 'Balança 1', icon: Scale },
   { id: 'balanca2', label: 'Balança 2', icon: Scale },
 ] as const;
