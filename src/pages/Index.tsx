@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { LayoutDashboard, Scale } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import PainelGestor from './PainelGestor';
 import PainelBalanca from './PainelBalanca';
+import CriarOrdem from './CriarOrdem';
 
 const tabs = [
   { id: 'gestor', label: 'Painel do Gestor', icon: LayoutDashboard },
+  { id: 'criar', label: 'Nova Ordem', icon: PlusCircle },
   { id: 'balanca1', label: 'Balança 1', icon: Scale },
   { id: 'balanca2', label: 'Balança 2', icon: Scale },
 ] as const;
@@ -49,6 +51,7 @@ export default function Index() {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === 'gestor' && <PainelGestor />}
+        {activeTab === 'criar' && <CriarOrdem />}
         {activeTab === 'balanca1' && <PainelBalanca balanca={1} />}
         {activeTab === 'balanca2' && <PainelBalanca balanca={2} />}
       </main>
