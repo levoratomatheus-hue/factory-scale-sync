@@ -51,6 +51,7 @@ export default function Index() {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === 'gestor' && <PainelGestor />}
+        {activeTab === 'criar' && <CriarOrdem />}
         {activeTab === 'balanca1' && <PainelBalanca balanca={1} />}
         {activeTab === 'balanca2' && <PainelBalanca balanca={2} />}
       </main>
