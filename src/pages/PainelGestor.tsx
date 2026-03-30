@@ -92,27 +92,51 @@ export default function PainelGestor() {
       <div>
         <h2 className="text-lg font-semibold mb-3">Status por Balança</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2].map(balanca => (
-            <div key={balanca} className="bg-card rounded-lg border p-4">
-              <h3 className="font-semibold text-sm text-muted-foreground mb-3">Balança {balanca}</h3>
-              <div className="space-y-2">
-                {ordensPorBalanca(balanca).length === 0 && (
-                  <p className="text-sm text-muted-foreground">Nenhuma ordem</p>
-                )}
-                {ordensPorBalanca(balanca).map(ordem => (
-                  <div key={ordem.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Lote {ordem.lote} · {ordem.quantidade} kg
-                      </div>
+          {[1, 2].map(balanca => {
+            const balancaOrdens = ordensPorBalanca(balanca);
+            const atual = balancaOrdens.find(o => o.status === 'Em Pesagem');
+            return (
+              <div key={balanca} className="bg-card rounded-lg border overflow-hidden">
+                <div className="px-4 pt-4 pb-2">
+                  <h3 className="font-semibold text-sm text-muted-foreground">Balança {balanca}</h3>
+                </div>
+
+                {/* Ordem atual em destaque */}
+                {atual ? (
+                  <div className="mx-4 mb-4 rounded-lg border-2 border-status-weighing/40 bg-status-weighing-bg p-4 space-y-1">
+                    <StatusBadge status="Em Pesagem" />
+                    <div className="text-lg font-bold leading-tight mt-2">{atual.produto}</div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-extrabold text-primary">{atual.quantidade} kg</span>
+                      <span className="text-sm text-muted-foreground">· Lote {atual.lote}</span>
                     </div>
-                    <StatusBadge status={ordem.status} className="ml-2 shrink-0" />
                   </div>
-                ))}
+                ) : (
+                  <div className="mx-4 mb-4 rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    Nenhuma ordem em pesagem
+                  </div>
+                )}
+
+                {/* Lista completa */}
+                <div className="px-4 pb-4 space-y-3">
+                  {balancaOrdens.length === 0 && (
+                    <p className="text-sm text-muted-foreground">Nenhuma ordem</p>
+                  )}
+                  {balancaOrdens.map(ordem => (
+                    <div key={ordem.id} className="flex items-center justify-between py-3 px-3 rounded-md bg-muted/50 border">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold truncate">{ordem.produto}</div>
+                        <div className="text-sm text-muted-foreground mt-0.5">
+                          Lote {ordem.lote} · {ordem.quantidade} kg
+                        </div>
+                      </div>
+                      <StatusBadge status={ordem.status} className="ml-3 shrink-0" />
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
