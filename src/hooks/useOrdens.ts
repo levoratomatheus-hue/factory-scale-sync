@@ -86,7 +86,7 @@ export function useHistorico() {
 
   useEffect(() => {
     const fetch = async () => {
-      const { data, error } = await supabase.from("ordens").select("*").order("numero", { ascending: false }); // mais recentes primeiro
+      const { data, error } = await supabase.from("ordens").select("*").order("criado_em", { ascending: false });
       if (!error && data) setOrdens(data);
       setLoading(false);
     };
