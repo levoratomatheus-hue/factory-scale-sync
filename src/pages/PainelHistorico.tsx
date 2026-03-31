@@ -49,7 +49,7 @@ export default function PainelHistorico() {
             )}
             {ordens.map(ordem => (
               <tr key={ordem.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-mono text-muted-foreground">#{ordem.numero}</td>
+                <td className="px-4 py-3 font-mono text-muted-foreground">{ordem.id.slice(0, 6)}</td>
                 <td className="px-4 py-3 font-medium">{ordem.lote}</td>
                 <td className="px-4 py-3">{ordem.produto}</td>
                 <td className="px-4 py-3">{ordem.quantidade} kg</td>
