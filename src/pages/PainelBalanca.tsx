@@ -11,7 +11,7 @@ interface PainelBalancaProps {
 }
 
 export default function PainelBalanca({ balanca }: PainelBalancaProps) {
-  const { ordens, loading, concluirOrdem, initBalanca } = useOrdens();
+  const { ordens, loading, concluirOrdem } = useOrdens();
 
   const balancaOrdens = ordens.filter(o => o.balanca === balanca);
   const concluidas = balancaOrdens.filter(o => o.status === 'Concluído');
