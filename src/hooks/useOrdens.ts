@@ -12,13 +12,11 @@ export function useOrdens(date?: string) {
     let query = supabase
       .from('ordens')
       .select('*')
-      .order('numero', { ascending: true });
+      .order('criado_em', { ascending: true });
 
     if (date) {
-      // Painel do Gestor — filtra pelo dia selecionado
       query = query.eq('data_programacao', today);
     } else {
-      // Balança — mostra tudo que ainda não foi concluído, qualquer dia
       query = query.neq('status', 'Concluído');
     }
 
@@ -59,4 +57,38 @@ export function useOrdens(date?: string) {
     const nextOrder = ordens.find(
       o => o.balanca === ordem.balanca && o.status === 'Em Aberto' && o.id !== ordemId
     );
-    if (nextOr
+    if (nextOrder) {
+      await supabase
+        .from('ordens')
+        .update({ status: 'Em Pesagem' })
+        .eq('id', nextOrder.id);
+
+      await supabase.from('historico').insert({
+        ordem_id: nextOrder.id,
+        status_anterior: 'Em Aberto',
+        status_novo: 'Em Pesagem',
+      });
+    }
+  };
+
+  return { ordens, loading, concluirOrdem, refetch: fetchOrdens };
+}
+
+export function useHistorico() {
+  const [ordens, setOrdens] = useState<Ordem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetch = async () => {
+      const { data, error } = await supabase
+        .from('ordens')
+        .select('*')
+        .order('criado_em', { ascending: false });
+      if (!error && data) setOrdens(data);
+      setLoading(false);
+    };
+    fetch();
+  }, []);
+
+  return { ordens, loading };
+}
