@@ -21,11 +21,6 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const concluidasCount = concluidas.length;
   const progress = total > 0 ? (concluidasCount / total) * 100 : 0;
 
-  useEffect(() => {
-    if (!loading && balancaOrdens.length > 0) {
-      initBalanca(balanca);
-    }
-  }, [loading, balancaOrdens.length, balanca, initBalanca]);
 
   if (loading) {
     return (
