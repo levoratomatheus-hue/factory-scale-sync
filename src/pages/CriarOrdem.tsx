@@ -8,13 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, Search } from 'lucide-react';
 import { format } from 'date-fns';
 
 const ordemSchema = z.object({
-  lote: z.string().trim().min(1, 'Lote é obrigatório').max(50, 'Máximo 50 caracteres'),
-  produto: z.string().trim().min(1, 'Produto é obrigatório').max(200, 'Máximo 200 caracteres'),
-  quantidade: z.coerce.number().positive('Quantidade deve ser positiva').max(999999, 'Valor muito alto'),
+  lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
+  produto: z.string().trim().min(1, 'Produto é obrigatório').max(200),
+  quantidade: z.coerce.number().positive('Quantidade deve ser positiva').max(999999),
   linha: z.string().min(1, 'Selecione a linha'),
   balanca: z.string().min(1, 'Selecione a balança'),
 });
@@ -23,11 +23,40 @@ type OrdemFormValues = z.infer<typeof ordemSchema>;
 
 export default function CriarOrdem() {
   const [saving, setSaving] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+  const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
     defaultValues: { lote: '', produto: '', quantidade: 0, linha: '', balanca: '' },
   });
+
+  const buscarLote = async () => {
+    const lote = form.getValues('lote').trim();
+    if (!lote) return;
+
+    setBuscando(true);
+    setLoteEncontrado(null);
+
+    const { data, error } = await supabase
+      .from('cadastro_lotes' as any)
+      .select('produto, quantidade')
+      .eq('lote', lote)
+      .single();
+
+    setBuscando(false);
+
+    if (error || !data) {
+      setLoteEncontrado(false);
+      toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
+      return;
+    }
+
+    form.setValue('produto', (data as any).produto);
+    form.setValue('quantidade', (data as any).quantidade);
+    setLoteEncontrado(true);
+    toast({ title: 'Lote encontrado!', description: (data as any).produto });
+  };
 
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
@@ -47,6 +76,7 @@ export default function CriarOrdem() {
     } else {
       toast({ title: 'Ordem criada com sucesso!' });
       form.reset();
+      setLoteEncontrado(null);
     }
   };
 
@@ -60,7 +90,24 @@ export default function CriarOrdem() {
             <FormField control={form.control} name="lote" render={({ field }) => (
               <FormItem>
                 <FormLabel>Lote</FormLabel>
-                <FormControl><Input placeholder="Ex: 31706" {...field} /></FormControl>
+                <div className="flex gap-2">
+                  <FormControl>
+                    <Input
+                      placeholder="Ex: 31706"
+                      {...field}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarLote())}
+                    />
+                  </FormControl>
+                  <Button type="button" variant="outline" size="icon" onClick={buscarLote} disabled={buscando}>
+                    {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {loteEncontrado === true && (
+                  <p className="text-xs text-status-done">✓ Produto e quantidade preenchidos automaticamente</p>
+                )}
+                {loteEncontrado === false && (
+                  <p className="text-xs text-muted-foreground">Lote não encontrado — preencha manualmente</p>
+                )}
                 <FormMessage />
               </FormItem>
             )} />

@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      cadastro_lotes: {
+        Row: {
+          classe: string | null
+          criado_em: string | null
+          id: string
+          lote: number
+          produto: string
+          quantidade: number
+        }
+        Insert: {
+          classe?: string | null
+          criado_em?: string | null
+          id?: string
+          lote: number
+          produto: string
+          quantidade?: number
+        }
+        Update: {
+          classe?: string | null
+          criado_em?: string | null
+          id?: string
+          lote?: number
+          produto?: string
+          quantidade?: number
+        }
+        Relationships: []
+      }
       historico: {
         Row: {
           alterado_em: string | null

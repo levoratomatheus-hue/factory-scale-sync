@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 interface MetricCardProps {
   title: string;
-  value: number;
+  value: number | string;
   variant: 'default' | 'open' | 'weighing' | 'done';
   icon: React.ReactNode;
 }
