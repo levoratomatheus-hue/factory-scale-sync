@@ -1,15 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
-type Ordem = Tables<"ordens">;
 
 export function useOrdens(date?: string) {
-  const [ordens, setOrdens] = useState<Ordem[]>([]);
+  const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const today = date || new Date().toISOString().split("T")[0];
 
   const fetchOrdens = useCallback(async () => {
-    let query = supabase.from("ordens").select("*").order("numero", { ascending: true });
+    let query = supabase.from("ordens").select("*").order("criado_em", { ascending: true });
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -65,20 +63,19 @@ export function useOrdens(date?: string) {
   };
 
   const initBalanca = useCallback(async (balanca: number) => {
-    // Busca direto do banco para não depender do estado local
     const { data } = await supabase
       .from("ordens")
       .select("*")
       .eq("balanca", balanca)
       .neq("status", "Concluído")
-      .order("numero", { ascending: true });
+      .order("criado_em", { ascending: true });
 
     if (!data || data.length === 0) return;
 
-    const hasEmPesagem = data.some((o) => o.status === "Em Pesagem");
+    const hasEmPesagem = data.some((o: any) => o.status === "Em Pesagem");
     if (hasEmPesagem) return;
 
-    const firstOpen = data.find((o) => o.status === "Em Aberto");
+    const firstOpen = data.find((o: any) => o.status === "Em Aberto");
     if (!firstOpen) return;
 
     await supabase.from("ordens").update({ status: "Em Pesagem" }).eq("id", firstOpen.id);
@@ -93,14 +90,13 @@ export function useOrdens(date?: string) {
   return { ordens, loading, concluirOrdem, initBalanca };
 }
 
-// Hook separado para o Histórico global
 export function useHistorico() {
-  const [ordens, setOrdens] = useState<Ordem[]>([]);
+  const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetch = async () => {
-      const { data, error } = await supabase.from("ordens").select("*").order("numero", { ascending: false });
+      const { data, error } = await supabase.from("ordens").select("*").order("criado_em", { ascending: false });
       if (!error && data) setOrdens(data);
       setLoading(false);
     };
