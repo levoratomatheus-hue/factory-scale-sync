@@ -1,26 +1,34 @@
-import { useEffect } from 'react';
-import { useOrdens } from '@/hooks/useOrdens';
-import { StatusBadge } from '@/components/StatusBadge';
-import { CheckCircle2, Loader2, Scale } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
+import { useEffect, useRef } from "react";
+import { useOrdens } from "@/hooks/useOrdens";
+import { StatusBadge } from "@/components/StatusBadge";
+import { CheckCircle2, Loader2, Scale } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 
 interface PainelBalancaProps {
   balanca: number;
 }
 
 export default function PainelBalanca({ balanca }: PainelBalancaProps) {
-  const { ordens, loading, concluirOrdem } = useOrdens();
+  const { ordens, loading, concluirOrdem, initBalanca } = useOrdens();
+  const iniciado = useRef(false);
 
-  const balancaOrdens = ordens.filter(o => o.balanca === balanca);
-  const concluidas = balancaOrdens.filter(o => o.status === 'Concluído');
-  const emPesagem = balancaOrdens.find(o => o.status === 'Em Pesagem');
-  const emAberto = balancaOrdens.filter(o => o.status === 'Em Aberto');
+  const balancaOrdens = ordens.filter((o) => o.balanca === balanca);
+  const concluidas = balancaOrdens.filter((o) => o.status === "Concluído");
+  const emPesagem = balancaOrdens.find((o) => o.status === "Em Pesagem");
+  const emAberto = balancaOrdens.filter((o) => o.status === "Em Aberto");
   const total = balancaOrdens.length;
   const concluidasCount = concluidas.length;
   const progress = total > 0 ? (concluidasCount / total) * 100 : 0;
 
+  useEffect(() => {
+    // Só inicia uma vez, depois que os dados carregaram e tem ordens
+    if (!loading && balancaOrdens.length > 0 && !iniciado.current) {
+      iniciado.current = true;
+      initBalanca(balanca);
+    }
+  }, [loading, balancaOrdens.length]);
 
   if (loading) {
     return (
@@ -41,12 +49,14 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       <div className="bg-card rounded-lg border p-4">
         <div className="flex justify-between text-sm mb-2">
           <span className="text-muted-foreground">Progresso</span>
-          <span className="font-semibold">{concluidasCount}/{total} concluídas</span>
+          <span className="font-semibold">
+            {concluidasCount}/{total} concluídas
+          </span>
         </div>
         <Progress value={progress} className="h-3" />
       </div>
 
-      {/* Current order */}
+      {/* Ordem atual em pesagem */}
       {emPesagem ? (
         <div className="bg-card rounded-xl border-2 border-status-weighing/40 p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -68,9 +78,22 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
         </div>
       ) : (
         <div className="bg-card rounded-xl border p-6 text-center text-muted-foreground">
-          {total === concluidasCount && total > 0
-            ? '🎉 Todas as ordens foram concluídas!'
-            : 'Nenhuma ordem em pesagem'}
+          {total === concluidasCount && total > 0 ? (
+            "🎉 Todas as ordens foram concluídas!"
+          ) : (
+            <div className="space-y-3">
+              <p>Nenhuma ordem em pesagem</p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  iniciado.current = false;
+                  initBalanca(balanca);
+                }}
+              >
+                Iniciar fila
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -101,8 +124,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
         <div>
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Concluídas</h2>
           <div className="space-y-2">
-            {concluidas.map(ordem => (
-              <div key={ordem.id} className={cn('bg-card rounded-lg border p-3 flex items-center gap-3 opacity-50')}>
+            {concluidas.map((ordem) => (
+              <div key={ordem.id} className={cn("bg-card rounded-lg border p-3 flex items-center gap-3 opacity-50")}>
                 <CheckCircle2 className="h-5 w-5 text-status-done shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate line-through">{ordem.produto}</div>
