@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { LayoutDashboard, Scale, PlusCircle, History } from "lucide-react";
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PainelGestor from "./PainelGestor";
 import PainelBalanca from "./PainelBalanca";
 import CriarOrdem from "./CriarOrdem";
 import PainelHistorico from "./PainelHistorico";
+import ImportarProgramacao from "./ImportarProgramacao";
 
 const tabs = [
   { id: "gestor", label: "Painel do Gestor", icon: LayoutDashboard },
@@ -12,6 +13,7 @@ const tabs = [
   { id: "balanca1", label: "Balança 1", icon: Scale },
   { id: "balanca2", label: "Balança 2", icon: Scale },
   { id: "historico", label: "Histórico", icon: History },
+  { id: "importar", label: "Importar", icon: FileUp },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -53,6 +55,7 @@ export default function Index() {
         {activeTab === "balanca1" && <PainelBalanca balanca={1} />}
         {activeTab === "balanca2" && <PainelBalanca balanca={2} />}
         {activeTab === "historico" && <PainelHistorico />}
+        {activeTab === "importar" && <ImportarProgramacao />}
       </main>
     </div>
   );
