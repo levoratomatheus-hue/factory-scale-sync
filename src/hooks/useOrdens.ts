@@ -22,8 +22,9 @@ export function useOrdens(date?: string) {
 
   useEffect(() => {
     fetchOrdens();
+    const channelName = `ordens-realtime-${date ?? "all"}-${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
-      .channel("ordens-realtime")
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         fetchOrdens();
       })
