@@ -1,12 +1,12 @@
-import { useHistorico } from '@/hooks/useOrdens';
-import { StatusBadge } from '@/components/StatusBadge';
-import { Loader2, History } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { useHistorico } from "@/hooks/useOrdens";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Loader2, History } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function PainelHistorico() {
   const { ordens, loading } = useHistorico();
-
+  if (erro) return <div className="p-4 text-red-500">Erro: {erro}</div>;
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -47,7 +47,7 @@ export default function PainelHistorico() {
                 </td>
               </tr>
             )}
-            {ordens.map(ordem => (
+            {ordens.map((ordem) => (
               <tr key={ordem.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3 font-mono text-muted-foreground">{ordem.id.slice(0, 6)}</td>
                 <td className="px-4 py-3 font-medium">{ordem.lote}</td>
@@ -56,7 +56,7 @@ export default function PainelHistorico() {
                 <td className="px-4 py-3">L{ordem.linha}</td>
                 <td className="px-4 py-3">B{ordem.balanca}</td>
                 <td className="px-4 py-3">
-                  {format(new Date(ordem.data_programacao), 'dd/MM/yyyy', { locale: ptBR })}
+                  {format(new Date(ordem.data_programacao), "dd/MM/yyyy", { locale: ptBR })}
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={ordem.status} />
