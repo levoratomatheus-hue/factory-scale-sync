@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function PainelHistorico() {
-  const { ordens, loading } = useHistorico();
+  const { ordens, loading, erro } = useHistorico();
   if (erro) return <div className="p-4 text-red-500">Erro: {erro}</div>;
   if (loading) {
     return (
