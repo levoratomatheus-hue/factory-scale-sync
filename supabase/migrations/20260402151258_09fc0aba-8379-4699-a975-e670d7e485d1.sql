@@ -1,0 +1,1 @@
+ALTER TABLE public.ordens ADD COLUMN IF NOT EXISTS posicao integer;

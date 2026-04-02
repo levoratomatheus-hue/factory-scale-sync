@@ -82,6 +82,7 @@ export type Database = {
           id: string
           linha: number
           lote: string
+          posicao: number | null
           produto: string
           quantidade: number
           status: string
@@ -94,6 +95,7 @@ export type Database = {
           id?: string
           linha: number
           lote: string
+          posicao?: number | null
           produto: string
           quantidade: number
           status?: string
@@ -106,6 +108,7 @@ export type Database = {
           id?: string
           linha?: number
           lote?: string
+          posicao?: number | null
           produto?: string
           quantidade?: number
           status?: string
