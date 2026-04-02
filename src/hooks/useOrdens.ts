@@ -96,9 +96,11 @@ export function useHistorico() {
 
   useEffect(() => {
     const fetch = async () => {
-      const { data, error } = await supabase.from("ordens").select("*").order("criado_em", { ascending: false });
-      if (!error && data) setOrdens(data);
-      setLoading(false);
+      const { data, error } = await supabase
+        .from("ordens")
+        .select("*")
+        .eq("status", "Concluído") // <- adiciona esta linha
+        .order("criado_em", { ascending: false });
     };
     fetch();
     const channel = supabase
