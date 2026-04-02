@@ -93,7 +93,6 @@ export function useOrdens(date?: string) {
 export function useHistorico() {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -103,19 +102,18 @@ export function useHistorico() {
         .eq("status", "Concluído")
         .order("criado_em", { ascending: false });
 
-      console.log("Historico data:", data);
-      console.log("Historico error:", error);
-
-      if (error) {
-        setErro(error.message);
-        setLoading(false);
-        return;
-      }
-      setOrdens(data || []);
+      if (!error && data) setOrdens(data);
       setLoading(false);
     };
     fetch();
+    const channel = supabase
+      .channel("historico-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetch)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  return { ordens, loading, erro };
+  return { ordens, loading };
 }
