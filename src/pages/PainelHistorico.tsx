@@ -5,7 +5,8 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function PainelHistorico() {
-  const { ordens, loading } = useHistorico();
+  const { ordens, loading, erro } = useHistorico();
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
