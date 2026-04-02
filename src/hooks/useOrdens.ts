@@ -7,7 +7,7 @@ export function useOrdens(date?: string) {
   const today = date || new Date().toISOString().split("T")[0];
 
   const fetchOrdens = useCallback(async () => {
-    let query = supabase.from("ordens").select("*").order("criado_em", { ascending: true });
+    let query = supabase.from("ordens").select("*").order("posicao", { ascending: true, nullsFirst: false });
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -68,7 +68,7 @@ export function useOrdens(date?: string) {
       .select("*")
       .eq("balanca", balanca)
       .neq("status", "Concluído")
-      .order("criado_em", { ascending: true });
+      .order("posicao", { ascending: true, nullsFirst: false });
 
     if (!data || data.length === 0) return;
 
@@ -100,8 +100,7 @@ export function useHistorico() {
         .from("ordens")
         .select("*")
         .eq("status", "Concluído")
-        .order("criado_em", { ascending: false });
-
+        .order("data_conclusao", { ascending: false });
       if (!error && data) setOrdens(data);
       setLoading(false);
     };
