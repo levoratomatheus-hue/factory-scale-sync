@@ -139,6 +139,26 @@ export default function PainelGestor() {
         />
       </div>
 
+      {/* Pendentes de dias anteriores */}
+      {pendentesAnteriores.length > 0 && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4">
+          <h3 className="font-semibold text-sm text-destructive mb-2">⚠️ Pendentes de dias anteriores</h3>
+          <div className="space-y-2">
+            {pendentesAnteriores.map((ordem) => (
+              <div key={ordem.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-background border">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium truncate">{ordem.produto}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Lote {ordem.lote} · {ordem.quantidade} kg · {format(new Date(ordem.data_programacao), "dd/MM/yyyy")}
+                  </div>
+                </div>
+                <StatusBadge status={ordem.status} className="ml-2 shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Aviso pendências */}
       {isPassado && emAberto > 0 && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-3 text-sm text-destructive font-medium">
