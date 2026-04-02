@@ -1,13 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { MetricCard } from "@/components/MetricCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ClipboardList, CheckCircle2, Loader2, Clock, CalendarIcon, TrendingUp } from "lucide-react";
+import {
+  ClipboardList,
+  CheckCircle2,
+  Loader2,
+  Clock,
+  CalendarIcon,
+  TrendingUp,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import { format, isToday, isPast, isFuture } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 export default function PainelGestor() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -22,12 +34,40 @@ export default function PainelGestor() {
   const concluidas = ordens.filter((o) => o.status === "Concluído").length;
   const emPesagem = ordens.filter((o) => o.status === "Em Pesagem").length;
   const emAberto = ordens.filter((o) => o.status === "Em Aberto").length;
-
-  // Taxa de conclusão para dias passados
   const taxaConclusao = total > 0 ? Math.round((concluidas / total) * 100) : 0;
 
   const ordensPorLinha = (linha: number) => ordens.filter((o) => o.linha === linha);
-  const ordensPorBalanca = (balanca: number) => ordens.filter((o) => o.balanca === balanca);
+  const ordensPorBalanca = (balanca: number) =>
+    ordens
+      .filter((o) => o.balanca === balanca && o.status !== "Concluído")
+      .sort((a, b) => (a.posicao ?? 999) - (b.posicao ?? 999));
+
+  const removerOrdem = async (ordemId: string) => {
+    if (!confirm("Tem certeza que deseja remover esta ordem?")) return;
+    const { error } = await supabase.from("ordens").delete().eq("id", ordemId);
+    if (error) {
+      toast({ title: "Erro ao remover ordem", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Ordem removida com sucesso!" });
+    }
+  };
+
+  const moverOrdem = async (ordemId: string, direcao: "up" | "down", balanca: number) => {
+    const fila = ordensPorBalanca(balanca);
+    const idx = fila.findIndex((o) => o.id === ordemId);
+    if (idx === -1) return;
+    if (direcao === "up" && idx === 0) return;
+    if (direcao === "down" && idx === fila.length - 1) return;
+
+    const outro = direcao === "up" ? fila[idx - 1] : fila[idx + 1];
+    const atual = fila[idx];
+
+    const posAtual = atual.posicao ?? idx + 1;
+    const posOutro = outro.posicao ?? (direcao === "up" ? idx : idx + 2);
+
+    await supabase.from("ordens").update({ posicao: posOutro }).eq("id", atual.id);
+    await supabase.from("ordens").update({ posicao: posAtual }).eq("id", outro.id);
+  };
 
   if (loading) {
     return (
@@ -63,20 +103,15 @@ export default function PainelGestor() {
         </Popover>
       </div>
 
-      {/* KPIs — variam conforme o dia selecionado */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* Total sempre aparece */}
         <MetricCard
           title="Total programado"
           value={total}
           variant="default"
           icon={<ClipboardList className="h-4 w-4" />}
         />
-
-        {/* Concluídas — sempre aparece */}
         <MetricCard title="Concluídas" value={concluidas} variant="done" icon={<CheckCircle2 className="h-4 w-4" />} />
-
-        {/* Hoje: Em Pesagem | Passado: Taxa de conclusão | Futuro: Previstas */}
         {isHoje && (
           <MetricCard title="Em Pesagem" value={emPesagem} variant="weighing" icon={<Loader2 className="h-4 w-4" />} />
         )}
@@ -91,8 +126,6 @@ export default function PainelGestor() {
         {isFuturo && (
           <MetricCard title="Previstas" value={total} variant="weighing" icon={<TrendingUp className="h-4 w-4" />} />
         )}
-
-        {/* Hoje e futuro: Em Aberto | Passado: Não concluídas */}
         <MetricCard
           title={isPassado ? "Não concluídas" : "Em Aberto"}
           value={emAberto}
@@ -101,7 +134,7 @@ export default function PainelGestor() {
         />
       </div>
 
-      {/* Aviso de dia passado com pendências */}
+      {/* Aviso pendências */}
       {isPassado && emAberto > 0 && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-3 text-sm text-destructive font-medium">
           ⚠️ {emAberto} ordem{emAberto > 1 ? "s" : ""} não {emAberto > 1 ? "foram concluídas" : "foi concluída"} neste
@@ -135,48 +168,77 @@ export default function PainelGestor() {
         </div>
       </div>
 
-      {/* Status por Balança */}
+      {/* Fila por Balança — com reordenar e remover */}
       <div>
-        <h2 className="text-lg font-semibold mb-3">Status por Balança</h2>
+        <h2 className="text-lg font-semibold mb-3">Fila por Balança</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2].map((balanca) => {
-            const balancaOrdens = ordensPorBalanca(balanca);
-            const atual = balancaOrdens.find((o) => o.status === "Em Pesagem");
+            const fila = ordensPorBalanca(balanca);
+            const atual = fila.find((o) => o.status === "Em Pesagem");
             return (
               <div key={balanca} className="bg-card rounded-lg border overflow-hidden">
                 <div className="px-4 pt-4 pb-2">
                   <h3 className="font-semibold text-sm text-muted-foreground">Balança {balanca}</h3>
                 </div>
 
+                {/* Ordem em pesagem */}
                 {atual ? (
-                  <div className="mx-4 mb-4 rounded-lg border-2 border-status-weighing/40 bg-status-weighing-bg p-4 space-y-1">
+                  <div className="mx-4 mb-3 rounded-lg border-2 border-status-weighing/40 bg-status-weighing-bg p-3 space-y-1">
                     <StatusBadge status="Em Pesagem" />
-                    <div className="text-lg font-bold leading-tight mt-2">{atual.produto}</div>
+                    <div className="text-base font-bold leading-tight mt-1">{atual.produto}</div>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-extrabold text-primary">{atual.quantidade} kg</span>
+                      <span className="text-xl font-extrabold text-primary">{atual.quantidade} kg</span>
                       <span className="text-sm text-muted-foreground">· Lote {atual.lote}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="mx-4 mb-4 rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                  <div className="mx-4 mb-3 rounded-lg border border-dashed p-3 text-center text-sm text-muted-foreground">
                     Nenhuma ordem em pesagem
                   </div>
                 )}
 
-                <div className="px-4 pb-4 space-y-3">
-                  {balancaOrdens.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem</p>}
-                  {balancaOrdens.map((ordem) => (
-                    <div
-                      key={ordem.id}
-                      className="flex items-center justify-between py-3 px-3 rounded-md bg-muted/50 border"
-                    >
+                {/* Fila com botões */}
+                <div className="px-4 pb-4 space-y-2">
+                  {fila.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem na fila</p>}
+                  {fila.map((ordem, idx) => (
+                    <div key={ordem.id} className="flex items-center gap-2 py-2 px-3 rounded-md bg-muted/50 border">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold truncate">{ordem.produto}</div>
-                        <div className="text-sm text-muted-foreground mt-0.5">
+                        <div className="text-xs text-muted-foreground">
                           Lote {ordem.lote} · {ordem.quantidade} kg
                         </div>
                       </div>
-                      <StatusBadge status={ordem.status} className="ml-3 shrink-0" />
+                      <StatusBadge status={ordem.status} className="shrink-0" />
+
+                      {/* Botões só para Em Aberto */}
+                      {ordem.status === "Em Aberto" && (
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <button
+                            onClick={() => moverOrdem(ordem.id, "up", balanca)}
+                            disabled={idx === 0 || (fila[0].status === "Em Pesagem" && idx === 1)}
+                            className="p-0.5 rounded hover:bg-muted disabled:opacity-30"
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => moverOrdem(ordem.id, "down", balanca)}
+                            disabled={idx === fila.length - 1}
+                            className="p-0.5 rounded hover:bg-muted disabled:opacity-30"
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Botão remover — Em Aberto e Em Pesagem */}
+                      {(ordem.status === "Em Aberto" || ordem.status === "Em Pesagem") && (
+                        <button
+                          onClick={() => removerOrdem(ordem.id)}
+                          className="p-1 rounded hover:bg-destructive/10 text-destructive shrink-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
