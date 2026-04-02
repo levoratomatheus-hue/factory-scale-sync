@@ -25,6 +25,11 @@ export default function PainelGestor() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { ordens, loading } = useOrdens(dateStr);
+  const { ordens: todasPendentes } = useOrdens();
+
+  const pendentesAnteriores = todasPendentes.filter(
+    (o) => o.data_programacao < dateStr && (o.status === "Em Aberto" || o.status === "Em Pesagem")
+  );
 
   const isHoje = isToday(selectedDate);
   const isPassado = isPast(selectedDate) && !isHoje;
