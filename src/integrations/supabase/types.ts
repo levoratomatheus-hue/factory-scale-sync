@@ -115,6 +115,30 @@ export type Database = {
         }
         Relationships: []
       }
+      perfis: {
+        Row: {
+          balanca: number | null
+          criado_em: string | null
+          id: string
+          nome: string
+          papel: string
+        }
+        Insert: {
+          balanca?: number | null
+          criado_em?: string | null
+          id: string
+          nome: string
+          papel?: string
+        }
+        Update: {
+          balanca?: number | null
+          criado_em?: string | null
+          id?: string
+          nome?: string
+          papel?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
