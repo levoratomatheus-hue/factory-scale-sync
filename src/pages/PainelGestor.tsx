@@ -211,7 +211,9 @@ export default function PainelGestor() {
                     <div className="text-base font-bold leading-tight mt-1">{atual.produto}</div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xl font-extrabold text-primary">{atual.quantidade} kg</span>
-                      <span className="text-sm text-muted-foreground">Lote {atual.lote}</span>
+                      <div className="text-sm text-muted-foreground">
+                        Lote {atual.lote} · {format(new Date(atual.data_programacao), 'dd/MM/yyyy')}
+                      </div>
                     </div>
                     <button onClick={() => removerOrdem(atual.id)} className="flex items-center gap-1 text-xs text-destructive hover:underline mt-1">
                       <Trash2 className="h-3 w-3" /> Remover
