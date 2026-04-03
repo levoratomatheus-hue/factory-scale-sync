@@ -43,7 +43,7 @@ export default function PainelGestor() {
 
   const ordensPorLinha = (linha: number) => ordens.filter((o) => o.linha === linha);
   const ordensPorBalanca = (balanca: number) =>
-    ordens
+    todasPendentes
       .filter((o) => o.balanca === balanca && o.status !== "Concluído")
       .sort((a, b) => (a.posicao ?? 999) - (b.posicao ?? 999));
 
