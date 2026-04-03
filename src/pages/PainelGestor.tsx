@@ -233,7 +233,9 @@ export default function PainelGestor() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold truncate">{ordem.produto}</div>
-                        <div className="text-xs text-muted-foreground">Lote {ordem.lote} · {ordem.quantidade} kg</div>
+                        <div className="text-xs text-muted-foreground">
+                          Lote {ordem.lote} · {ordem.quantidade} kg · {format(new Date(ordem.data_programacao), 'dd/MM/yyyy')}
+                        </div>
                       </div>
                       <div className="flex flex-col gap-0.5 shrink-0">
                         <button onClick={() => moverOrdem(ordem.id, "up", balanca)} disabled={idx === 0} className="p-0.5 rounded hover:bg-muted disabled:opacity-30">
