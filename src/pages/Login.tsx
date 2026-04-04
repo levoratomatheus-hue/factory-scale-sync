@@ -15,13 +15,16 @@ export default function Login() {
     setLoading(true);
     setErro('');
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: senha,
     });
 
+    console.log('data:', data);
+    console.log('error:', error);
+
     if (error) {
-      setErro('Email ou senha incorretos.');
+      setErro(error.message);
     }
 
     setLoading(false);
