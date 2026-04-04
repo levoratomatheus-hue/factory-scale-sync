@@ -16,12 +16,9 @@ export default function Login() {
     setErro('');
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: senha,
+      email: email.trim().toLowerCase(),
+      password: senha.trim(),
     });
-
-    console.log('data:', data);
-    console.log('error:', error);
 
     if (error) {
       setErro(error.message);
