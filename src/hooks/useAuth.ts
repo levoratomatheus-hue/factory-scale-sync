@@ -14,23 +14,36 @@ export function useAuth() {
 
   useEffect(() => {
     const fetchPerfil = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setLoading(false); return; }
 
-      const { data } = await supabase
-        .from('perfis')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+        const { data, error } = await supabase
+          .from('perfis')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
 
-      setPerfil(data as Perfil | null);
-      setLoading(false);
+        console.log('perfil data:', data);
+        console.log('perfil error:', error);
+
+        if (data) setPerfil(data as Perfil);
+        setLoading(false);
+      } catch (err) {
+        console.log('erro useAuth:', err);
+        setLoading(false);
+      }
     };
 
     fetchPerfil();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchPerfil();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        fetchPerfil();
+      } else {
+        setPerfil(null);
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
