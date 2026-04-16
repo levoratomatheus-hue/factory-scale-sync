@@ -25,6 +25,8 @@ export default function CriarOrdem() {
   const [saving, setSaving] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
+  const [formulaId, setFormulaId] = useState<string | null>(null);
+  const [quantidadeOP, setQuantidadeOP] = useState<number>(0);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
@@ -40,7 +42,7 @@ export default function CriarOrdem() {
 
     const { data, error } = await supabase
       .from('cadastro_lotes')
-      .select('produto, quantidade')
+      .select('produto, quantidade, formula_id')
       .eq('lote', Number(lote))
       .single();
 
@@ -52,10 +54,13 @@ export default function CriarOrdem() {
       return;
     }
 
-    form.setValue('produto', data.produto);
-    form.setValue('quantidade', data.quantidade);
+    const row = data as any;
+    form.setValue('produto', row.produto);
+    form.setValue('quantidade', row.quantidade);
+    setFormulaId(row.formula_id ?? null);
+    setQuantidadeOP(row.quantidade);
     setLoteEncontrado(true);
-    toast({ title: 'Lote encontrado!', description: (data as any).produto });
+    toast({ title: 'Lote encontrado!', description: row.produto });
   };
 
   const onSubmit = async (values: OrdemFormValues) => {
@@ -77,6 +82,8 @@ export default function CriarOrdem() {
       toast({ title: 'Ordem criada com sucesso!' });
       form.reset();
       setLoteEncontrado(null);
+      setFormulaId(null);
+      setQuantidadeOP(0);
     }
   };
 
