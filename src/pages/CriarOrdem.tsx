@@ -39,9 +39,9 @@ export default function CriarOrdem() {
     setLoteEncontrado(null);
 
     const { data, error } = await supabase
-      .from('cadastro_lotes' as any)
+      .from('cadastro_lotes')
       .select('produto, quantidade')
-      .eq('lote', lote)
+      .eq('lote', Number(lote))
       .single();
 
     setBuscando(false);
@@ -52,8 +52,8 @@ export default function CriarOrdem() {
       return;
     }
 
-    form.setValue('produto', (data as any).produto);
-    form.setValue('quantidade', (data as any).quantidade);
+    form.setValue('produto', data.produto);
+    form.setValue('quantidade', data.quantidade);
     setLoteEncontrado(true);
     toast({ title: 'Lote encontrado!', description: (data as any).produto });
   };
