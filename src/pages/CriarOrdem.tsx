@@ -132,14 +132,19 @@ export default function CriarOrdem() {
             )} />
 
             {loteEncontrado === true && (
-              <div>
-                <label className="text-sm font-medium">Tamanho de Batelada</label>
-                <Input
-                  type="number"
-                  value={tamanhoBatelada ?? ''}
-                  readOnly
-                  className="mt-1 bg-muted"
-                />
+              <div className="space-y-2">
+                <div>
+                  <label className="text-sm font-medium">Tamanho de Batelada</label>
+                  <Input
+                    type="number"
+                    value={tamanhoBatelada ?? ''}
+                    onChange={(e) => setTamanhoBatelada(e.target.value ? Number(e.target.value) : null)}
+                    className="mt-1"
+                  />
+                </div>
+                {tamanhoBatelada !== null && tamanhoBatelada > 0 && formulaId && (
+                  <p className="text-xs text-muted-foreground">Fórmula: <span className="font-medium text-foreground">{formulaId}</span></p>
+                )}
               </div>
             )}
 
