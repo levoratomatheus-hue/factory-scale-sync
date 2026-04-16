@@ -77,7 +77,9 @@ export default function CriarOrdem() {
       linha: parseInt(values.linha),
       balanca: parseInt(values.balanca),
       data_programacao: format(new Date(), 'yyyy-MM-dd'),
-    });
+      formula_id: formulaId,
+      tamanho_batelada: tamanhoBatelada,
+    } as any);
 
     setSaving(false);
 
