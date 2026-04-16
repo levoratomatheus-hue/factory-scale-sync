@@ -1,5 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
+import { useFormula } from "@/hooks/useFormula";
+import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CheckCircle2, Loader2, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,9 +16,34 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const { ordens, loading, concluirOrdem, initBalanca } = useOrdens();
   const iniciado = useRef(false);
 
+  const [formulaId, setFormulaId] = useState<string | null>(null);
+  const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
+
   const balancaOrdens = ordens.filter((o) => o.balanca === balanca);
+
   const concluidas = balancaOrdens.filter((o) => o.status === "Concluído");
   const emPesagem = balancaOrdens.find((o) => o.status === "Em Pesagem");
+
+  // Busca formula_id e tamanho_batelada do cadastro_lotes quando a ordem em pesagem muda
+  useEffect(() => {
+    if (!emPesagem?.lote) {
+      setFormulaId(null);
+      setTamanhoBatelada(null);
+      return;
+    }
+    supabase
+      .from("cadastro_lotes")
+      .select("formula_id, tamanho_batelada")
+      .eq("lote", Number(emPesagem.lote))
+      .single()
+      .then(({ data }) => {
+        const row = data as any;
+        setFormulaId(row?.formula_id ?? null);
+        setTamanhoBatelada(row?.tamanho_batelada ?? null);
+      });
+  }, [emPesagem?.lote]);
+
+  const { itens, loading: loadingFormula } = useFormula(formulaId, tamanhoBatelada);
   const emAberto = balancaOrdens.filter((o) => o.status === "Em Aberto");
   const total = balancaOrdens.length;
   const concluidasCount = concluidas.length;
@@ -67,6 +94,45 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
           <div className="text-4xl font-extrabold text-primary">
             {emPesagem.quantidade} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
+
+          {loadingFormula && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando fórmula...
+            </div>
+          )}
+
+          {itens.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">
+                Fórmula: <span className="text-foreground">{formulaId}</span>
+                {tamanhoBatelada && <span className="ml-2">· Batelada: {tamanhoBatelada} kg</span>}
+              </p>
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-3 py-2">Seq</th>
+                      <th className="text-left px-3 py-2">Matéria-Prima</th>
+                      <th className="text-left px-3 py-2">Un</th>
+                      <th className="text-right px-3 py-2">Qtd (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itens.map((item) => (
+                      <tr key={item.id} className="border-t">
+                        <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
+                        <td className="px-3 py-2 font-medium">{item.materia_prima}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? '-'}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{item.quantidade_kg}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <Button
             size="lg"
             className="w-full h-14 text-lg font-bold bg-status-done hover:bg-status-done/90 text-primary-foreground"
