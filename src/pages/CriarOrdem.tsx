@@ -27,6 +27,7 @@ export default function CriarOrdem() {
   const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
   const [formulaId, setFormulaId] = useState<string | null>(null);
   const [quantidadeOP, setQuantidadeOP] = useState<number>(0);
+  const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
@@ -42,12 +43,12 @@ export default function CriarOrdem() {
 
     const { data, error } = await supabase
       .from('cadastro_lotes')
-      .select('produto, quantidade, formula_id')
+      .select('produto, quantidade, formula_id, tamanho_batelada')
       .eq('lote', Number(lote))
       .single();
 
     setBuscando(false);
-    console.log('dados do lote:', data, 'erro:', error);
+    console.log('dados do lote:', JSON.stringify(data));
 
     if (error || !data) {
       setLoteEncontrado(false);
@@ -60,6 +61,7 @@ export default function CriarOrdem() {
     form.setValue('quantidade', row.quantidade);
     setFormulaId(row.formula_id ?? null);
     setQuantidadeOP(row.quantidade);
+    setTamanhoBatelada(row.tamanho_batelada ?? null);
     setLoteEncontrado(true);
     toast({ title: 'Lote encontrado!', description: row.produto });
   };
@@ -85,6 +87,7 @@ export default function CriarOrdem() {
       setLoteEncontrado(null);
       setFormulaId(null);
       setQuantidadeOP(0);
+      setTamanhoBatelada(null);
     }
   };
 
@@ -127,6 +130,18 @@ export default function CriarOrdem() {
                 <FormMessage />
               </FormItem>
             )} />
+
+            {loteEncontrado === true && (
+              <div>
+                <label className="text-sm font-medium">Tamanho de Batelada</label>
+                <Input
+                  type="number"
+                  value={tamanhoBatelada ?? ''}
+                  readOnly
+                  className="mt-1 bg-muted"
+                />
+              </div>
+            )}
 
             <FormField control={form.control} name="quantidade" render={({ field }) => (
               <FormItem>
