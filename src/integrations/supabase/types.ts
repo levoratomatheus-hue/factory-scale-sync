@@ -47,6 +47,39 @@ export type Database = {
         }
         Relationships: []
       }
+      formulas: {
+        Row: {
+          id: string
+          formula_id: string
+          produto: string | null
+          sequencia: number | null
+          materia_prima: string
+          fornecedor: string | null
+          unidade: string | null
+          percentual: number
+        }
+        Insert: {
+          id?: string
+          formula_id: string
+          produto?: string | null
+          sequencia?: number | null
+          materia_prima: string
+          fornecedor?: string | null
+          unidade?: string | null
+          percentual: number
+        }
+        Update: {
+          id?: string
+          formula_id?: string
+          produto?: string | null
+          sequencia?: number | null
+          materia_prima?: string
+          fornecedor?: string | null
+          unidade?: string | null
+          percentual?: number
+        }
+        Relationships: []
+      }
       historico: {
         Row: {
           alterado_em: string | null

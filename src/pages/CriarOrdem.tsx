@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { toast } from '@/hooks/use-toast';
 import { Save, Loader2, Search } from 'lucide-react';
 import { format } from 'date-fns';
+import { useFormula } from '@/hooks/useFormula';
 
 const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
@@ -28,6 +29,8 @@ export default function CriarOrdem() {
   const [formulaId, setFormulaId] = useState<string | null>(null);
   const [quantidadeOP, setQuantidadeOP] = useState<number>(0);
   const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
+
+  const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
@@ -62,7 +65,7 @@ export default function CriarOrdem() {
     setQuantidadeOP(data.quantidade);
     setTamanhoBatelada(data.tamanho_batelada ?? null);
     setLoteEncontrado(true);
-    toast({ title: 'Lote encontrado!', description: row.produto });
+    toast({ title: 'Lote encontrado!', description: data.produto });
   };
 
   const onSubmit = async (values: OrdemFormValues) => {
@@ -131,7 +134,7 @@ export default function CriarOrdem() {
             )} />
 
             {loteEncontrado === true && (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">Tamanho de Batelada</label>
                   <Input
@@ -141,8 +144,59 @@ export default function CriarOrdem() {
                     className="mt-1"
                   />
                 </div>
-                {tamanhoBatelada !== null && tamanhoBatelada > 0 && formulaId && (
-                  <p className="text-xs text-muted-foreground">Fórmula: <span className="font-medium text-foreground">{formulaId}</span></p>
+
+                {formulaId && (
+                  <p className="text-xs text-muted-foreground">
+                    Fórmula: <span className="font-medium text-foreground">{formulaId}</span>
+                  </p>
+                )}
+
+                {loadingFormula && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando matérias-primas...
+                  </div>
+                )}
+
+                {erroFormula && (
+                  <p className="text-sm text-destructive">{erroFormula}</p>
+                )}
+
+                {itens.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Matérias-Primas</label>
+                    <div className="rounded-md border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted text-muted-foreground">
+                          <tr>
+                            <th className="text-left px-3 py-2">Seq</th>
+                            <th className="text-left px-3 py-2">Matéria-Prima</th>
+                            <th className="text-left px-3 py-2">Un</th>
+                            <th className="text-right px-3 py-2">%</th>
+                            <th className="text-right px-3 py-2">Qtd (kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itens.map((item) => (
+                            <tr key={item.id} className="border-t">
+                              <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
+                              <td className="px-3 py-2">{item.materia_prima}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? '-'}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">{item.percentual}%</td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  value={item.quantidade_kg}
+                                  onChange={(e) => setQuantidade(item.id, Number(e.target.value))}
+                                  className="h-7 w-24 text-right ml-auto"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
