@@ -24,26 +24,27 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const concluidas = balancaOrdens.filter((o) => o.status === "Concluído");
   const emPesagem = balancaOrdens.find((o) => o.status === "Em Pesagem");
 
-  // Busca formula_id e tamanho_batelada do cadastro_lotes quando a ordem em pesagem muda
+  // Busca formula_id e tamanho_batelada diretamente da tabela ordens pelo id da ordem em pesagem
   useEffect(() => {
-    if (!emPesagem?.lote) {
+    if (!emPesagem?.id) {
       setFormulaId(null);
       setTamanhoBatelada(null);
       return;
     }
     supabase
-      .from("cadastro_lotes")
+      .from("ordens")
       .select("formula_id, tamanho_batelada")
-      .eq("lote", Number(emPesagem.lote))
+      .eq("id", emPesagem.id)
       .single()
       .then(({ data }) => {
         const row = data as any;
         setFormulaId(row?.formula_id ?? null);
         setTamanhoBatelada(row?.tamanho_batelada ?? null);
       });
-  }, [emPesagem?.lote]);
+  }, [emPesagem?.id]);
 
   const { itens, loading: loadingFormula } = useFormula(formulaId, tamanhoBatelada);
+  console.log('formulaId:', formulaId, '| tamanhoBatelada:', tamanhoBatelada, '| itens:', JSON.stringify(itens));
   const emAberto = balancaOrdens.filter((o) => o.status === "Em Aberto");
   const total = balancaOrdens.length;
   const concluidasCount = concluidas.length;
