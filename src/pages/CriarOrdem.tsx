@@ -43,7 +43,7 @@ export default function CriarOrdem() {
 
     const { data, error } = await supabase
       .from('cadastro_lotes')
-      .select('produto, quantidade, formula_id, tamanho_batelada')
+      .select('*')
       .eq('lote', Number(lote))
       .single();
 
