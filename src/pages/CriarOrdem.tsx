@@ -43,7 +43,7 @@ export default function CriarOrdem() {
 
     const { data, error } = await supabase
       .from('cadastro_lotes')
-      .select('produto, quantidade')
+      .select('produto, quantidade, formula_id, tamanho_batelada')
       .eq('lote', Number(lote))
       .single();
 
@@ -56,12 +56,11 @@ export default function CriarOrdem() {
       return;
     }
 
-    const row = data as any;
-    form.setValue('produto', row.produto);
-    form.setValue('quantidade', row.quantidade);
-    setFormulaId(row.formula_id ?? null);
-    setQuantidadeOP(row.quantidade);
-    setTamanhoBatelada(row.tamanho_batelada ?? null);
+    form.setValue('produto', data.produto);
+    form.setValue('quantidade', data.quantidade);
+    setFormulaId(data.formula_id ?? null);
+    setQuantidadeOP(data.quantidade);
+    setTamanhoBatelada(data.tamanho_batelada ?? null);
     setLoteEncontrado(true);
     toast({ title: 'Lote encontrado!', description: row.produto });
   };

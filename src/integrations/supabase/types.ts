@@ -18,26 +18,32 @@ export type Database = {
         Row: {
           classe: string | null
           criado_em: string | null
+          formula_id: string | null
           id: string
           lote: number
           produto: string
           quantidade: number
+          tamanho_batelada: number | null
         }
         Insert: {
           classe?: string | null
           criado_em?: string | null
+          formula_id?: string | null
           id?: string
           lote: number
           produto: string
           quantidade?: number
+          tamanho_batelada?: number | null
         }
         Update: {
           classe?: string | null
           criado_em?: string | null
+          formula_id?: string | null
           id?: string
           lote?: number
           produto?: string
           quantidade?: number
+          tamanho_batelada?: number | null
         }
         Relationships: []
       }
