@@ -47,6 +47,7 @@ export default function CriarOrdem() {
       .single();
 
     setBuscando(false);
+    console.log('dados do lote:', data, 'erro:', error);
 
     if (error || !data) {
       setLoteEncontrado(false);
