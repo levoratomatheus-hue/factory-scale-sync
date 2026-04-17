@@ -5,7 +5,7 @@ interface Perfil {
   id: string;
   nome: string;
   papel: 'gestor' | 'operador';
-  balanca: number | null;
+  balanca: string | null;
 }
 
 export function useAuth() {

@@ -57,6 +57,10 @@ export default {
           "weighing-bg": "hsl(var(--status-weighing-bg))",
           done: "hsl(var(--status-done))",
           "done-bg": "hsl(var(--status-done-bg))",
+          mixing: "hsl(var(--status-mixing))",
+          "mixing-bg": "hsl(var(--status-mixing-bg))",
+          line: "hsl(var(--status-line))",
+          "line-bg": "hsl(var(--status-line-bg))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

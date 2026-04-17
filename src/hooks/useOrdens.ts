@@ -12,7 +12,7 @@ export function useOrdens(date?: string) {
     if (date) {
       query = query.eq("data_programacao", today);
     } else {
-      query = query.neq("status", "Concluído");
+      query = query.neq("status", "concluido");
     }
 
     const { data, error } = await query;
@@ -34,58 +34,69 @@ export function useOrdens(date?: string) {
     };
   }, [fetchOrdens]);
 
+  // Called when weighing is done — next status depends on requer_mistura flag
   const concluirOrdem = async (ordemId: string) => {
     const ordem = ordens.find((o) => o.id === ordemId);
     if (!ordem) return;
 
+    const proximoStatus = ordem.requer_mistura === false
+      ? "aguardando_linha"
+      : "aguardando_mistura";
+
     await supabase
       .from("ordens")
-      .update({
-        status: "Concluído",
-        data_conclusao: new Date().toISOString(),
-      })
+      .update({ status: proximoStatus })
       .eq("id", ordemId);
 
     await supabase.from("historico").insert({
       ordem_id: ordemId,
       status_anterior: ordem.status,
-      status_novo: "Concluído",
+      status_novo: proximoStatus,
     });
 
-    const nextOrder = ordens.find((o) => o.balanca === ordem.balanca && o.status === "Em Aberto" && o.id !== ordemId);
+    const nextOrder = ordens.find(
+      (o) => o.balanca === ordem.balanca && o.status === "pendente" && o.id !== ordemId
+    );
     if (nextOrder) {
-      await supabase.from("ordens").update({ status: "Em Pesagem" }).eq("id", nextOrder.id);
+      await supabase.from("ordens").update({ status: "em_pesagem" }).eq("id", nextOrder.id);
       await supabase.from("historico").insert({
         ordem_id: nextOrder.id,
-        status_anterior: "Em Aberto",
-        status_novo: "Em Pesagem",
+        status_anterior: "pendente",
+        status_novo: "em_pesagem",
       });
     }
   };
 
-  const initBalanca = useCallback(async (balanca: number) => {
+  const initBalanca = useCallback(async (balanca: number): Promise<string | null> => {
     const { data } = await supabase
       .from("ordens")
       .select("*")
       .eq("balanca", balanca)
-      .neq("status", "Concluído")
+      .in("status", ["pendente", "em_pesagem"])
       .order("posicao", { ascending: true, nullsFirst: false });
 
-    if (!data || data.length === 0) return;
+    if (!data || data.length === 0) return null;
 
-    const hasEmPesagem = data.some((o: any) => o.status === "Em Pesagem");
-    if (hasEmPesagem) return;
+    const hasEmPesagem = data.some((o: any) => o.status === "em_pesagem");
+    if (hasEmPesagem) return null;
 
-    const firstOpen = data.find((o: any) => o.status === "Em Aberto");
-    if (!firstOpen) return;
+    const firstPendente = data.find((o: any) => o.status === "pendente");
+    if (!firstPendente) return null;
 
-    await supabase.from("ordens").update({ status: "Em Pesagem" }).eq("id", firstOpen.id);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "em_pesagem" })
+      .eq("id", firstPendente.id);
+
+    if (error) return error.message;
 
     await supabase.from("historico").insert({
-      ordem_id: firstOpen.id,
-      status_anterior: "Em Aberto",
-      status_novo: "Em Pesagem",
+      ordem_id: firstPendente.id,
+      status_anterior: "pendente",
+      status_novo: "em_pesagem",
     });
+
+    return null;
   }, []);
 
   return { ordens, loading, concluirOrdem, initBalanca };
@@ -100,7 +111,7 @@ export function useHistorico() {
       const { data, error } = await supabase
         .from("ordens")
         .select("*")
-        .eq("status", "Concluído")
+        .eq("status", "concluido")
         .order("data_conclusao", { ascending: false });
       if (!error && data) setOrdens(data);
       setLoading(false);

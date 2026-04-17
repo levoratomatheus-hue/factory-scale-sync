@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { MetricCard } from "@/components/MetricCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -28,7 +28,9 @@ export default function PainelGestor() {
   const { ordens: todasPendentes } = useOrdens();
 
   const pendentesAnteriores = todasPendentes.filter(
-    (o) => o.data_programacao < dateStr && (o.status === "Em Aberto" || o.status === "Em Pesagem")
+    (o) =>
+      o.data_programacao < dateStr &&
+      ["pendente", "em_pesagem"].includes(o.status)
   );
 
   const isHoje = isToday(selectedDate);
@@ -36,15 +38,15 @@ export default function PainelGestor() {
   const isFuturo = isFuture(selectedDate);
 
   const total = ordens.length;
-  const concluidas = ordens.filter((o) => o.status === "Concluído").length;
-  const emPesagem = ordens.filter((o) => o.status === "Em Pesagem").length;
-  const emAberto = ordens.filter((o) => o.status === "Em Aberto").length;
+  const concluidas = ordens.filter((o) => o.status === "concluido").length;
+  const emPesagem = ordens.filter((o) => o.status === "em_pesagem").length;
+  const emAberto = ordens.filter((o) => o.status === "pendente").length;
   const taxaConclusao = total > 0 ? Math.round((concluidas / total) * 100) : 0;
 
   const ordensPorLinha = (linha: number) => ordens.filter((o) => o.linha === linha);
   const ordensPorBalanca = (balanca: number) =>
     todasPendentes
-      .filter((o) => o.balanca === balanca && o.status !== "Concluído")
+      .filter((o) => o.balanca === balanca && o.status !== "concluido")
       .sort((a, b) => (a.posicao ?? 999) - (b.posicao ?? 999));
 
   const removerOrdem = async (ordemId: string) => {
@@ -132,7 +134,7 @@ export default function PainelGestor() {
           <MetricCard title="Previstas" value={total} variant="weighing" icon={<TrendingUp className="h-4 w-4" />} />
         )}
         <MetricCard
-          title={isPassado ? "Não concluídas" : "Em Aberto"}
+          title={isPassado ? "Não concluídas" : "Pendentes"}
           value={emAberto}
           variant="open"
           icon={<Clock className="h-4 w-4" />}
@@ -170,8 +172,8 @@ export default function PainelGestor() {
       {/* Programação por Linha */}
       <div>
         <h2 className="text-lg font-semibold mb-3">Programação por Linha</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map((linha) => (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5].map((linha) => (
             <div key={linha} className="bg-card rounded-lg border p-4">
               <h3 className="font-semibold text-sm text-muted-foreground mb-3">Linha {linha}</h3>
               <div className="space-y-2">
@@ -199,7 +201,7 @@ export default function PainelGestor() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2].map((balanca) => {
             const fila = ordensPorBalanca(balanca);
-            const atual = fila.find((o) => o.status === "Em Pesagem");
+            const atual = fila.find((o) => o.status === "em_pesagem");
             return (
               <div key={balanca} className="bg-card rounded-lg border overflow-hidden">
                 <div className="px-4 pt-4 pb-2">
@@ -207,7 +209,7 @@ export default function PainelGestor() {
                 </div>
                 {atual ? (
                   <div className="mx-4 mb-3 rounded-lg border-2 border-status-weighing/40 bg-status-weighing-bg p-3 space-y-1">
-                    <StatusBadge status="Em Pesagem" />
+                    <StatusBadge status="em_pesagem" />
                     <div className="text-base font-bold leading-tight mt-1">{atual.produto}</div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xl font-extrabold text-primary">{atual.quantidade} kg</span>
@@ -225,10 +227,10 @@ export default function PainelGestor() {
                   </div>
                 )}
                 <div className="px-4 pb-4 space-y-2">
-                  {fila.filter((o) => o.status === "Em Aberto").length === 0 && (
+                  {fila.filter((o) => o.status === "pendente").length === 0 && (
                     <p className="text-sm text-muted-foreground">Nenhuma ordem na fila</p>
                   )}
-                  {fila.filter((o) => o.status === "Em Aberto").map((ordem, idx, arr) => (
+                  {fila.filter((o) => o.status === "pendente").map((ordem, idx, arr) => (
                     <div key={ordem.id} className="flex items-center gap-2 py-2 px-3 rounded-md bg-muted/50 border">
                       <div className="flex items-center justify-center h-7 w-7 rounded-full bg-status-open-bg text-status-open font-bold text-xs shrink-0">
                         {idx + 1}

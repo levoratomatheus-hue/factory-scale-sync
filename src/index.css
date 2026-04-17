@@ -43,6 +43,10 @@
     --status-weighing-bg: 220 70% 95%;
     --status-done: 142 71% 45%;
     --status-done-bg: 142 71% 95%;
+    --status-mixing: 270 65% 50%;
+    --status-mixing-bg: 270 65% 95%;
+    --status-line: 25 90% 48%;
+    --status-line-bg: 25 90% 95%;
 
     --sidebar-background: 220 25% 12%;
     --sidebar-foreground: 220 10% 85%;

@@ -29,6 +29,8 @@ export default function CriarOrdem() {
   const [formulaId, setFormulaId] = useState<string | null>(null);
   const [quantidadeOP, setQuantidadeOP] = useState<number>(0);
   const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
+  const [obs, setObs] = useState('');
+  const [requerMistura, setRequerMistura] = useState(true);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -70,29 +72,52 @@ export default function CriarOrdem() {
 
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
-    const { error } = await supabase.from('ordens').insert({
-      lote: values.lote,
-      produto: values.produto,
-      quantidade: values.quantidade,
-      linha: parseInt(values.linha),
-      balanca: parseInt(values.balanca),
-      data_programacao: format(new Date(), 'yyyy-MM-dd'),
-      formula_id: formulaId,
-      tamanho_batelada: tamanhoBatelada,
-    } as any);
+
+    const { data: novaOrdem, error } = await supabase
+      .from('ordens')
+      .insert({
+        lote: values.lote,
+        produto: values.produto,
+        quantidade: values.quantidade,
+        linha: parseInt(values.linha),
+        balanca: parseInt(values.balanca),
+        status: 'pendente',
+        data_programacao: format(new Date(), 'yyyy-MM-dd'),
+        formula_id: formulaId,
+        tamanho_batelada: tamanhoBatelada,
+        obs: obs.trim() || null,
+        requer_mistura: requerMistura,
+      } as any)
+      .select()
+      .single();
+
+    if (error || !novaOrdem) {
+      setSaving(false);
+      toast({ title: 'Erro ao salvar', description: error?.message, variant: 'destructive' });
+      return;
+    }
+
+    // Save customized formula quantities if the gestor edited them
+    if (itens.length > 0) {
+      await supabase.from('ordens_formula').insert(
+        itens.map((item) => ({
+          ordem_id: (novaOrdem as any).id,
+          sequencia: item.sequencia,
+          materia_prima: item.materia_prima,
+          quantidade_kg: item.quantidade_kg,
+        }))
+      );
+    }
 
     setSaving(false);
-
-    if (error) {
-      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Ordem criada com sucesso!' });
-      form.reset();
-      setLoteEncontrado(null);
-      setFormulaId(null);
-      setQuantidadeOP(0);
-      setTamanhoBatelada(null);
-    }
+    toast({ title: 'Ordem criada com sucesso!' });
+    form.reset();
+    setLoteEncontrado(null);
+    setFormulaId(null);
+    setQuantidadeOP(0);
+    setTamanhoBatelada(null);
+    setObs('');
+    setRequerMistura(true);
   };
 
   return (
@@ -167,6 +192,7 @@ export default function CriarOrdem() {
                 {itens.length > 0 && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Matérias-Primas</label>
+                    <p className="text-xs text-muted-foreground">Edite as quantidades para customizar esta ordem.</p>
                     <div className="rounded-md border overflow-hidden">
                       <table className="w-full text-sm">
                         <thead className="bg-muted text-muted-foreground">
@@ -221,6 +247,8 @@ export default function CriarOrdem() {
                       <SelectItem value="1">Linha 1</SelectItem>
                       <SelectItem value="2">Linha 2</SelectItem>
                       <SelectItem value="3">Linha 3</SelectItem>
+                      <SelectItem value="4">Linha 4</SelectItem>
+                      <SelectItem value="5">Linha 5</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -240,6 +268,37 @@ export default function CriarOrdem() {
                   <FormMessage />
                 </FormItem>
               )} />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div>
+                <p className="text-sm font-medium">Requer Mistura</p>
+                <p className="text-xs text-muted-foreground">
+                  {requerMistura ? 'Pesagem → Mistura → Linha' : 'Pesagem → Linha (sem mistura)'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={requerMistura}
+                onClick={() => setRequerMistura((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg transition-transform ${requerMistura ? 'translate-x-5' : 'translate-x-0'}`}
+                />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Observações para Mistura</label>
+              <textarea
+                value={obs}
+                onChange={(e) => setObs(e.target.value)}
+                placeholder="Ex: Adicionar corante apenas após mistura base..."
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              />
             </div>
 
             <Button type="submit" className="w-full" disabled={saving}>
