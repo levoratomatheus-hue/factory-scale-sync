@@ -1,13 +1,15 @@
 import { useState, ReactNode } from 'react';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2 } from 'lucide-react';
 import PainelGestor from './PainelGestor';
 import PainelBalanca from './PainelBalanca';
 import PainelMistura from './PainelMistura';
 import PainelLinha from './PainelLinha';
 import CriarOrdem from './CriarOrdem';
 import PainelHistorico from './PainelHistorico';
+import PainelAnalises from './PainelAnalises';
 import PainelLiberacao from './PainelLiberacao';
 import ImportarProgramacao from './ImportarProgramacao';
+import PainelProgramacao from './PainelProgramacao';
 import Login from './Login';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -26,8 +28,9 @@ import {
 } from '@/components/ui/sidebar';
 
 const tabsGestor = [
-  { id: 'gestor',    label: 'Painel do Gestor', icon: LayoutDashboard },
-  { id: 'criar',     label: 'Nova Ordem',        icon: PlusCircle },
+  { id: 'gestor',        label: 'Painel do Gestor', icon: LayoutDashboard },
+  { id: 'programacao',   label: 'Programação',       icon: CalendarDays },
+  { id: 'criar',         label: 'Nova Ordem',        icon: PlusCircle },
   { id: 'balanca1',  label: 'Balança 1',          icon: Scale },
   { id: 'balanca2',  label: 'Balança 2',          icon: Scale },
   { id: 'mistura',   label: 'Mistura',             icon: FlaskConical },
@@ -38,6 +41,7 @@ const tabsGestor = [
   { id: 'linha5',      label: 'Linha 5',      icon: Factory },
   { id: 'liberacao',   label: 'Liberação',    icon: ShieldCheck },
   { id: 'historico',   label: 'Histórico',    icon: History },
+  { id: 'analises',   label: 'Análises da Produção', icon: BarChart2 },
   { id: 'importar',  label: 'Importar',            icon: FileUp },
 ] as const;
 
@@ -52,6 +56,12 @@ function resolveLinhaNumber(balanca: string | null): number | null {
 export default function Index() {
   const { perfil, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabGestorId>('gestor');
+  const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
+
+  const handleCriarOP = (lote: number) => {
+    setPrefillLote(lote);
+    setActiveTab('criar');
+  };
 
   if (loading) {
     return (
@@ -159,8 +169,9 @@ export default function Index() {
           <span className="font-semibold text-sm">{activeLabel}</span>
         </header>
         <main className="p-6">
-          {activeTab === 'gestor'    && <PainelGestor />}
-          {activeTab === 'criar'     && <CriarOrdem />}
+          {activeTab === 'gestor'       && <PainelGestor onCriarOP={handleCriarOP} />}
+          {activeTab === 'programacao'  && <PainelProgramacao />}
+          {activeTab === 'criar'        && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
           {activeTab === 'balanca1'  && <PainelBalanca balanca={1} />}
           {activeTab === 'balanca2'  && <PainelBalanca balanca={2} />}
           {activeTab === 'mistura'   && <PainelMistura />}
@@ -171,6 +182,7 @@ export default function Index() {
           {activeTab === 'linha5'     && <PainelLinha linha={5} />}
           {activeTab === 'liberacao'  && <PainelLiberacao />}
           {activeTab === 'historico'  && <PainelHistorico />}
+          {activeTab === 'analises'  && <PainelAnalises />}
           {activeTab === 'importar'  && <ImportarProgramacao />}
         </main>
       </SidebarInset>

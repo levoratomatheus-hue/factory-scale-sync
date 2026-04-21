@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
+import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Scale } from "lucide-react";
+import { CheckCircle2, Loader2, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, formatKg, sortOrdens } from "@/lib/utils";
+import { MarcaBadge } from "@/components/MarcaBadge";
 import { toast } from "@/hooks/use-toast";
+import { imprimirEtiqueta } from "@/lib/printEtiqueta";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,8 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-const fmtQtd = (n: number) => n.toFixed(3).replace(".", ",");
 
 interface PainelBalancaProps {
   balanca: number;
@@ -32,7 +33,7 @@ interface FormulaRow {
 }
 
 export default function PainelBalanca({ balanca }: PainelBalancaProps) {
-  const { ordens, loading, concluirOrdem, initBalanca } = useOrdens();
+  const { ordens, loading, concluirOrdem, initBalanca, fetchOrdens } = useOrdens();
   const iniciado = useRef(false);
 
   const [formulaId, setFormulaId] = useState<string | null>(null);
@@ -43,8 +44,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [carga, setCarga] = useState(1);
 
-  const balancaOrdens = ordens.filter(
-    (o) => o.balanca === balanca && ["pendente", "em_pesagem"].includes(o.status)
+  const balancaOrdens = sortOrdens(
+    ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))
   );
 
   const emPesagem = balancaOrdens.find((o) => o.status === "em_pesagem");
@@ -102,8 +103,9 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   useEffect(() => {
     if (!loading && balancaOrdens.length > 0 && !iniciado.current) {
       iniciado.current = true;
-      initBalanca(balanca).then((err) => {
+      initBalanca(balanca).then(async (err) => {
         if (err) toast({ title: "Erro ao iniciar fila automaticamente", description: err, variant: "destructive" });
+        await fetchOrdens();
       });
     }
   }, [loading, balancaOrdens.length]);
@@ -128,11 +130,36 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <span className="text-muted-foreground/40 shrink-0">·</span>
               <StatusBadge status="em_pesagem" />
             </div>
-            <span className="text-sm text-muted-foreground shrink-0">Lote {emPesagem.lote}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground shrink-0">Lote {emPesagem.lote}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  imprimirEtiqueta({
+                    ordemId: emPesagem.id,
+                    produto: emPesagem.produto,
+                    marca: emPesagem.marca,
+                    lote: emPesagem.lote,
+                    quantidade: emPesagem.quantidade,
+                    formulaId,
+                    tamanhoBatelada,
+                    itens: displayItens,
+                    obs: emPesagem.obs,
+                  }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
+                }
+              >
+                <Printer className="h-3.5 w-3.5 mr-1" />
+                Etiqueta
+              </Button>
+            </div>
           </div>
-          <div className="text-xl font-bold leading-tight">{emPesagem.produto}</div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <div className="text-xl font-bold leading-tight">{emPesagem.produto}</div>
+            <MarcaBadge marca={emPesagem.marca} />
+          </div>
           <div className="text-4xl font-extrabold text-primary">
-            {emPesagem.quantidade} <span className="text-lg font-semibold text-muted-foreground">kg</span>
+            {formatKg(emPesagem.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
 
           {tamanhoBatelada && tamanhoBatelada > 0 && (
@@ -141,7 +168,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 {Math.round(emPesagem.quantidade / tamanhoBatelada)}
               </span>{' '}
               batelada{Math.round(emPesagem.quantidade / tamanhoBatelada) !== 1 ? 's' : ''} de{' '}
-              <span className="text-foreground font-bold">{tamanhoBatelada} kg</span> cada
+              <span className="text-foreground font-bold">{formatKg(tamanhoBatelada)} kg</span> cada
             </div>
           )}
 
@@ -156,7 +183,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">
                 Fórmula: <span className="text-foreground">{formulaId}</span>
-                {tamanhoBatelada && <span className="ml-2">· Batelada: {tamanhoBatelada} kg</span>}
+                {tamanhoBatelada && <span className="ml-2">· Batelada: {formatKg(tamanhoBatelada)} kg</span>}
                 {hasCustom && <span className="ml-2 text-status-weighing">· Quantidades customizadas</span>}
               </p>
               <div className="rounded-md border overflow-hidden">
@@ -184,9 +211,9 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                         }
                       >
                         <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
-                        <td className={cn("px-3 py-2 font-medium", checkedItens.has(idx) && "line-through text-muted-foreground")}>{item.materia_prima}</td>
+                        <td className={cn("px-3 py-2 font-medium", checkedItens.has(idx) && "line-through text-muted-foreground", item.quantidade_kg === 0 && "line-through text-muted-foreground/50")}>{item.materia_prima}</td>
                         {!hasCustom && <td className="px-3 py-2 text-muted-foreground">{(item as any).unidade ?? '-'}</td>}
-                        <td className="px-3 py-2 text-right font-bold text-lg">{fmtQtd(item.quantidade_kg)}</td>
+                        <td className={cn("px-3 py-2 text-right font-bold text-lg", item.quantidade_kg === 0 && "line-through text-muted-foreground/50")}>{formatKg(item.quantidade_kg)}</td>
                         <td className="px-3 py-2 text-center">
                           <input
                             type="checkbox"
@@ -206,6 +233,15 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t">
+                      <td colSpan={hasCustom ? 3 : 4} className="px-3 py-1.5 text-xs text-muted-foreground/60 text-right">total fórmula</td>
+                      <td className="px-3 py-1.5 text-right text-xs text-muted-foreground/60">
+                        {formatKg(displayItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
@@ -234,19 +270,36 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => concluirOrdem(emPesagem.id)}>
+                <AlertDialogAction onClick={() => {
+                  setConfirmOpen(false);
+                  concluirOrdem(emPesagem.id).then(async (err) => {
+                    if (err) toast({ title: "Erro ao concluir pesagem", description: err, variant: "destructive" });
+                    await fetchOrdens();
+                  });
+                }}>
                   Confirmar
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
 
-          {emPesagem.obs && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
-              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Observações</p>
-              <p className="text-sm text-amber-900 whitespace-pre-wrap">{emPesagem.obs}</p>
-            </div>
-          )}
+          {emPesagem.obs && (() => {
+            const items = parseObsItems(emPesagem.obs);
+            return (
+              <div className="rounded-lg border-2 border-blue-800 bg-blue-700 px-4 py-3 space-y-2 shadow-md">
+                <p className="text-sm font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
+                {items ? (
+                  <ul className="space-y-1">
+                    {items.map((item, i) => (
+                      <li key={i} className="text-base font-bold text-white font-mono">{formatObsLine(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-base font-bold text-white whitespace-pre-wrap">{emPesagem.obs}</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <div className="bg-card rounded-xl border p-6 text-center text-muted-foreground">
@@ -263,6 +316,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   if (err) {
                     toast({ title: "Erro ao iniciar fila", description: err, variant: "destructive" });
                   }
+                  await fetchOrdens();
                 }}
               >
                 Iniciar fila
@@ -284,8 +338,9 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Lote {ordem.lote} · {ordem.quantidade} kg
+                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                    Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
+                    <MarcaBadge marca={ordem.marca} size="sm" />
                   </div>
                 </div>
               </div>

@@ -11,7 +11,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   aguardando_mistura:  { label: 'Aguard. Mistura',   className: 'bg-status-mixing-bg text-status-mixing' },
   em_mistura:          { label: 'Em Mistura',         className: 'bg-status-mixing-bg text-status-mixing font-bold' },
   aguardando_linha:    { label: 'Aguard. Linha',      className: 'bg-status-line-bg text-status-line' },
-  em_linha:              { label: 'Em Linha',            className: 'bg-status-line-bg text-status-line font-bold' },
+  em_linha:              { label: 'Em Linha',            className: 'bg-blue-100 text-blue-700 font-bold' },
   aguardando_liberacao:  { label: 'Aguard. Liberação',   className: 'bg-orange-100 text-orange-700' },
   concluido:             { label: 'Concluído',           className: 'bg-status-done-bg text-status-done' },
 };

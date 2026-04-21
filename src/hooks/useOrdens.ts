@@ -35,18 +35,20 @@ export function useOrdens(date?: string) {
   }, [fetchOrdens]);
 
   // Called when weighing is done — next status depends on requer_mistura flag
-  const concluirOrdem = async (ordemId: string) => {
+  const concluirOrdem = async (ordemId: string): Promise<string | null> => {
     const ordem = ordens.find((o) => o.id === ordemId);
-    if (!ordem) return;
+    if (!ordem) return `Ordem ${ordemId} não encontrada no estado local`;
 
     const proximoStatus = ordem.requer_mistura === false
       ? "aguardando_linha"
       : "aguardando_mistura";
 
-    await supabase
+    const { error } = await supabase
       .from("ordens")
       .update({ status: proximoStatus })
       .eq("id", ordemId);
+
+    if (error) return error.message;
 
     await supabase.from("historico").insert({
       ordem_id: ordemId,
@@ -65,6 +67,8 @@ export function useOrdens(date?: string) {
         status_novo: "em_pesagem",
       });
     }
+
+    return null;
   };
 
   const initBalanca = useCallback(async (balanca: number): Promise<string | null> => {
@@ -99,32 +103,160 @@ export function useOrdens(date?: string) {
     return null;
   }, []);
 
-  return { ordens, loading, concluirOrdem, initBalanca };
+  return { ordens, loading, concluirOrdem, initBalanca, fetchOrdens };
 }
 
-export function useHistorico() {
+export function useHistorico(dataInicio?: string, dataFim?: string) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchHistorico = useCallback(async () => {
+    setLoading(true);
+    let query = supabase
+      .from("ordens")
+      .select("*")
+      .eq("status", "concluido")
+      .order("data_conclusao", { ascending: false });
+
+    if (dataInicio) query = query.gte("data_programacao", dataInicio);
+    if (dataFim) query = query.lte("data_programacao", dataFim);
+
+    const { data, error } = await query;
+    if (!error && data) setOrdens(data);
+    setLoading(false);
+  }, [dataInicio, dataFim]);
+
   useEffect(() => {
-    const fetch = async () => {
-      const { data, error } = await supabase
-        .from("ordens")
-        .select("*")
-        .eq("status", "concluido")
-        .order("data_conclusao", { ascending: false });
-      if (!error && data) setOrdens(data);
-      setLoading(false);
-    };
-    fetch();
+    fetchHistorico();
     const channel = supabase
-      .channel("historico-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetch)
+      .channel(`historico-realtime-${dataInicio ?? "all"}-${dataFim ?? ""}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetchHistorico)
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchHistorico]);
 
   return { ordens, loading };
+}
+
+export function useAnalises(dataInicio: string, dataFim: string) {
+  const [ordens, setOrdens] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAnalises = useCallback(async () => {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("ordens")
+      .select("id, quantidade_real, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
+      .eq("status", "concluido")
+      .gte("data_programacao", dataInicio)
+      .lte("data_programacao", dataFim)
+      .order("data_programacao", { ascending: true });
+
+    if (!error && data) setOrdens(data);
+    setLoading(false);
+  }, [dataInicio, dataFim]);
+
+  useEffect(() => {
+    fetchAnalises();
+  }, [fetchAnalises]);
+
+  return { ordens, loading };
+}
+
+export function useParadasLinha(linha: number, data: string) {
+  const [paradas, setParadas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchParadas = useCallback(async () => {
+    setLoading(true);
+    const { data: rows, error } = await supabase
+      .from("paradas")
+      .select("*")
+      .eq("linha", linha)
+      .eq("data", data)
+      .order("hora_inicio", { ascending: true });
+    if (!error && rows) setParadas(rows);
+    setLoading(false);
+  }, [linha, data]);
+
+  useEffect(() => {
+    fetchParadas();
+    const channel = supabase
+      .channel(`paradas-linha-${linha}-${data}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "paradas" }, fetchParadas)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchParadas]);
+
+  return { paradas, loading, fetchParadas };
+}
+
+export function useParadasAnalises(dataInicio: string, dataFim: string) {
+  const [paradas, setParadas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchParadas = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("paradas")
+      .select("linha, data, motivo, hora_inicio, hora_fim")
+      .gte("data", dataInicio)
+      .lte("data", dataFim);
+    if (!error && data) setParadas(data);
+    setLoading(false);
+  }, [dataInicio, dataFim]);
+
+  useEffect(() => {
+    fetchParadas();
+  }, [fetchParadas]);
+
+  return { paradas, loading };
+}
+
+export function useRegistrosDiariosOrdem(ordemId: string | null) {
+  const [registros, setRegistros] = useState<any[]>([]);
+
+  const fetchRegistros = useCallback(async () => {
+    if (!ordemId) { setRegistros([]); return; }
+    const { data } = await (supabase as any)
+      .from("registros_diarios")
+      .select("*")
+      .eq("ordem_id", ordemId)
+      .order("data", { ascending: true });
+    setRegistros(data ?? []);
+  }, [ordemId]);
+
+  useEffect(() => {
+    fetchRegistros();
+    if (!ordemId) return;
+    const channel = supabase
+      .channel(`reg-diarios-${ordemId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, fetchRegistros)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchRegistros, ordemId]);
+
+  return { registros, fetchRegistros };
+}
+
+export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string) {
+  const [registros, setRegistros] = useState<any[]>([]);
+
+  const fetchRegistros = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("registros_diarios")
+      .select("ordem_id, data, hora_inicio, hora_fim, ordens(linha)")
+      .gte("data", dataInicio)
+      .lte("data", dataFim);
+    setRegistros(data ?? []);
+  }, [dataInicio, dataFim]);
+
+  useEffect(() => {
+    fetchRegistros();
+  }, [fetchRegistros]);
+
+  return { registros };
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { MetricCard } from "@/components/MetricCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -12,16 +12,30 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
+  PlusCircle,
+  PackageSearch,
 } from "lucide-react";
 import { format, isToday, isPast, isFuture } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, sortOrdens } from "@/lib/utils";
+import { MarcaBadge } from "@/components/MarcaBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
-export default function PainelGestor() {
+interface LoteSemOP {
+  lote: number;
+  produto: string;
+  quantidade: number;
+  classe: string;
+}
+
+interface PainelGestorProps {
+  onCriarOP?: (lote: number) => void;
+}
+
+export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { ordens, loading } = useOrdens(dateStr);
@@ -43,11 +57,34 @@ export default function PainelGestor() {
   const emAberto = ordens.filter((o) => o.status === "pendente").length;
   const taxaConclusao = total > 0 ? Math.round((concluidas / total) * 100) : 0;
 
-  const ordensPorLinha = (linha: number) => ordens.filter((o) => o.linha === linha);
+  const ordensPorLinha = (linha: number) => sortOrdens(ordens.filter((o) => o.linha === linha));
   const ordensPorBalanca = (balanca: number) =>
-    todasPendentes
-      .filter((o) => o.balanca === balanca && o.status !== "concluido")
-      .sort((a, b) => (a.posicao ?? 999) - (b.posicao ?? 999));
+    sortOrdens(todasPendentes.filter((o) => o.balanca === balanca && o.status !== "concluido"));
+
+  const [lotesSeOP, setLotesSeOP] = useState<LoteSemOP[]>([]);
+  const [loadingLotesSemOP, setLoadingLotesSemOP] = useState(false);
+
+  useEffect(() => {
+    const fetchLotesSemOP = async () => {
+      setLoadingLotesSemOP(true);
+      const { data: lotes } = await (supabase as any)
+        .from('cadastro_lotes')
+        .select('lote, produto, quantidade, classe')
+        .eq('status', 'Em Aberto')
+        .order('lote', { ascending: true });
+
+      if (!lotes?.length) { setLoadingLotesSemOP(false); return; }
+
+      const { data: ordensExistentes } = await supabase
+        .from('ordens')
+        .select('lote');
+
+      const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
+      setLotesSeOP(lotes.filter((l: any) => !lotesComOP.has(String(l.lote))));
+      setLoadingLotesSemOP(false);
+    };
+    fetchLotesSemOP();
+  }, []);
 
   const removerOrdem = async (ordemId: string) => {
     if (!confirm("Tem certeza que deseja remover esta ordem?")) return;
@@ -141,6 +178,64 @@ export default function PainelGestor() {
         />
       </div>
 
+      {/* Lotes sem OP */}
+      {(loadingLotesSemOP || lotesSeOP.length > 0) && (
+        <div className="bg-card rounded-lg border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+            <div className="flex items-center gap-2">
+              <PackageSearch className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-sm">Lotes Pendentes de Programação</h3>
+            </div>
+            {!loadingLotesSemOP && (
+              <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5">
+                {lotesSeOP.length} lote{lotesSeOP.length !== 1 ? 's' : ''} sem OP
+              </span>
+            )}
+          </div>
+
+          {loadingLotesSemOP ? (
+            <div className="flex items-center justify-center p-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground border-b">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium">Lote</th>
+                    <th className="text-left px-4 py-2 font-medium">Produto</th>
+                    <th className="text-right px-4 py-2 font-medium">Qtd (kg)</th>
+                    <th className="text-left px-4 py-2 font-medium">Classe</th>
+                    <th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotesSeOP.map((l) => (
+                    <tr key={l.lote} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2 font-mono font-medium">{l.lote}</td>
+                      <td className="px-4 py-2 max-w-xs truncate">{l.produto}</td>
+                      <td className="px-4 py-2 text-right">{l.quantidade.toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{l.classe || '—'}</td>
+                      <td className="px-4 py-2 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 h-7 text-xs"
+                          onClick={() => onCriarOP?.(l.lote)}
+                        >
+                          <PlusCircle className="h-3.5 w-3.5" />
+                          Criar OP
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Pendentes de dias anteriores */}
       {pendentesAnteriores.length > 0 && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4">
@@ -149,7 +244,10 @@ export default function PainelGestor() {
             {pendentesAnteriores.map((ordem) => (
               <div key={ordem.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-background border">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{ordem.produto}</div>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <div className="text-sm font-medium truncate">{ordem.produto}</div>
+                    <MarcaBadge marca={ordem.marca} size="sm" />
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     Lote {ordem.lote} · {ordem.quantidade} kg · {format(new Date(ordem.data_programacao), "dd/MM/yyyy")}
                   </div>
@@ -181,7 +279,10 @@ export default function PainelGestor() {
                 {ordensPorLinha(linha).map((ordem) => (
                   <div key={ordem.id} className="flex items-center justify-between py-2 border-b last:border-0">
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate">{ordem.produto}</div>
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <div className="text-sm font-medium truncate">{ordem.produto}</div>
+                        <MarcaBadge marca={ordem.marca} size="sm" />
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         Lote {ordem.lote} · {ordem.quantidade} kg
                       </div>
@@ -210,7 +311,10 @@ export default function PainelGestor() {
                 {atual ? (
                   <div className="mx-4 mb-3 rounded-lg border-2 border-status-weighing/40 bg-status-weighing-bg p-3 space-y-1">
                     <StatusBadge status="em_pesagem" />
-                    <div className="text-base font-bold leading-tight mt-1">{atual.produto}</div>
+                    <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                      <div className="text-base font-bold leading-tight">{atual.produto}</div>
+                      <MarcaBadge marca={atual.marca} size="sm" />
+                    </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xl font-extrabold text-primary">{atual.quantidade} kg</span>
                       <div className="text-sm text-muted-foreground">
@@ -236,7 +340,10 @@ export default function PainelGestor() {
                         {idx + 1}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold truncate">{ordem.produto}</div>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <div className="text-sm font-semibold truncate">{ordem.produto}</div>
+                          <MarcaBadge marca={ordem.marca} size="sm" />
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           Lote {ordem.lote} · {ordem.quantidade} kg · {format(new Date(ordem.data_programacao), 'dd/MM/yyyy')}
                         </div>

@@ -24,13 +24,9 @@ export function useAuth() {
           .eq('id', user.id)
           .maybeSingle();
 
-        console.log('perfil data:', data);
-        console.log('perfil error:', error);
-
         if (data) setPerfil(data as Perfil);
         setLoading(false);
-      } catch (err) {
-        console.log('erro useAuth:', err);
+      } catch {
         setLoading(false);
       }
     };

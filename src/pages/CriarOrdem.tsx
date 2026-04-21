@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import { toast } from '@/hooks/use-toast';
 import { Save, Loader2, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
+import { formatKg } from '@/lib/utils';
 
 const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
@@ -18,42 +19,61 @@ const ordemSchema = z.object({
   quantidade: z.coerce.number().positive('Quantidade deve ser positiva').max(999999),
   linha: z.string().min(1, 'Selecione a linha'),
   balanca: z.string().min(1, 'Selecione a balança'),
+  marca: z.string().min(1, 'Selecione a marca'),
 });
 
 type OrdemFormValues = z.infer<typeof ordemSchema>;
 
-export default function CriarOrdem() {
+interface CriarOrdemProps {
+  prefillLote?: number;
+  onPrefillConsumed?: () => void;
+}
+
+export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrdemProps = {}) {
   const [saving, setSaving] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
+  const [loteJaTemOP, setLoteJaTemOP] = useState(false);
   const [formulaId, setFormulaId] = useState<string | null>(null);
-  const [quantidadeOP, setQuantidadeOP] = useState<number>(0);
   const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
-  const [obs, setObs] = useState('');
+  const [obsItems, setObsItems] = useState([
+    { qty: '', mp: '' },
+    { qty: '', mp: '' },
+    { qty: '', mp: '' },
+    { qty: '', mp: '' },
+  ]);
   const [requerMistura, setRequerMistura] = useState(true);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
-    defaultValues: { lote: '', produto: '', quantidade: 0, linha: '', balanca: '' },
+    defaultValues: { lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' },
   });
 
-  const buscarLote = async () => {
-    const lote = form.getValues('lote').trim();
-    if (!lote) return;
+  const buscarLote = useCallback(async (loteOverride?: number) => {
+    const loteStr = loteOverride !== undefined ? String(loteOverride) : form.getValues('lote').trim();
+    const loteNum = Number(loteStr.replace(/\./g, ''));
+    if (!loteStr || isNaN(loteNum) || loteNum <= 0) return;
+    if (loteOverride !== undefined) form.setValue('lote', loteStr);
 
     setBuscando(true);
     setLoteEncontrado(null);
+    setLoteJaTemOP(false);
 
-    const { data, error } = await supabase
-      .from('cadastro_lotes')
-      .select('*')
-      .eq('lote', Number(lote))
-      .single();
+    const [{ data, error }, { data: ordemExistente }] = await Promise.all([
+      supabase.from('cadastro_lotes').select('*').eq('lote', loteNum).single(),
+      supabase.from('ordens').select('id').eq('lote', loteStr).maybeSingle(),
+    ]);
 
     setBuscando(false);
-    console.log('dados do lote:', JSON.stringify(data));
+
+    if (ordemExistente) {
+      setLoteEncontrado(false);
+      setLoteJaTemOP(true);
+      toast({ title: 'Este lote já possui uma OP criada.', variant: 'destructive' });
+      return;
+    }
 
     if (error || !data) {
       setLoteEncontrado(false);
@@ -64,11 +84,15 @@ export default function CriarOrdem() {
     form.setValue('produto', data.produto);
     form.setValue('quantidade', data.quantidade);
     setFormulaId(data.formula_id ?? null);
-    setQuantidadeOP(data.quantidade);
     setTamanhoBatelada(data.tamanho_batelada ?? null);
     setLoteEncontrado(true);
     toast({ title: 'Lote encontrado!', description: data.produto });
-  };
+    onPrefillConsumed?.();
+  }, [form, onPrefillConsumed]);
+
+  useEffect(() => {
+    if (prefillLote) buscarLote(prefillLote);
+  }, [prefillLote, buscarLote]);
 
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
@@ -85,7 +109,13 @@ export default function CriarOrdem() {
         data_programacao: format(new Date(), 'yyyy-MM-dd'),
         formula_id: formulaId,
         tamanho_batelada: tamanhoBatelada,
-        obs: obs.trim() || null,
+        marca: values.marca || null,
+        obs: (() => {
+          const filled = obsItems
+            .filter((r) => r.mp.trim() || r.qty.trim())
+            .map((r) => ({ qty: parseInt(r.qty) || 0, mp: r.mp.trim() }));
+          return filled.length > 0 ? JSON.stringify(filled) : null;
+        })(),
         requer_mistura: requerMistura,
       } as any)
       .select()
@@ -111,12 +141,11 @@ export default function CriarOrdem() {
 
     setSaving(false);
     toast({ title: 'Ordem criada com sucesso!' });
-    form.reset();
+    form.reset({ lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' });
     setLoteEncontrado(null);
     setFormulaId(null);
-    setQuantidadeOP(0);
     setTamanhoBatelada(null);
-    setObs('');
+    setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
     setRequerMistura(true);
   };
 
@@ -138,14 +167,17 @@ export default function CriarOrdem() {
                       onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarLote())}
                     />
                   </FormControl>
-                  <Button type="button" variant="outline" size="icon" onClick={buscarLote} disabled={buscando}>
+                  <Button type="button" variant="outline" size="icon" onClick={() => buscarLote()} disabled={buscando}>
                     {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                   </Button>
                 </div>
                 {loteEncontrado === true && (
                   <p className="text-xs text-status-done">✓ Produto e quantidade preenchidos automaticamente</p>
                 )}
-                {loteEncontrado === false && (
+                {loteJaTemOP && (
+                  <p className="text-xs text-destructive font-medium">⚠ Este lote já possui uma OP criada.</p>
+                )}
+                {loteEncontrado === false && !loteJaTemOP && (
                   <p className="text-xs text-muted-foreground">Lote não encontrado — preencha manualmente</p>
                 )}
                 <FormMessage />
@@ -222,6 +254,14 @@ export default function CriarOrdem() {
                             </tr>
                           ))}
                         </tbody>
+                        <tfoot>
+                          <tr className="border-t">
+                            <td colSpan={4} className="px-3 py-1.5 text-xs text-muted-foreground/60 text-right">total fórmula</td>
+                            <td className="px-3 py-1.5 text-right text-xs text-muted-foreground/60">
+                              {formatKg(itens.reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   </div>
@@ -270,6 +310,20 @@ export default function CriarOrdem() {
               )} />
             </div>
 
+            <FormField control={form.control} name="marca" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Marca</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione a marca" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="Pigma">Pigma</SelectItem>
+                    <SelectItem value="Zan Collor">Zan Collor</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
               <div>
                 <p className="text-sm font-medium">Requer Mistura</p>
@@ -290,15 +344,33 @@ export default function CriarOrdem() {
               </button>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Observações para Mistura</label>
-              <textarea
-                value={obs}
-                onChange={(e) => setObs(e.target.value)}
-                placeholder="Ex: Adicionar corante apenas após mistura base..."
-                rows={3}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Adições para Mistura</label>
+              <div className="space-y-1.5">
+                {obsItems.map((row, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={row.qty}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                      }}
+                      placeholder="0"
+                      className="w-14 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <span className="text-sm font-semibold text-muted-foreground shrink-0">x</span>
+                    <input
+                      type="text"
+                      value={row.mp}
+                      onChange={(e) => setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, mp: e.target.value.toUpperCase() } : r))}
+                      placeholder="Matéria-Prima"
+                      className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={saving}>

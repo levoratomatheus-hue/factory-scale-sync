@@ -1,26 +1,59 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
+import { formatKg, sortOrdens } from "@/lib/utils";
+import { MarcaBadge } from "@/components/MarcaBadge";
 import { useFormula } from "@/hooks/useFormula";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, FlaskConical, Play } from "lucide-react";
+import { CheckCircle2, Loader2, FlaskConical, Play, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+import { imprimirEtiqueta } from "@/lib/printEtiqueta";
+
+interface FormulaRow {
+  sequencia: number | null;
+  materia_prima: string;
+  unidade?: string | null;
+  quantidade_kg: number;
+}
 
 export default function PainelMistura() {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [checkedItens, setCheckedItens] = useState<Set<number>>(new Set());
+  const [customItens, setCustomItens] = useState<FormulaRow[]>([]);
+  const [hasCustom, setHasCustom] = useState(false);
 
-  const emMistura = ordens.find((o) => o.status === "em_mistura") ?? null;
-  const aguardando = ordens.filter((o) => o.status === "aguardando_mistura");
+  const sorted = sortOrdens(ordens);
+  const emMistura = sorted.find((o) => o.status === "em_mistura") ?? null;
+  const aguardando = sorted.filter((o) => o.status === "aguardando_mistura");
 
-  const { itens, loading: loadingFormula } = useFormula(
-    emMistura?.formula_id ?? null,
-    emMistura?.tamanho_batelada ?? null
+  const { itens: formulaItens, loading: loadingFormula } = useFormula(
+    hasCustom ? null : (emMistura?.formula_id ?? null),
+    hasCustom ? null : (emMistura?.tamanho_batelada ?? null)
   );
 
+  const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
+
   useEffect(() => {
-    setCheckedItens(new Set());
+    if (!emMistura?.id) {
+      setCustomItens([]);
+      setHasCustom(false);
+      return;
+    }
+    supabase
+      .from("ordens_formula")
+      .select("sequencia, materia_prima, quantidade_kg")
+      .eq("ordem_id", emMistura.id)
+      .order("sequencia", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setCustomItens(data as FormulaRow[]);
+          setHasCustom(true);
+        } else {
+          setCustomItens([]);
+          setHasCustom(false);
+        }
+      });
   }, [emMistura?.id]);
 
   const fetchOrdens = async () => {
@@ -43,21 +76,39 @@ export default function PainelMistura() {
   }, []);
 
   const iniciarMistura = async (ordem: any) => {
-    await supabase.from("ordens").update({ status: "em_mistura" }).eq("id", ordem.id);
+    const { error } = await supabase.from("ordens").update({ status: "em_mistura" }).eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao iniciar mistura", description: error.message, variant: "destructive" });
+      return;
+    }
     await supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_mistura",
       status_novo: "em_mistura",
     });
+    await fetchOrdens();
   };
 
   const concluirMistura = async (ordem: any) => {
-    await supabase.from("ordens").update({ status: "aguardando_linha" }).eq("id", ordem.id);
+    if (!ordem.linha) {
+      toast({ title: "Linha de destino não definida", description: "Edite a ordem e defina a linha antes de concluir.", variant: "destructive" });
+      return;
+    }
+    const hoje = new Date().toISOString().split("T")[0];
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "aguardando_linha", linha: ordem.linha, data_programacao: hoje })
+      .eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao concluir mistura", description: error.message, variant: "destructive" });
+      return;
+    }
     await supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "em_mistura",
       status_novo: "aguardando_linha",
     });
+    await fetchOrdens();
   };
 
   if (loading) {
@@ -80,11 +131,40 @@ export default function PainelMistura() {
         <div className="bg-card rounded-xl border-2 border-status-mixing/40 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <StatusBadge status="em_mistura" />
-            <span className="text-sm text-muted-foreground">Lote {emMistura.lote}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Lote {emMistura.lote}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  imprimirEtiqueta({
+                    ordemId: emMistura.id,
+                    produto: emMistura.produto,
+                    marca: emMistura.marca,
+                    lote: emMistura.lote,
+                    quantidade: emMistura.quantidade,
+                    formulaId: emMistura.formula_id,
+                    tamanhoBatelada: emMistura.tamanho_batelada,
+                    itens: itens.map((i) => ({
+                      sequencia: i.sequencia,
+                      materia_prima: i.materia_prima,
+                      quantidade_kg: i.quantidade_kg,
+                    })),
+                    obs: emMistura.obs,
+                  }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
+                }
+              >
+                <Printer className="h-3.5 w-3.5 mr-1" />
+                Etiqueta
+              </Button>
+            </div>
           </div>
-          <div className="text-xl font-bold leading-tight">{emMistura.produto}</div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <div className="text-xl font-bold leading-tight">{emMistura.produto}</div>
+            <MarcaBadge marca={emMistura.marca} />
+          </div>
           <div className="text-4xl font-extrabold text-primary">
-            {emMistura.quantidade} <span className="text-lg font-semibold text-muted-foreground">kg</span>
+            {formatKg(emMistura.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
 
           {emMistura.tamanho_batelada && emMistura.tamanho_batelada > 0 && (
@@ -93,7 +173,7 @@ export default function PainelMistura() {
                 {Math.round(emMistura.quantidade / emMistura.tamanho_batelada)}
               </span>{' '}
               batelada{Math.round(emMistura.quantidade / emMistura.tamanho_batelada) !== 1 ? 's' : ''} de{' '}
-              <span className="text-foreground font-bold">{emMistura.tamanho_batelada} kg</span> cada
+              <span className="text-foreground font-bold">{formatKg(emMistura.tamanho_batelada)} kg</span> cada
             </div>
           )}
 
@@ -101,12 +181,23 @@ export default function PainelMistura() {
             Linha destino: <span className="font-semibold text-foreground">{emMistura.linha}</span>
           </div>
 
-          {emMistura.obs && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
-              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">⚠ Observações</p>
-              <p className="text-sm text-amber-900 whitespace-pre-wrap">{emMistura.obs}</p>
-            </div>
-          )}
+          {emMistura.obs && (() => {
+            const items = parseObsItems(emMistura.obs);
+            return (
+              <div className="rounded-lg border-2 border-blue-800 bg-blue-700 px-4 py-3 space-y-2 shadow-md">
+                <p className="text-sm font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
+                {items ? (
+                  <ul className="space-y-1">
+                    {items.map((item, i) => (
+                      <li key={i} className="text-base font-bold text-white font-mono">{formatObsLine(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-base font-bold text-white whitespace-pre-wrap">{emMistura.obs}</p>
+                )}
+              </div>
+            );
+          })()}
 
           {loadingFormula && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -115,13 +206,14 @@ export default function PainelMistura() {
             </div>
           )}
 
-          {itens.length > 0 && (
+          {displayItens.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">
                 Fórmula: <span className="text-foreground">{emMistura.formula_id}</span>
                 {emMistura.tamanho_batelada && (
-                  <span className="ml-2">· Batelada: {emMistura.tamanho_batelada} kg</span>
+                  <span className="ml-2">· Batelada: {formatKg(emMistura.tamanho_batelada)} kg</span>
                 )}
+                {hasCustom && <span className="ml-2 text-status-weighing">· Quantidades do pesador</span>}
               </p>
               <div className="rounded-md border overflow-hidden">
                 <table className="w-full text-sm">
@@ -129,53 +221,34 @@ export default function PainelMistura() {
                     <tr>
                       <th className="text-left px-3 py-2">Seq</th>
                       <th className="text-left px-3 py-2">Matéria-Prima</th>
-                      <th className="text-left px-3 py-2">Un</th>
+                      {!hasCustom && <th className="text-left px-3 py-2">Un</th>}
                       <th className="text-right px-3 py-2">Qtd (kg)</th>
-                      <th className="px-3 py-2 w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {itens.map((item, idx) => (
-                      <tr
-                        key={item.id}
-                        className={cn("border-t cursor-pointer", checkedItens.has(idx) && "bg-green-50")}
-                        onClick={() =>
-                          setCheckedItens((prev) => {
-                            const next = new Set(prev);
-                            next.has(idx) ? next.delete(idx) : next.add(idx);
-                            return next;
-                          })
-                        }
-                      >
+                    {displayItens.map((item, idx) => (
+                      <tr key={idx} className="border-t">
                         <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
-                        <td className={cn("px-3 py-2 font-medium", checkedItens.has(idx) && "line-through text-muted-foreground")}>{item.materia_prima}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? '-'}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{item.quantidade_kg}</td>
-                        <td className="px-3 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            readOnly
-                            checked={checkedItens.has(idx)}
-                            className="h-4 w-4 accent-green-600 cursor-pointer"
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() =>
-                              setCheckedItens((prev) => {
-                                const next = new Set(prev);
-                                next.has(idx) ? next.delete(idx) : next.add(idx);
-                                return next;
-                              })
-                            }
-                          />
-                        </td>
+                        <td className={`px-3 py-2 font-medium${item.quantidade_kg === 0 ? " line-through text-muted-foreground/50" : ""}`}>{item.materia_prima}</td>
+                        {!hasCustom && <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? '-'}</td>}
+                        <td className={`px-3 py-2 text-right font-semibold${item.quantidade_kg === 0 ? " line-through text-muted-foreground/50" : ""}`}>{formatKg(item.quantidade_kg)}</td>
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t">
+                      <td colSpan={hasCustom ? 2 : 3} className="px-3 py-1.5 text-xs text-muted-foreground/60 text-right">total fórmula</td>
+                      <td className="px-3 py-1.5 text-right text-xs text-muted-foreground/60">
+                        {formatKg(displayItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
           )}
 
-          {(itens.length === 0 || checkedItens.size === itens.length) && !loadingFormula && (
+          {!loadingFormula && (
             <div className="flex justify-end">
               <Button
                 size="sm"
@@ -208,8 +281,9 @@ export default function PainelMistura() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Lote {ordem.lote} · {ordem.quantidade} kg · Linha {ordem.linha}
+                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                    Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg · Linha {ordem.linha}
+                    <MarcaBadge marca={ordem.marca} size="sm" />
                   </div>
                 </div>
                 {!emMistura && (
