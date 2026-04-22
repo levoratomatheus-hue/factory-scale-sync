@@ -333,7 +333,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto pb-16">
+    <div className="space-y-4 w-full pb-16">
 
       {/* Banner: OPs de dias anteriores */}
       {pendentes.length > 0 && (
@@ -427,8 +427,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
       {/* Ordem atual em linha */}
       {emLinha ? (
-        <div className="bg-card rounded-xl border-2 border-status-line/40 p-6 space-y-4">
-          <div className="flex items-center justify-between gap-2">
+        <>
+          <div className="flex items-center justify-between gap-2 px-1">
             <div className="flex items-center gap-2 min-w-0">
               <Factory className="h-4 w-4 text-primary shrink-0" />
               <span className="text-sm font-semibold text-muted-foreground shrink-0">Linha {linha}</span>
@@ -438,10 +438,11 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             <span className="text-sm text-muted-foreground shrink-0">Lote {emLinha.lote}</span>
           </div>
 
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <div className="text-xl font-bold leading-tight">{emLinha.produto}</div>
-            <MarcaBadge marca={emLinha.marca} />
-          </div>
+          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-line/40 p-6 space-y-4">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <div className="text-xl font-bold leading-tight">{emLinha.produto}</div>
+              <MarcaBadge marca={emLinha.marca} />
+            </div>
 
           <div className="text-4xl font-extrabold text-primary">
             {formatKg(emLinha.quantidade)}{" "}
@@ -495,12 +496,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
           {itens.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">
-                Fórmula: <span className="text-foreground">{emLinha.formula_id}</span>
-                {emLinha.tamanho_batelada > 0 && (
-                  <span className="ml-2">· Batelada: {formatKg(emLinha.tamanho_batelada)} kg</span>
-                )}
-              </p>
               <div className="rounded-md border overflow-hidden">
                 <table className="w-full text-base">
                   <thead className="bg-muted text-muted-foreground text-sm">
@@ -607,9 +602,10 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
+          </div>
+        </>
       ) : (
-        <div className="bg-card rounded-xl border p-6 text-center text-muted-foreground">
+        <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-6 text-center text-muted-foreground">
           <div className="space-y-3">
             <p>Nenhuma ordem em andamento</p>
             <Button
@@ -628,7 +624,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
       {/* Próximas ordens */}
       {emAberto.length > 0 && (
-        <div>
+        <div className="max-w-2xl mx-auto w-full">
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Próximas ordens</h2>
           <div className="space-y-2">
             {emAberto.map((ordem, i) => (
@@ -653,7 +649,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       )}
 
       {/* Paradas do dia */}
-      <div className="bg-card rounded-xl border p-5 space-y-4">
+      <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <OctagonX className="h-4 w-4 text-orange-500" />

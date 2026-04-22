@@ -119,45 +119,45 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto pb-16">
+    <div className="space-y-4 w-full pb-16">
       {/* Ordem atual em pesagem */}
       {emPesagem ? (
-        <div className="bg-card rounded-xl border-2 border-status-weighing/40 p-6 space-y-4">
-          <div className="flex items-center justify-between gap-2">
+        <>
+          <div className="flex items-center justify-between gap-2 px-1">
             <div className="flex items-center gap-2 min-w-0">
               <Scale className="h-4 w-4 text-primary shrink-0" />
               <span className="text-sm font-semibold text-muted-foreground shrink-0">Balança {balanca}</span>
               <span className="text-muted-foreground/40 shrink-0">·</span>
               <StatusBadge status="em_pesagem" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground shrink-0">Lote {emPesagem.lote}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  imprimirEtiqueta({
-                    ordemId: emPesagem.id,
-                    produto: emPesagem.produto,
-                    marca: emPesagem.marca,
-                    lote: emPesagem.lote,
-                    quantidade: emPesagem.quantidade,
-                    formulaId,
-                    tamanhoBatelada,
-                    itens: displayItens,
-                    obs: emPesagem.obs,
-                  }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
-                }
-              >
-                <Printer className="h-3.5 w-3.5 mr-1" />
-                Etiqueta
-              </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                imprimirEtiqueta({
+                  ordemId: emPesagem.id,
+                  produto: emPesagem.produto,
+                  marca: emPesagem.marca,
+                  lote: emPesagem.lote,
+                  quantidade: emPesagem.quantidade,
+                  formulaId,
+                  tamanhoBatelada,
+                  itens: displayItens,
+                  obs: emPesagem.obs,
+                }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
+              }
+            >
+              <Printer className="h-3.5 w-3.5 mr-1" />
+              Etiqueta
+            </Button>
+          </div>
+
+          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-weighing/40 p-6 space-y-4">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <div className="text-xl font-bold leading-tight">{emPesagem.produto}</div>
+              <MarcaBadge marca={emPesagem.marca} />
+              <span className="text-sm text-muted-foreground ml-auto shrink-0">Lote {emPesagem.lote}</span>
             </div>
-          </div>
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <div className="text-xl font-bold leading-tight">{emPesagem.produto}</div>
-            <MarcaBadge marca={emPesagem.marca} />
-          </div>
           <div className="text-4xl font-extrabold text-primary">
             {formatKg(emPesagem.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
@@ -181,11 +181,6 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
           {displayItens.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">
-                Fórmula: <span className="text-foreground">{formulaId}</span>
-                {tamanhoBatelada && <span className="ml-2">· Batelada: {formatKg(tamanhoBatelada)} kg</span>}
-                {hasCustom && <span className="ml-2 text-status-weighing">· Quantidades customizadas</span>}
-              </p>
               <div className="rounded-md border overflow-hidden">
                 <table className="w-full text-base">
                   <thead className="bg-muted text-muted-foreground text-sm">
@@ -300,9 +295,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </div>
             );
           })()}
-        </div>
+          </div>
+        </>
       ) : (
-        <div className="bg-card rounded-xl border p-6 text-center text-muted-foreground">
+        <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-6 text-center text-muted-foreground">
           {emAberto.length === 0 && totalHoje > 0 ? (
             "Todas as ordens foram pesadas!"
           ) : (
@@ -328,7 +324,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
       {/* Próximas ordens */}
       {emAberto.length > 0 && (
-        <div>
+        <div className="max-w-2xl mx-auto w-full">
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Próximas ordens</h2>
           <div className="space-y-2">
             {emAberto.map((ordem, i) => (
