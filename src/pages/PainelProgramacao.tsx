@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil } from "lucide-react";
@@ -563,7 +564,7 @@ function LinhaColumn({
 }
 
 export default function PainelProgramacao() {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [data, setData] = useState(todayStr);
   const [ordens, setOrdens] = useState<Ordem[]>([]);
   const [loading, setLoading] = useState(true);

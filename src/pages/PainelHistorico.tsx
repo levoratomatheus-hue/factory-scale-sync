@@ -19,7 +19,7 @@ import { toast } from "@/hooks/use-toast";
 type Modo = "dia" | "periodo";
 
 export default function PainelHistorico() {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [modo, setModo] = useState<Modo>("dia");
   const [dia, setDia] = useState(todayStr);
   const [dataInicio, setDataInicio] = useState(todayStr);

@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
 export function useOrdens(date?: string) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const today = date || new Date().toISOString().split("T")[0];
+  const today = date || format(new Date(), 'yyyy-MM-dd');
 
   const fetchOrdens = useCallback(async () => {
     let query = supabase.from("ordens").select("*").order("posicao", { ascending: true, nullsFirst: false });

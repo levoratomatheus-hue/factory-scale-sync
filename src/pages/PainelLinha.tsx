@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Trash2, CalendarPlus, AlertTriangle, CalendarClock } from "lucide-react";
+import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Trash2, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -40,7 +40,7 @@ interface PainelLinhaProps {
   linha: number;
 }
 
-const today = new Date().toISOString().split("T")[0];
+const today = format(new Date(), 'yyyy-MM-dd');
 
 export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [ordens, setOrdens] = useState<any[]>([]);
@@ -63,13 +63,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [paradaInicio, setParadaInicio] = useState("");
   const [paradaFim, setParadaFim] = useState("");
   const [savingParada, setSavingParada] = useState(false);
-
-  // OPs de dias anteriores pendentes
-  const [pendentes, setPendentes] = useState<any[]>([]);
-  const [pendentesOpen, setPendentesOpen] = useState(false);
-  // novaData[ordemId] = string com a data escolhida para reprogramar
-  const [novaData, setNovaData] = useState<Record<string, string>>({});
-  const [reprogramando, setReprogramando] = useState<Record<string, boolean>>({});
 
   const linhaOrdens = sortOrdens(
     ordens.filter((o) => ["aguardando_linha", "em_linha", "aguardando_liberacao", "concluido"].includes(o.status))
@@ -104,26 +97,11 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     setLoading(false);
   };
 
-  const fetchPendentes = async () => {
-    const { data } = await supabase
-      .from("ordens")
-      .select("*")
-      .eq("linha", linha)
-      .lt("data_programacao", today)
-      .in("status", ["aguardando_linha", "em_linha"])
-      .order("data_programacao", { ascending: true });
-    setPendentes(data ?? []);
-  };
-
   useEffect(() => {
     fetchOrdens();
-    fetchPendentes();
     const channel = supabase
       .channel(`linha-${linha}-realtime`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
-        fetchOrdens();
-        fetchPendentes();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetchOrdens)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [linha]);
@@ -167,27 +145,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       });
     }
   }, [loading, linhaOrdens.length]);
-
-  const reprogramarOrdem = async (ordemId: string, paraHoje: boolean) => {
-    const data = paraHoje ? today : (novaData[ordemId] ?? today);
-    if (!data) {
-      toast({ title: "Selecione uma data", variant: "destructive" });
-      return;
-    }
-    setReprogramando((prev) => ({ ...prev, [ordemId]: true }));
-    const { error } = await supabase
-      .from("ordens")
-      .update({ data_programacao: data, status: "aguardando_linha" } as any)
-      .eq("id", ordemId);
-    setReprogramando((prev) => ({ ...prev, [ordemId]: false }));
-    if (error) {
-      toast({ title: "Erro ao reprogramar ordem", description: error.message, variant: "destructive" });
-      return;
-    }
-    await fetchPendentes();
-    await fetchOrdens();
-    toast({ title: `Ordem reprogramada para ${paraHoje ? "hoje" : data}` });
-  };
 
   const salvarRegistroDia = async () => {
     if (!emLinha) return;
@@ -334,96 +291,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
   return (
     <div className="space-y-4 w-full pb-16">
-
-      {/* Banner: OPs de dias anteriores */}
-      {pendentes.length > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="text-sm font-medium text-amber-800">
-              Você tem <span className="font-bold">{pendentes.length}</span> OP{pendentes.length !== 1 ? "s" : ""} de dias anteriores pendente{pendentes.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100"
-            onClick={() => setPendentesOpen(true)}
-          >
-            Ver pendentes
-          </Button>
-        </div>
-      )}
-
-      {/* Modal: OPs pendentes de dias anteriores */}
-      <Dialog open={pendentesOpen} onOpenChange={setPendentesOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-amber-600" />
-              OPs de dias anteriores — Linha {linha}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {pendentes.map((op) => (
-              <div key={op.id} className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="text-sm font-semibold leading-tight">{op.produto}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                      <span>Lote {op.lote}</span>
-                      <span>·</span>
-                      <span>{formatKg(op.quantidade)} kg</span>
-                      <span>·</span>
-                      <StatusBadge status={op.status} />
-                    </div>
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground shrink-0 bg-background border rounded px-2 py-0.5">
-                    {op.data_programacao}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    disabled={reprogramando[op.id]}
-                    onClick={() => reprogramarOrdem(op.id, true)}
-                  >
-                    {reprogramando[op.id]
-                      ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      : <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />}
-                    Reprogramar para hoje
-                  </Button>
-
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="date"
-                      value={novaData[op.id] ?? ""}
-                      min={today}
-                      onChange={(e) => setNovaData((prev) => ({ ...prev, [op.id]: e.target.value }))}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={!novaData[op.id] || reprogramando[op.id]}
-                      onClick={() => reprogramarOrdem(op.id, false)}
-                    >
-                      {reprogramando[op.id]
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : "Reprogramar"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendentesOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Ordem atual em linha */}
       {emLinha ? (

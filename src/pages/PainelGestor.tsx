@@ -14,11 +14,21 @@ import {
   ChevronDown,
   PlusCircle,
   PackageSearch,
+  AlertTriangle,
+  CalendarPlus,
+  CalendarClock,
 } from "lucide-react";
 import { format, isToday, isPast, isFuture } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,12 +50,17 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { ordens, loading } = useOrdens(dateStr);
   const { ordens: todasPendentes } = useOrdens();
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
 
   const pendentesAnteriores = todasPendentes.filter(
     (o) =>
-      o.data_programacao < dateStr &&
-      ["pendente", "em_pesagem"].includes(o.status)
+      o.data_programacao < todayStr &&
+      ["pendente", "aguardando_linha"].includes(o.status)
   );
+
+  const [pendentesOpen, setPendentesOpen] = useState(false);
+  const [novaData, setNovaData] = useState<Record<string, string>>({});
+  const [reprogramando, setReprogramando] = useState<Record<string, boolean>>({});
 
   const isHoje = isToday(selectedDate);
   const isPassado = isPast(selectedDate) && !isHoje;
@@ -85,6 +100,19 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     };
     fetchLotesSemOP();
   }, []);
+
+  const reprogramarOrdem = async (ordemId: string, paraHoje: boolean) => {
+    const data = paraHoje ? todayStr : (novaData[ordemId] ?? todayStr);
+    if (!data) { toast({ title: "Selecione uma data", variant: "destructive" }); return; }
+    setReprogramando((prev) => ({ ...prev, [ordemId]: true }));
+    const { error } = await supabase
+      .from("ordens")
+      .update({ data_programacao: data, status: "aguardando_linha" } as any)
+      .eq("id", ordemId);
+    setReprogramando((prev) => ({ ...prev, [ordemId]: false }));
+    if (error) { toast({ title: "Erro ao reprogramar", description: error.message, variant: "destructive" }); return; }
+    toast({ title: `Ordem reprogramada para ${paraHoje ? "hoje" : data}` });
+  };
 
   const removerOrdem = async (ordemId: string) => {
     if (!confirm("Tem certeza que deseja remover esta ordem?")) return;
@@ -238,26 +266,90 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
       {/* Pendentes de dias anteriores */}
       {pendentesAnteriores.length > 0 && (
-        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4">
-          <h3 className="font-semibold text-sm text-destructive mb-2">⚠️ Pendentes de dias anteriores</h3>
-          <div className="space-y-2">
-            {pendentesAnteriores.map((ordem) => (
-              <div key={ordem.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-background border">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                    <MarcaBadge marca={ordem.marca} size="sm" />
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-sm font-medium text-amber-800">
+              <span className="font-bold">{pendentesAnteriores.length}</span> OP{pendentesAnteriores.length !== 1 ? "s" : ""} de dias anteriores precisam ser reprogramadas
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100"
+            onClick={() => setPendentesOpen(true)}
+          >
+            Ver e reprogramar
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={pendentesOpen} onOpenChange={setPendentesOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 text-amber-600" />
+              OPs de dias anteriores pendentes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {pendentesAnteriores.map((op) => (
+              <div key={op.id} className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-sm font-semibold leading-tight">{op.produto}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                      <span>Lote {op.lote}</span>
+                      <span>·</span>
+                      <span>{op.quantidade} kg</span>
+                      <span>·</span>
+                      <StatusBadge status={op.status} />
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Lote {ordem.lote} · {ordem.quantidade} kg · {format(new Date(ordem.data_programacao), "dd/MM/yyyy")}
+                  <span className="text-xs font-mono text-muted-foreground shrink-0 bg-background border rounded px-2 py-0.5">
+                    {format(new Date(op.data_programacao + "T12:00:00"), "dd/MM/yyyy")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={reprogramando[op.id]}
+                    onClick={() => reprogramarOrdem(op.id, true)}
+                  >
+                    {reprogramando[op.id]
+                      ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      : <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />}
+                    Reprogramar para hoje
+                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={novaData[op.id] ?? ""}
+                      min={todayStr}
+                      onChange={(e) => setNovaData((prev) => ({ ...prev, [op.id]: e.target.value }))}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!novaData[op.id] || reprogramando[op.id]}
+                      onClick={() => reprogramarOrdem(op.id, false)}
+                    >
+                      {reprogramando[op.id]
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : "Reprogramar"}
+                    </Button>
                   </div>
                 </div>
-                <StatusBadge status={ordem.status} className="ml-2 shrink-0" />
               </div>
             ))}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendentesOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Aviso pendências */}
       {isPassado && emAberto > 0 && (
