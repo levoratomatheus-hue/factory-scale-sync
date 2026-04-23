@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFormula } from "@/hooks/useFormula";
 import { formatKg, sortOrdens } from "@/lib/utils";
@@ -422,11 +422,13 @@ function SortableCard({
   onReprogramar,
   onDblClick,
   onEditar,
+  onExcluir,
 }: {
   ordem: Ordem;
   onReprogramar: (id: string, novaData: string) => Promise<void>;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
+  onExcluir: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -452,8 +454,8 @@ function SortableCard({
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-xs font-semibold leading-tight truncate">{ordem.produto}</p>
+      <div className="flex-1 space-y-1 overflow-hidden">
+        <p className="text-xs font-semibold leading-tight break-words">{ordem.produto}</p>
         <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
           Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
           <MarcaBadge marca={ordem.marca} size="sm" />
@@ -469,6 +471,13 @@ function SortableCard({
           <Pencil className="h-3.5 w-3.5" />
         </button>
       )}
+      <button
+        onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
+        className="mt-0.5 text-muted-foreground/50 hover:text-destructive shrink-0"
+        title="Excluir"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
           <button
@@ -513,17 +522,19 @@ function LinhaColumn({
   onReprogramar,
   onDblClick,
   onEditar,
+  onExcluir,
 }: {
   linha: number;
   ordens: Ordem[];
   onReprogramar: (id: string, novaData: string) => Promise<void>;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
+  onExcluir: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
   return (
-    <div className="flex flex-col w-48 shrink-0">
+    <div className="flex flex-col flex-1 min-w-0">
       <div className="mb-2">
         <div className="bg-muted rounded-md py-1.5 px-2 flex items-center justify-between">
           <span className="text-xs font-bold">Linha {linha}</span>
@@ -537,7 +548,7 @@ function LinhaColumn({
         <div
           ref={setNodeRef}
           className={`flex-1 overflow-y-auto space-y-1.5 rounded-lg transition-colors ${isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}
-          style={{ maxHeight: "calc(100vh - 230px)", minHeight: "80px" }}
+          style={{ maxHeight: "calc(100vh - 230px)", minHeight: "200px" }}
         >
           {ordens.length === 0 ? (
             <div className="flex items-center justify-center h-20 rounded-lg border border-dashed text-xs text-muted-foreground">
@@ -545,7 +556,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} />
+              <SortableCard key={ordem.id} ordem={ordem} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} />
             ))
           )}
         </div>
@@ -570,6 +581,8 @@ export default function PainelProgramacao() {
   const [loading, setLoading] = useState(true);
   const [ordemFormula, setOrdemFormula] = useState<Ordem | null>(null);
   const [ordemEditando, setOrdemEditando] = useState<Ordem | null>(null);
+  const [ordemParaExcluir, setOrdemParaExcluir] = useState<Ordem | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -669,6 +682,20 @@ export default function PainelProgramacao() {
     toast({ title: `Ordem movida para Linha ${novaLinha}` });
   };
 
+  const handleExcluir = async () => {
+    if (!ordemParaExcluir) return;
+    setExcluindo(true);
+    const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
+    setExcluindo(false);
+    setOrdemParaExcluir(null);
+    if (error) {
+      toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
+    } else {
+      setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
+      toast({ title: "Ordem excluída com sucesso!" });
+    }
+  };
+
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const { error } = await supabase
       .from("ordens")
@@ -741,7 +768,7 @@ export default function PainelProgramacao() {
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4">
+          <div className="grid grid-cols-5 gap-3 w-full pb-4">
             {[1, 2, 3, 4, 5].map((l) => (
               <LinhaColumn
                 key={l}
@@ -750,6 +777,7 @@ export default function PainelProgramacao() {
                 onReprogramar={handleReprogramar}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
+                onExcluir={setOrdemParaExcluir}
               />
             ))}
           </div>
@@ -757,6 +785,28 @@ export default function PainelProgramacao() {
       )}
 
       <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} onMoverLinha={handleMoverLinha} />
+
+      <Dialog open={!!ordemParaExcluir} onOpenChange={(open) => !open && setOrdemParaExcluir(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir ordem de produção?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaExcluir?.produto}</span>
+              <br />
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaExcluir(null)} disabled={excluindo}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleExcluir} disabled={excluindo}>
+              {excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

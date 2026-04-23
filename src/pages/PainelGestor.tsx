@@ -27,6 +27,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn, sortOrdens } from "@/lib/utils";
@@ -59,6 +60,8 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   );
 
   const [pendentesOpen, setPendentesOpen] = useState(false);
+  const [ordemParaExcluir, setOrdemParaExcluir] = useState<{ id: string; produto: string } | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
   const [novaData, setNovaData] = useState<Record<string, string>>({});
   const [reprogramando, setReprogramando] = useState<Record<string, boolean>>({});
 
@@ -114,13 +117,16 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     toast({ title: `Ordem reprogramada para ${paraHoje ? "hoje" : data}` });
   };
 
-  const removerOrdem = async (ordemId: string) => {
-    if (!confirm("Tem certeza que deseja remover esta ordem?")) return;
-    const { error } = await supabase.from("ordens").delete().eq("id", ordemId);
+  const excluirOrdem = async () => {
+    if (!ordemParaExcluir) return;
+    setExcluindo(true);
+    const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
+    setExcluindo(false);
+    setOrdemParaExcluir(null);
     if (error) {
-      toast({ title: "Erro ao remover ordem", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Ordem removida com sucesso!" });
+      toast({ title: "Ordem excluída com sucesso!" });
     }
   };
 
@@ -369,7 +375,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
               <div className="space-y-2">
                 {ordensPorLinha(linha).length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem</p>}
                 {ordensPorLinha(linha).map((ordem) => (
-                  <div key={ordem.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div key={ordem.id} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <div className="text-sm font-medium truncate">{ordem.produto}</div>
@@ -380,6 +386,13 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                       </div>
                     </div>
                     <StatusBadge status={ordem.status} className="ml-2 shrink-0" />
+                    <button
+                      onClick={() => setOrdemParaExcluir({ id: ordem.id, produto: ordem.produto })}
+                      className="p-1 rounded hover:bg-destructive/10 text-destructive shrink-0"
+                      title="Excluir OP"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -413,8 +426,8 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                         Lote {atual.lote} · {format(new Date(atual.data_programacao), 'dd/MM/yyyy')}
                       </div>
                     </div>
-                    <button onClick={() => removerOrdem(atual.id)} className="flex items-center gap-1 text-xs text-destructive hover:underline mt-1">
-                      <Trash2 className="h-3 w-3" /> Remover
+                    <button onClick={() => setOrdemParaExcluir({ id: atual.id, produto: atual.produto })} className="flex items-center gap-1 text-xs text-destructive hover:underline mt-1">
+                      <Trash2 className="h-3 w-3" /> Excluir
                     </button>
                   </div>
                 ) : (
@@ -448,7 +461,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                           <ChevronDown className="h-4 w-4" />
                         </button>
                       </div>
-                      <button onClick={() => removerOrdem(ordem.id)} className="p-1 rounded hover:bg-destructive/10 text-destructive shrink-0">
+                      <button onClick={() => setOrdemParaExcluir({ id: ordem.id, produto: ordem.produto })} className="p-1 rounded hover:bg-destructive/10 text-destructive shrink-0">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -459,6 +472,28 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           })}
         </div>
       </div>
+
+      <Dialog open={!!ordemParaExcluir} onOpenChange={(open) => !open && setOrdemParaExcluir(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir ordem de produção?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaExcluir?.produto}</span>
+              <br />
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaExcluir(null)} disabled={excluindo}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={excluirOrdem} disabled={excluindo}>
+              {excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
