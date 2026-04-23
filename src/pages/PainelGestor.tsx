@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   CalendarPlus,
   CalendarClock,
+  Pencil,
+  Undo2,
 } from "lucide-react";
 import { format, isToday, isPast, isFuture } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -34,6 +36,7 @@ import { cn, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { EditarOrdemDialog, type OrdemEditavel } from "@/components/EditarOrdemDialog";
 
 interface LoteSemOP {
   lote: number;
@@ -62,6 +65,9 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [pendentesOpen, setPendentesOpen] = useState(false);
   const [ordemParaExcluir, setOrdemParaExcluir] = useState<{ id: string; produto: string } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [ordemEditando, setOrdemEditando] = useState<OrdemEditavel | null>(null);
+  const [ordemParaVoltar, setOrdemParaVoltar] = useState<{ id: string; produto: string } | null>(null);
+  const [voltando, setVoltando] = useState(false);
   const [novaData, setNovaData] = useState<Record<string, string>>({});
   const [reprogramando, setReprogramando] = useState<Record<string, boolean>>({});
 
@@ -127,6 +133,36 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Ordem excluída com sucesso!" });
+    }
+  };
+
+  const handleVoltarFila = async () => {
+    if (!ordemParaVoltar) return;
+    setVoltando(true);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "aguardando_linha" } as any)
+      .eq("id", ordemParaVoltar.id);
+    if (!error) {
+      await supabase.from("historico").insert({
+        ordem_id: ordemParaVoltar.id,
+        status_anterior: "em_linha",
+        status_novo: "aguardando_linha",
+      });
+      toast({ title: "Ordem voltou para a fila" });
+    } else {
+      toast({ title: "Erro ao voltar para fila", description: error.message, variant: "destructive" });
+    }
+    setVoltando(false);
+    setOrdemParaVoltar(null);
+  };
+
+  const handleEditar = async (id: string, payload: Record<string, unknown>) => {
+    const { error } = await supabase.from("ordens").update(payload as any).eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao editar ordem", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Ordem atualizada com sucesso" });
     }
   };
 
@@ -375,20 +411,34 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
               <div className="space-y-2">
                 {ordensPorLinha(linha).length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem</p>}
                 {ordensPorLinha(linha).map((ordem) => (
-                  <div key={ordem.id} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                        <MarcaBadge marca={ordem.marca} size="sm" />
-                      </div>
-                      <div className="text-xs text-muted-foreground">
+                  <div key={ordem.id} className="bg-card border rounded-lg p-2.5 flex items-start gap-1.5">
+                    <div className="flex-1 space-y-1 overflow-hidden">
+                      <p className="text-xs font-semibold leading-tight break-words">{ordem.produto}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
                         Lote {ordem.lote} · {ordem.quantidade} kg
-                      </div>
+                        <MarcaBadge marca={ordem.marca} size="sm" />
+                      </p>
+                      <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
                     </div>
-                    <StatusBadge status={ordem.status} className="ml-2 shrink-0" />
+                    <button
+                      onClick={() => setOrdemEditando(ordem as OrdemEditavel)}
+                      className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
+                      title="Editar OP"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    {ordem.status === "em_linha" && (
+                      <button
+                        onClick={() => setOrdemParaVoltar({ id: ordem.id, produto: ordem.produto })}
+                        className="mt-0.5 text-muted-foreground/50 hover:text-amber-600 shrink-0"
+                        title="Voltar para Fila"
+                      >
+                        <Undo2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={() => setOrdemParaExcluir({ id: ordem.id, produto: ordem.produto })}
-                      className="p-1 rounded hover:bg-destructive/10 text-destructive shrink-0"
+                      className="mt-0.5 text-muted-foreground/50 hover:text-destructive shrink-0"
                       title="Excluir OP"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -426,9 +476,14 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                         Lote {atual.lote} · {format(new Date(atual.data_programacao), 'dd/MM/yyyy')}
                       </div>
                     </div>
-                    <button onClick={() => setOrdemParaExcluir({ id: atual.id, produto: atual.produto })} className="flex items-center gap-1 text-xs text-destructive hover:underline mt-1">
-                      <Trash2 className="h-3 w-3" /> Excluir
-                    </button>
+                    <div className="flex items-center gap-3 mt-1">
+                      <button onClick={() => setOrdemEditando(atual as OrdemEditavel)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary hover:underline">
+                        <Pencil className="h-3 w-3" /> Editar
+                      </button>
+                      <button onClick={() => setOrdemParaExcluir({ id: atual.id, produto: atual.produto })} className="flex items-center gap-1 text-xs text-destructive hover:underline">
+                        <Trash2 className="h-3 w-3" /> Excluir
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="mx-4 mb-3 rounded-lg border border-dashed p-3 text-center text-sm text-muted-foreground">
@@ -461,6 +516,9 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                           <ChevronDown className="h-4 w-4" />
                         </button>
                       </div>
+                      <button onClick={() => setOrdemEditando(ordem as OrdemEditavel)} className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary shrink-0" title="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </button>
                       <button onClick={() => setOrdemParaExcluir({ id: ordem.id, produto: ordem.produto })} className="p-1 rounded hover:bg-destructive/10 text-destructive shrink-0">
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -472,6 +530,34 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           })}
         </div>
       </div>
+
+      <EditarOrdemDialog
+        ordem={ordemEditando}
+        onClose={() => setOrdemEditando(null)}
+        onSalvar={handleEditar}
+      />
+
+      <Dialog open={!!ordemParaVoltar} onOpenChange={(open) => !open && setOrdemParaVoltar(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Voltar para a fila?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaVoltar?.produto}</span>
+              <br />
+              O status voltará de <strong>Em Linha</strong> para <strong>Aguardando Linha</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaVoltar(null)} disabled={voltando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleVoltarFila} disabled={voltando}>
+              {voltando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!ordemParaExcluir} onOpenChange={(open) => !open && setOrdemParaExcluir(null)}>
         <DialogContent className="max-w-sm">

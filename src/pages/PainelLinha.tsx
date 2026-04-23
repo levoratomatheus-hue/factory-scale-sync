@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Trash2, CalendarPlus } from "lucide-react";
+import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -48,13 +48,14 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const iniciado = useRef(false);
 
-  // Registrar Dia dialog state
-  const [registroDiaOpen, setRegistroDiaOpen] = useState(false);
-  const [diaData, setDiaData] = useState(today);
-  const [diaHoraInicio, setDiaHoraInicio] = useState("");
-  const [diaHoraFim, setDiaHoraFim] = useState("");
-  const [diaItems, setDiaItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
-  const [savingRegistro, setSavingRegistro] = useState(false);
+  // Etapa 1 — registrar hora início
+  const [horaInicioInput, setHoraInicioInput] = useState("");
+  const [savingInicio, setSavingInicio] = useState(false);
+
+  // Etapa 2 — form inline de conclusão
+  const [horaFim, setHoraFim] = useState("");
+  const [prodItems, setProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [obsLinha, setObsLinha] = useState("");
 
   // Paradas
   const { paradas } = useParadasLinha(linha, today);
@@ -77,12 +78,12 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
   const { registros, fetchRegistros } = useRegistrosDiariosOrdem(emLinha?.id ?? null);
 
-  // Reset dialog when order changes
+  // Reset inline form when order changes
   useEffect(() => {
-    setDiaData(today);
-    setDiaHoraInicio("");
-    setDiaHoraFim("");
-    setDiaItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    setHoraInicioInput("");
+    setHoraFim("");
+    setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    setObsLinha("");
   }, [emLinha?.id]);
 
   const fetchOrdens = async () => {
@@ -146,56 +147,64 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     }
   }, [loading, linhaOrdens.length]);
 
-  const salvarRegistroDia = async () => {
-    if (!emLinha) return;
-    if (!diaHoraInicio || !diaHoraFim) {
-      toast({ title: "Informe hora início e hora fim", variant: "destructive" });
+  const salvarInicio = async () => {
+    if (!emLinha || !horaInicioInput) {
+      toast({ title: "Informe a hora de início", variant: "destructive" });
       return;
     }
-    if (diaHoraFim <= diaHoraInicio) {
-      toast({ title: "Hora fim deve ser após hora início", variant: "destructive" });
-      return;
-    }
-    const filledItems = diaItems.filter((r) => r.qty.trim() || r.peso.trim());
-    const registroProducao = filledItems.length > 0
-      ? filledItems.map((r) => ({
-          qty: parseInt(r.qty) || 0,
-          peso: parseFloat(r.peso.replace(",", ".")) || 0,
-        }))
-      : null;
-
-    setSavingRegistro(true);
-    const { error } = await (supabase as any).from("registros_diarios").insert({
-      ordem_id: emLinha.id,
-      data: diaData,
-      hora_inicio: diaHoraInicio,
-      hora_fim: diaHoraFim,
-      registro_producao: registroProducao,
-    });
-    setSavingRegistro(false);
-
+    setSavingInicio(true);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ hora_inicio: horaInicioInput } as any)
+      .eq("id", emLinha.id);
+    setSavingInicio(false);
     if (error) {
-      toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao salvar início", description: error.message, variant: "destructive" });
       return;
     }
-    setRegistroDiaOpen(false);
-    setDiaData(today);
-    setDiaHoraInicio("");
-    setDiaHoraFim("");
-    setDiaItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
-    await fetchRegistros();
-    toast({ title: "Registro do dia salvo" });
+    await fetchOrdens();
+    toast({ title: "Hora de início registrada" });
   };
 
   const concluirOrdem = async (ordemId: string) => {
+    if (!horaFim) {
+      toast({ title: "Informe a hora de fim antes de concluir", variant: "destructive" });
+      return;
+    }
+    const filledItems = prodItems.filter((r) => r.qty.trim() || r.peso.trim());
+    if (filledItems.length === 0) {
+      toast({ title: "Informe pelo menos um registro de produção", variant: "destructive" });
+      return;
+    }
+    if (emLinha?.hora_inicio && horaFim <= emLinha.hora_inicio) {
+      toast({ title: "Hora fim deve ser após hora início", variant: "destructive" });
+      return;
+    }
+
+    // Salva registro de produção do dia
+    const { error: errReg } = await (supabase as any).from("registros_diarios").insert({
+      ordem_id: ordemId,
+      data: today,
+      hora_inicio: emLinha?.hora_inicio ?? null,
+      hora_fim: horaFim,
+      registro_producao: filledItems.map((r) => ({
+        qty: parseInt(r.qty) || 0,
+        peso: parseFloat(r.peso.replace(",", ".")) || 0,
+      })),
+    });
+    if (errReg) {
+      toast({ title: "Erro ao salvar registro de produção", description: errReg.message, variant: "destructive" });
+      return;
+    }
+
     const { error } = await supabase
       .from("ordens")
       .update({
         status: "aguardando_liberacao",
+        hora_fim: horaFim,
+        obs_linha: obsLinha.trim() || null,
         motivo_reprovacao: null,
         hora_inicio: null,
-        hora_fim: null,
-        obs_linha: null,
       } as any)
       .eq("id", ordemId);
 
@@ -386,79 +395,149 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             </div>
           )}
 
-          {/* Registros Diários */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Registros de Produção</span>
-              <Button size="sm" variant="outline" onClick={() => setRegistroDiaOpen(true)}>
-                <CalendarPlus className="mr-1.5 h-4 w-4" />
-                Registrar Dia
+          {/* ── Etapa 1: registrar hora início ── */}
+          {!emLinha.hora_inicio && (
+            <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-primary">Registre o início da produção</p>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={horaInicioInput}
+                  onChange={(e) => setHoraInicioInput(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={!horaInicioInput || savingInicio}
+                onClick={salvarInicio}
+              >
+                {savingInicio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar Início
               </Button>
             </div>
+          )}
 
-            {registros.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-2 rounded-md border border-dashed">
-                Nenhum registro ainda
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {registros.map((r) => {
-                  const items: any[] | null = Array.isArray(r.registro_producao) ? r.registro_producao : null;
-                  const prodStr = items?.filter((i: any) => i.qty || i.peso)
-                    .map((i: any) => `${i.qty}× ${formatKg(i.peso)}`)
-                    .join(" / ") ?? "";
-                  const horas = parseHoras(r.hora_inicio, r.hora_fim);
-                  return (
-                    <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 flex items-start justify-between gap-2">
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold">
-                            {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                          </span>
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {r.hora_inicio.slice(0, 5)} – {r.hora_fim.slice(0, 5)}
-                            {horas !== null && <span className="ml-1">({horas.toFixed(1)}h)</span>}
-                          </span>
-                        </div>
-                        {prodStr && (
-                          <p className="text-sm font-mono text-foreground">{prodStr}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => excluirRegistro(r.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  );
-                })}
+          {/* ── Etapa 2: concluir produção ── */}
+          {emLinha.hora_inicio && (
+            <div className="space-y-4">
+              {/* Hora início — somente leitura */}
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Início:</span>
+                <span className="font-semibold font-mono">{String(emLinha.hora_inicio).slice(0, 5)}</span>
               </div>
-            )}
-          </div>
 
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
-              onClick={() => setConfirmOpen(true)}
-            >
-              <CheckCircle2 className="mr-1 h-4 w-4" />
-              Concluir
-            </Button>
-          </div>
+              {/* Hora fim */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={horaFim}
+                  onChange={(e) => setHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* Registro de produção */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Registro de Produção</label>
+                {prodItems.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={row.qty}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, "");
+                        setProdItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                      }}
+                      placeholder="0"
+                      className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={row.peso}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9,]/g, "");
+                        setProdItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
+                      }}
+                      placeholder="0,000 kg"
+                      className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Observações da linha */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Observações da Linha</label>
+                <textarea
+                  value={obsLinha}
+                  onChange={(e) => setObsLinha(e.target.value)}
+                  rows={2}
+                  placeholder="Opcional"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+              </div>
+
+              {/* Registros anteriores (histórico) */}
+              {registros.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Registros anteriores</p>
+                  {registros.map((r) => {
+                    const items: any[] | null = Array.isArray(r.registro_producao) ? r.registro_producao : null;
+                    const prodStr = items?.filter((i: any) => i.qty || i.peso)
+                      .map((i: any) => `${i.qty}× ${formatKg(i.peso)}`)
+                      .join(" / ") ?? "";
+                    const horas = parseHoras(r.hora_inicio, r.hora_fim);
+                    return (
+                      <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 flex items-start justify-between gap-2">
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold">
+                              {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                            </span>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {r.hora_inicio.slice(0, 5)} – {r.hora_fim.slice(0, 5)}
+                              {horas !== null && <span className="ml-1">({horas.toFixed(1)}h)</span>}
+                            </span>
+                          </div>
+                          {prodStr && <p className="text-sm font-mono text-foreground">{prodStr}</p>}
+                        </div>
+                        <button
+                          onClick={() => excluirRegistro(r.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  Concluir
+                </Button>
+              </div>
+            </div>
+          )}
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Concluir ordem</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Deseja marcar esta ordem como concluída?
-                  {registros.length === 0 && (
-                    <span className="block mt-1 text-amber-600 font-medium">
-                      Nenhum registro diário foi salvo ainda.
-                    </span>
-                  )}
+                  Deseja registrar a produção e marcar esta ordem como concluída?
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -553,83 +632,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           </div>
         )}
       </div>
-
-      {/* Dialog: Registrar Dia */}
-      <Dialog open={registroDiaOpen} onOpenChange={setRegistroDiaOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Registrar Dia de Produção</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Data</label>
-              <input
-                type="date"
-                value={diaData}
-                onChange={(e) => setDiaData(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Hora Início</label>
-                <input
-                  type="time"
-                  value={diaHoraInicio}
-                  onChange={(e) => setDiaHoraInicio(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Hora Fim</label>
-                <input
-                  type="time"
-                  value={diaHoraFim}
-                  onChange={(e) => setDiaHoraFim(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Registro de Produção</label>
-              {diaItems.map((row, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={row.qty}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9]/g, "");
-                      setDiaItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
-                    }}
-                    placeholder="0"
-                    className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={row.peso}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9,]/g, "");
-                      setDiaItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
-                    }}
-                    placeholder="0,000"
-                    className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRegistroDiaOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarRegistroDia} disabled={savingRegistro}>
-              {savingRegistro && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar Registro
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Dialog: Registrar Parada */}
       <Dialog open={paradaOpen} onOpenChange={setParadaOpen}>

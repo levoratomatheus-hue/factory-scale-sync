@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useFormula } from "@/hooks/useFormula";
 import { formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
+import { EditarOrdemDialog } from "@/components/EditarOrdemDialog";
 import {
   DndContext,
   closestCorners,
@@ -45,243 +46,6 @@ interface Ordem {
   data_programacao: string;
 }
 
-const EDITAVEIS = new Set(["pendente", "aguardando_linha"]);
-
-function parseObsItemsEdit(obs: string | null): { qty: string; mp: string }[] {
-  const vazio = Array.from({ length: 4 }, () => ({ qty: "", mp: "" }));
-  if (!obs) return vazio;
-  try {
-    const parsed = JSON.parse(obs);
-    if (Array.isArray(parsed)) {
-      const filled = parsed.map((i: any) => ({ qty: String(i.qty ?? ""), mp: String(i.mp ?? "") }));
-      while (filled.length < 4) filled.push({ qty: "", mp: "" });
-      return filled.slice(0, 4);
-    }
-  } catch { /* não é JSON */ }
-  return vazio;
-}
-
-function EditarOrdemDialog({
-  ordem,
-  onClose,
-  onSalvar,
-}: {
-  ordem: Ordem | null;
-  onClose: () => void;
-  onSalvar: (id: string, payload: Record<string, unknown>) => Promise<void>;
-}) {
-  const [quantidade, setQuantidade] = useState("");
-  const [tamanhoBatelada, setTamanhoBatelada] = useState("");
-  const [linha, setLinha] = useState("");
-  const [balanca, setBalanca] = useState("");
-  const [dataProg, setDataProg] = useState("");
-  const [requerMistura, setRequerMistura] = useState(true);
-  const [marca, setMarca] = useState("");
-  const [obsItems, setObsItems] = useState(Array.from({ length: 4 }, () => ({ qty: "", mp: "" })));
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!ordem) return;
-    setQuantidade(String(ordem.quantidade ?? ""));
-    setTamanhoBatelada(ordem.tamanho_batelada ? String(ordem.tamanho_batelada) : "");
-    setLinha(String(ordem.linha ?? ""));
-    setBalanca(ordem.balanca ? String(ordem.balanca) : "");
-    setDataProg(ordem.data_programacao ?? "");
-    setRequerMistura(ordem.requer_mistura !== false);
-    setMarca(ordem.marca ?? "");
-    setObsItems(parseObsItemsEdit(ordem.obs));
-  }, [ordem?.id]);
-
-  if (!ordem) return null;
-
-  const handleSalvar = async () => {
-    const qtd = parseFloat(quantidade.replace(",", "."));
-    if (isNaN(qtd) || qtd <= 0) {
-      toast({ title: "Informe uma quantidade válida", variant: "destructive" });
-      return;
-    }
-    if (!linha) {
-      toast({ title: "Selecione a linha", variant: "destructive" });
-      return;
-    }
-    if (!marca) {
-      toast({ title: "Selecione a marca", variant: "destructive" });
-      return;
-    }
-
-    const filledObs = obsItems.filter((r) => r.mp.trim() || r.qty.trim());
-    const obsJson = filledObs.length > 0
-      ? JSON.stringify(filledObs.map((r) => ({ qty: parseInt(r.qty) || 0, mp: r.mp.trim() })))
-      : null;
-
-    setSaving(true);
-    await onSalvar(ordem.id, {
-      quantidade: qtd,
-      tamanho_batelada: tamanhoBatelada ? parseFloat(tamanhoBatelada) : null,
-      linha: parseInt(linha),
-      balanca: balanca ? parseInt(balanca) : null,
-      data_programacao: dataProg,
-      requer_mistura: requerMistura,
-      marca: marca || null,
-      obs: obsJson,
-    });
-    setSaving(false);
-    onClose();
-  };
-
-  return (
-    <Dialog open={!!ordem} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="leading-tight">
-            Editar OP — Lote {ordem.lote}
-          </DialogTitle>
-          <p className="text-sm text-muted-foreground truncate">{ordem.produto}</p>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          {/* Quantidade */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Quantidade (kg)</label>
-            <input
-              type="number"
-              value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-
-          {/* Tamanho de batelada */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Tamanho de Batelada (kg)</label>
-            <input
-              type="number"
-              value={tamanhoBatelada}
-              onChange={(e) => setTamanhoBatelada(e.target.value)}
-              placeholder="Opcional"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-
-          {/* Linha + Balança */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Linha</label>
-              <Select value={linha} onValueChange={setLinha}>
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5].map((l) => (
-                    <SelectItem key={l} value={String(l)}>Linha {l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Balança</label>
-              <Select value={balanca} onValueChange={setBalanca}>
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Balança 1</SelectItem>
-                  <SelectItem value="2">Balança 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Data programação */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Data de Programação</label>
-            <input
-              type="date"
-              value={dataProg}
-              onChange={(e) => setDataProg(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-
-          {/* Marca */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Marca</label>
-            <Select value={marca} onValueChange={setMarca}>
-              <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Selecione a marca" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Pigma">Pigma</SelectItem>
-                <SelectItem value="Zan Collor">Zan Collor</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Requer mistura */}
-          <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
-            <div>
-              <p className="text-sm font-medium">Requer Mistura</p>
-              <p className="text-xs text-muted-foreground">
-                {requerMistura ? "Pesagem → Mistura → Linha" : "Pesagem → Linha (sem mistura)"}
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={requerMistura}
-              onClick={() => setRequerMistura((v) => !v)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? "bg-primary" : "bg-input"}`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg transition-transform ${requerMistura ? "translate-x-5" : "translate-x-0"}`}
-              />
-            </button>
-          </div>
-
-          {/* Adições para mistura */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Adições para Mistura</label>
-            <div className="space-y-1.5">
-              {obsItems.map((row, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={row.qty}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9]/g, "");
-                      setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
-                    }}
-                    placeholder="0"
-                    className="w-14 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <span className="text-sm font-semibold text-muted-foreground shrink-0">x</span>
-                  <input
-                    type="text"
-                    value={row.mp}
-                    onChange={(e) =>
-                      setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, mp: e.target.value.toUpperCase() } : r))
-                    }
-                    placeholder="Matéria-Prima"
-                    className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSalvar} disabled={saving}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Salvar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function FormulaDialog({
   ordem,
@@ -423,12 +187,14 @@ function SortableCard({
   onDblClick,
   onEditar,
   onExcluir,
+  onVoltarFila,
 }: {
   ordem: Ordem;
   onReprogramar: (id: string, novaData: string) => Promise<void>;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
+  onVoltarFila: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -462,13 +228,20 @@ function SortableCard({
         </p>
         <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
       </div>
-      {EDITAVEIS.has(ordem.status) && (
+      <button
+        onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
+        className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
+        title="Editar"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      {ordem.status === "em_linha" && (
         <button
-          onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
-          className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
-          title="Editar"
+          onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }}
+          className="mt-0.5 text-muted-foreground/50 hover:text-amber-600 shrink-0"
+          title="Voltar para Fila"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Undo2 className="h-3.5 w-3.5" />
         </button>
       )}
       <button
@@ -523,6 +296,7 @@ function LinhaColumn({
   onDblClick,
   onEditar,
   onExcluir,
+  onVoltarFila,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -530,6 +304,7 @@ function LinhaColumn({
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
+  onVoltarFila: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -556,7 +331,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} />
+              <SortableCard key={ordem.id} ordem={ordem} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} />
             ))
           )}
         </div>
@@ -583,6 +358,8 @@ export default function PainelProgramacao() {
   const [ordemEditando, setOrdemEditando] = useState<Ordem | null>(null);
   const [ordemParaExcluir, setOrdemParaExcluir] = useState<Ordem | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [ordemParaVoltar, setOrdemParaVoltar] = useState<Ordem | null>(null);
+  const [voltando, setVoltando] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -696,6 +473,28 @@ export default function PainelProgramacao() {
     }
   };
 
+  const handleVoltarFila = async () => {
+    if (!ordemParaVoltar) return;
+    setVoltando(true);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "aguardando_linha" } as any)
+      .eq("id", ordemParaVoltar.id);
+    if (!error) {
+      await supabase.from("historico").insert({
+        ordem_id: ordemParaVoltar.id,
+        status_anterior: "em_linha",
+        status_novo: "aguardando_linha",
+      });
+      setOrdens((prev) => prev.map((o) => o.id === ordemParaVoltar.id ? { ...o, status: "aguardando_linha" } : o));
+      toast({ title: "Ordem voltou para a fila" });
+    } else {
+      toast({ title: "Erro ao voltar para fila", description: error.message, variant: "destructive" });
+    }
+    setVoltando(false);
+    setOrdemParaVoltar(null);
+  };
+
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const { error } = await supabase
       .from("ordens")
@@ -778,6 +577,7 @@ export default function PainelProgramacao() {
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
+                onVoltarFila={setOrdemParaVoltar}
               />
             ))}
           </div>
@@ -785,6 +585,28 @@ export default function PainelProgramacao() {
       )}
 
       <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} onMoverLinha={handleMoverLinha} />
+
+      <Dialog open={!!ordemParaVoltar} onOpenChange={(open) => !open && setOrdemParaVoltar(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Voltar para a fila?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaVoltar?.produto}</span>
+              <br />
+              O status voltará de <strong>Em Linha</strong> para <strong>Aguardando Linha</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaVoltar(null)} disabled={voltando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleVoltarFila} disabled={voltando}>
+              {voltando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!ordemParaExcluir} onOpenChange={(open) => !open && setOrdemParaExcluir(null)}>
         <DialogContent className="max-w-sm">

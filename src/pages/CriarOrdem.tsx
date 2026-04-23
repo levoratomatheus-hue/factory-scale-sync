@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, Search } from 'lucide-react';
+import { Save, Loader2, Search, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
@@ -34,6 +34,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [buscando, setBuscando] = useState(false);
   const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
   const [loteJaTemOP, setLoteJaTemOP] = useState(false);
+  const [semFormula, setSemFormula] = useState(false);
   const [formulaId, setFormulaId] = useState<string | null>(null);
   const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
   const [obsItems, setObsItems] = useState([
@@ -60,6 +61,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setBuscando(true);
     setLoteEncontrado(null);
     setLoteJaTemOP(false);
+    setSemFormula(false);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
       supabase.from('cadastro_lotes').select('*').eq('lote', loteNum).single(),
@@ -85,6 +87,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     form.setValue('quantidade', data.quantidade);
     setFormulaId(data.formula_id ?? null);
     setTamanhoBatelada(data.tamanho_batelada ?? null);
+    setSemFormula(!data.formula_id);
     setLoteEncontrado(true);
     toast({ title: 'Lote encontrado!', description: data.produto });
     onPrefillConsumed?.();
@@ -145,6 +148,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setLoteEncontrado(null);
     setFormulaId(null);
     setTamanhoBatelada(null);
+    setSemFormula(false);
     setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
     setRequerMistura(true);
   };
@@ -179,6 +183,14 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 )}
                 {loteEncontrado === false && !loteJaTemOP && (
                   <p className="text-xs text-muted-foreground">Lote não encontrado — preencha manualmente</p>
+                )}
+                {semFormula && (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 mt-1">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs font-medium text-amber-800">
+                      Este lote não possui fórmula cadastrada. A ordem será salva sem fórmula e sem lista de matérias-primas.
+                    </p>
+                  </div>
                 )}
                 <FormMessage />
               </FormItem>

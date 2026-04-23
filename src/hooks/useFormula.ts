@@ -19,36 +19,45 @@ export function useFormula(formulaId: string | null, tamanhoBatelada: number | n
   useEffect(() => {
     if (!formulaId || !tamanhoBatelada || tamanhoBatelada <= 0) {
       setItens([]);
+      setLoading(false);
+      setError(null);
       return;
     }
 
-    const fetchFormula = async () => {
-      setLoading(true);
-      setError(null);
+    setItens([]);
+    setLoading(true);
+    setError(null);
 
-      const { data, error: err } = await supabase
-        .from('formulas')
-        .select('id, sequencia, materia_prima, fornecedor, unidade, percentual')
-        .eq('formula_id', formulaId)
-        .order('sequencia', { ascending: true });
+    let cancelled = false;
 
-      setLoading(false);
+    supabase
+      .from('formulas')
+      .select('id, sequencia, materia_prima, fornecedor, unidade, percentual')
+      .eq('formula_id', formulaId)
+      .order('sequencia', { ascending: true })
+      .then(({ data, error: err }) => {
+        if (cancelled) return;
+        setLoading(false);
+        if (err || !data) {
+          setError('Erro ao buscar fórmula');
+          setItens([]);
+          return;
+        }
+        if (data.length === 0) {
+          setError('Fórmula não encontrada');
+          setItens([]);
+          return;
+        }
+        setError(null);
+        setItens(
+          data.map((row) => ({
+            ...row,
+            quantidade_kg: parseFloat(((row.percentual / 100) * tamanhoBatelada).toFixed(3)),
+          }))
+        );
+      });
 
-      if (err || !data) {
-        setError('Erro ao buscar fórmula');
-        setItens([]);
-        return;
-      }
-
-      setItens(
-        data.map((row) => ({
-          ...row,
-          quantidade_kg: parseFloat(((row.percentual / 100) * tamanhoBatelada).toFixed(3)),
-        }))
-      );
-    };
-
-    fetchFormula();
+    return () => { cancelled = true; };
   }, [formulaId, tamanhoBatelada]);
 
   const setQuantidade = (id: string, quantidade_kg: number) => {

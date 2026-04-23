@@ -40,6 +40,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
   const [customItens, setCustomItens] = useState<FormulaRow[]>([]);
   const [hasCustom, setHasCustom] = useState(false);
+  const [loadingOrdem, setLoadingOrdem] = useState(false);
   const [checkedItens, setCheckedItens] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [carga, setCarga] = useState(1);
@@ -51,52 +52,54 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const emPesagem = balancaOrdens.find((o) => o.status === "em_pesagem");
   const emAberto = balancaOrdens.filter((o) => o.status === "pendente");
 
-  // Fetch formula_id, tamanho_batelada and ordens_formula for the active order
   useEffect(() => {
     if (!emPesagem?.id) {
       setFormulaId(null);
       setTamanhoBatelada(null);
       setCustomItens([]);
       setHasCustom(false);
+      setLoadingOrdem(false);
       return;
     }
 
     setCheckedItens(new Set());
     setCarga(1);
+    // Limpa imediatamente para não exibir dados de outra OP
+    setFormulaId(null);
+    setTamanhoBatelada(null);
+    setCustomItens([]);
+    setHasCustom(false);
+    setLoadingOrdem(true);
 
-    supabase
-      .from("ordens")
-      .select("formula_id, tamanho_batelada")
-      .eq("id", emPesagem.id)
-      .single()
-      .then(({ data }) => {
-        const row = data as any;
-        setFormulaId(row?.formula_id ?? null);
-        setTamanhoBatelada(row?.tamanho_batelada ?? null);
-      });
+    let cancelled = false;
 
-    supabase
-      .from("ordens_formula")
-      .select("sequencia, materia_prima, quantidade_kg")
-      .eq("ordem_id", emPesagem.id)
-      .order("sequencia", { ascending: true })
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setCustomItens(data as FormulaRow[]);
-          setHasCustom(true);
-        } else {
-          setCustomItens([]);
-          setHasCustom(false);
-        }
-      });
+    Promise.all([
+      supabase.from("ordens").select("formula_id, tamanho_batelada").eq("id", emPesagem.id).single(),
+      supabase.from("ordens_formula").select("sequencia, materia_prima, quantidade_kg").eq("ordem_id", emPesagem.id).order("sequencia", { ascending: true }),
+    ]).then(([ordemRes, formulaRes]) => {
+      if (cancelled) return;
+      const row = ordemRes.data as any;
+      const hasC = !!(formulaRes.data && formulaRes.data.length > 0);
+      setFormulaId(row?.formula_id ?? null);
+      setTamanhoBatelada(row?.tamanho_batelada ?? null);
+      if (hasC) {
+        setCustomItens(formulaRes.data as FormulaRow[]);
+        setHasCustom(true);
+      }
+      setLoadingOrdem(false);
+    });
+
+    return () => { cancelled = true; };
   }, [emPesagem?.id]);
 
-  const { itens: formulaItens, loading: loadingFormula } = useFormula(
+  const { itens: formulaItens, loading: loadingFormula, error: formulaError } = useFormula(
     hasCustom ? null : formulaId,
     hasCustom ? null : tamanhoBatelada
   );
 
   const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
+  const isLoadingFormula = loadingOrdem || (!hasCustom && loadingFormula);
+  const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
 
   const totalHoje = ordens.filter((o) => o.balanca === balanca).length;
 
@@ -172,14 +175,20 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             </div>
           )}
 
-          {!hasCustom && loadingFormula && (
+          {isLoadingFormula && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando fórmula...
             </div>
           )}
 
-          {displayItens.length > 0 && (
+          {formulaNaoEncontrada && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive font-medium">
+              {formulaError ?? "Fórmula não encontrada"}
+            </div>
+          )}
+
+          {!isLoadingFormula && displayItens.length > 0 && (
             <div className="space-y-2">
               <div className="rounded-md border overflow-hidden">
                 <table className="w-full text-base">
@@ -242,7 +251,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             </div>
           )}
 
-          {(displayItens.length === 0 || checkedItens.size === displayItens.length) && !loadingFormula && (
+          {(displayItens.length === 0 || checkedItens.size === displayItens.length) && !isLoadingFormula && (
             <div className="flex justify-end">
               <Button
                 size="sm"

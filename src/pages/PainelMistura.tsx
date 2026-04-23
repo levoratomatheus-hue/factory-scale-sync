@@ -23,38 +23,56 @@ export default function PainelMistura() {
   const [loading, setLoading] = useState(true);
   const [customItens, setCustomItens] = useState<FormulaRow[]>([]);
   const [hasCustom, setHasCustom] = useState(false);
+  const [loadingOrdemFormula, setLoadingOrdemFormula] = useState(false);
 
   const sorted = sortOrdens(ordens);
   const emMistura = sorted.find((o) => o.status === "em_mistura") ?? null;
   const aguardando = sorted.filter((o) => o.status === "aguardando_mistura");
 
-  const { itens: formulaItens, loading: loadingFormula } = useFormula(
+  const { itens: formulaItens, loading: loadingFormula, error: formulaError } = useFormula(
     hasCustom ? null : (emMistura?.formula_id ?? null),
     hasCustom ? null : (emMistura?.tamanho_batelada ?? null)
   );
 
   const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
+  const isLoadingFormula = loadingOrdemFormula || (!hasCustom && loadingFormula);
+  const formulaNaoEncontrada =
+    !isLoadingFormula &&
+    !hasCustom &&
+    !!(emMistura?.formula_id) &&
+    !!(emMistura?.tamanho_batelada) &&
+    displayItens.length === 0;
 
   useEffect(() => {
     if (!emMistura?.id) {
       setCustomItens([]);
       setHasCustom(false);
+      setLoadingOrdemFormula(false);
       return;
     }
+
+    // Limpa imediatamente para não exibir dados de outra OP
+    setCustomItens([]);
+    setHasCustom(false);
+    setLoadingOrdemFormula(true);
+
+    let cancelled = false;
+
     supabase
       .from("ordens_formula")
       .select("sequencia, materia_prima, quantidade_kg")
       .eq("ordem_id", emMistura.id)
       .order("sequencia", { ascending: true })
       .then(({ data }) => {
+        if (cancelled) return;
         if (data && data.length > 0) {
           setCustomItens(data as FormulaRow[]);
           setHasCustom(true);
-        } else {
-          setCustomItens([]);
-          setHasCustom(false);
         }
+        setLoadingOrdemFormula(false);
       });
+
+    return () => { cancelled = true; };
   }, [emMistura?.id]);
 
   const fetchOrdens = async () => {
@@ -208,14 +226,20 @@ export default function PainelMistura() {
               })()}
             </div>
 
-            {loadingFormula && (
+            {isLoadingFormula && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Carregando fórmula...
               </div>
             )}
 
-            {displayItens.length > 0 && (
+            {formulaNaoEncontrada && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive font-medium">
+                {formulaError ?? "Fórmula não encontrada"}
+              </div>
+            )}
+
+            {!isLoadingFormula && displayItens.length > 0 && (
               <div className="space-y-2">
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-base">
@@ -250,7 +274,7 @@ export default function PainelMistura() {
               </div>
             )}
 
-            {!loadingFormula && (
+            {!isLoadingFormula && (
               <div className="flex justify-end">
                 <Button
                   size="sm"
