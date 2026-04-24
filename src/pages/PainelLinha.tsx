@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormula } from "@/hooks/useFormula";
 import { useParadasLinha, useRegistrosDiariosOrdem } from "@/hooks/useOrdens";
@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -46,7 +46,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const iniciado = useRef(false);
 
   // Etapa 1 — registrar hora início
   const [horaInicioInput, setHoraInicioInput] = useState("");
@@ -107,45 +106,25 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     return () => { supabase.removeChannel(channel); };
   }, [linha]);
 
-  const initLinha = async (): Promise<string | null> => {
-    const { data } = await supabase
-      .from("ordens")
-      .select("*")
-      .eq("linha", linha)
-      .eq("data_programacao", today)
-      .in("status", ["aguardando_linha", "em_linha"])
-      .order("posicao", { ascending: true, nullsFirst: false });
-
-    if (!data || data.length === 0) return null;
-    if (data.some((o: any) => o.status === "em_linha")) return null;
-
-    const first = data.find((o: any) => o.status === "aguardando_linha");
-    if (!first) return null;
-
+  const iniciarOrdem = async (ordem: any) => {
     const { error } = await supabase
       .from("ordens")
       .update({ status: "em_linha" })
-      .eq("id", first.id);
+      .eq("id", ordem.id);
 
-    if (error) return error.message;
+    if (error) {
+      toast({ title: "Erro ao iniciar ordem", description: error.message, variant: "destructive" });
+      return;
+    }
 
     await supabase.from("historico").insert({
-      ordem_id: first.id,
+      ordem_id: ordem.id,
       status_anterior: "aguardando_linha",
       status_novo: "em_linha",
     });
 
-    return null;
+    await fetchOrdens();
   };
-
-  useEffect(() => {
-    if (!loading && linhaOrdens.length > 0 && !iniciado.current) {
-      iniciado.current = true;
-      initLinha().then((err) => {
-        if (err) toast({ title: "Erro ao iniciar fila automaticamente", description: err, variant: "destructive" });
-      });
-    }
-  }, [loading, linhaOrdens.length]);
 
   const salvarInicio = async () => {
     if (!emLinha || !horaInicioInput) {
@@ -218,33 +197,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       status_anterior: "em_linha",
       status_novo: "aguardando_liberacao",
     });
-
-    const { count: emLinhaCount } = await supabase
-      .from("ordens")
-      .select("*", { count: "exact", head: true })
-      .eq("linha", linha)
-      .eq("status", "em_linha");
-
-    if (!emLinhaCount || emLinhaCount === 0) {
-      const { data: proximas } = await supabase
-        .from("ordens")
-        .select("id")
-        .eq("linha", linha)
-        .eq("data_programacao", today)
-        .eq("status", "aguardando_linha")
-        .order("posicao", { ascending: true, nullsFirst: false })
-        .limit(1);
-
-      if (proximas && proximas.length > 0) {
-        const nextId = proximas[0].id;
-        await supabase.from("ordens").update({ status: "em_linha" }).eq("id", nextId);
-        await supabase.from("historico").insert({
-          ordem_id: nextId,
-          status_anterior: "aguardando_linha",
-          status_novo: "em_linha",
-        });
-      }
-    }
 
     await fetchOrdens();
     toast({ title: "Ordem concluída com sucesso" });
@@ -552,19 +504,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
         </>
       ) : (
         <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-6 text-center text-muted-foreground">
-          <div className="space-y-3">
-            <p>Nenhuma ordem em andamento</p>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                iniciado.current = false;
-                const err = await initLinha();
-                if (err) toast({ title: "Erro ao iniciar fila", description: err, variant: "destructive" });
-              }}
-            >
-              Iniciar fila
-            </Button>
-          </div>
+          <p>Nenhuma ordem em andamento</p>
         </div>
       )}
 
@@ -588,6 +528,12 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                     <MarcaBadge marca={ordem.marca} size="sm" />
                   </div>
                 </div>
+                {!emLinha && (
+                  <Button size="sm" variant="outline" onClick={() => iniciarOrdem(ordem)} className="shrink-0">
+                    <Play className="mr-1 h-3 w-3" />
+                    Iniciar
+                  </Button>
+                )}
               </div>
             ))}
           </div>
