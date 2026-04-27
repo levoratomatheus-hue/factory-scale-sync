@@ -10,6 +10,7 @@ interface LoteRow {
   classe: string;
   formula_id: string | null;
   status: string | null;
+  data_emissao: string | null;
 }
 
 interface FormulaRow {
@@ -32,7 +33,7 @@ export default function ImportarProgramacao() {
   const [erro, setErro] = useState<string | null>(null);
 
   const [loadingFormulas, setLoadingFormulas] = useState(false);
-  const [resultadoFormulas, setResultadoFormulas] = useState<{ total: number } | null>(null);
+  const [resultadoFormulas, setResultadoFormulas] = useState<{ totalFormulas: number; totalLinhas: number } | null>(null);
   const [erroFormulas, setErroFormulas] = useState<string | null>(null);
 
   // ── Importar Programação (lotes) ──────────────────────────────────────────
@@ -55,8 +56,13 @@ export default function ImportarProgramacao() {
         return;
       }
 
-      // campo1=lote, campo4=formula_id, campo5=produto, campo7=status, campo9=quantidade, campo13=classe
+      // campo1=lote, campo4=formula_id, campo5=produto, campo6=data_emissao, campo7=status, campo9=quantidade, campo13=classe
       const limpar = (v: string) => v.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim();
+      const parseDateBR = (v: string): string | null => {
+        const s = limpar(v);
+        const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+      };
       const lotes: LoteRow[] = lines
         .map((line) => {
           const p = line.split(';');
@@ -64,11 +70,12 @@ export default function ImportarProgramacao() {
           const quantidade = parseFloat(limpar(p[8] ?? '0').replace(/\./g, '').replace(',', '.'));
           return {
             lote,
-            formula_id: limpar(p[3] ?? '') || null,
-            produto:    limpar(p[4] ?? ''),
-            status:     limpar(p[6] ?? '') || null,
-            quantidade: isNaN(quantidade) ? 0 : quantidade,
-            classe:     limpar(p[12] ?? ''),
+            formula_id:   limpar(p[3] ?? '') || null,
+            produto:      limpar(p[4] ?? ''),
+            data_emissao: parseDateBR(p[5] ?? ''),
+            status:       limpar(p[6] ?? '') || null,
+            quantidade:   isNaN(quantidade) ? 0 : quantidade,
+            classe:       limpar(p[12] ?? ''),
           };
         })
         .filter((r) => !isNaN(r.lote) && r.lote > 0 && r.produto);
@@ -149,18 +156,60 @@ export default function ImportarProgramacao() {
         return;
       }
 
-      const { error } = await (supabase as any)
-        .from('formulas')
-        .upsert(rows, { onConflict: 'formula_id,sequencia' });
+      // Group rows by formula_id so we can delete+reinsert each formula atomically.
+      // ordens_formula (historical pesagem data) is a separate table and is NEVER touched here.
+      const byFormula = rows.reduce<Map<string, FormulaRow[]>>((map, row) => {
+        if (!map.has(row.formula_id)) map.set(row.formula_id, []);
+        map.get(row.formula_id)!.push(row);
+        return map;
+      }, new Map());
 
-      if (error) {
-        setErroFormulas(`Erro ao salvar: ${error.message}`);
-        setLoadingFormulas(false);
-        return;
+      const formulaIds = Array.from(byFormula.keys());
+
+      // Verify concluded OPs for each formula_id (informational).
+      // Even when concluded OPs exist their ingredient data is already preserved
+      // in ordens_formula — the standard formulas table can be safely overwritten.
+      const { data: opsConcluidas } = await supabase
+        .from('ordens')
+        .select('formula_id')
+        .in('formula_id', formulaIds)
+        .eq('status', 'concluido');
+
+      const formulasComHistorico = new Set((opsConcluidas ?? []).map((o: any) => o.formula_id));
+
+      for (const [formulaId, formulaRows] of byFormula) {
+        // Delete existing rows in `formulas` only — never touches ordens_formula
+        const { error: delErr } = await (supabase as any)
+          .from('formulas')
+          .delete()
+          .eq('formula_id', formulaId);
+
+        if (delErr) {
+          setErroFormulas(`Erro ao deletar fórmula ${formulaId}: ${delErr.message}`);
+          setLoadingFormulas(false);
+          return;
+        }
+
+        // Insert updated ingredient list
+        const { error: insErr } = await (supabase as any)
+          .from('formulas')
+          .insert(formulaRows);
+
+        if (insErr) {
+          setErroFormulas(`Erro ao inserir fórmula ${formulaId}: ${insErr.message}`);
+          setLoadingFormulas(false);
+          return;
+        }
       }
 
-      setResultadoFormulas({ total: rows.length });
-      toast({ title: `${rows.length} registros de fórmula importados com sucesso!` });
+      const comHistorico = formulaIds.filter((id) => formulasComHistorico.has(id)).length;
+      setResultadoFormulas({ totalFormulas: formulaIds.length, totalLinhas: rows.length });
+      toast({
+        title: `${formulaIds.length} fórmula${formulaIds.length !== 1 ? 's' : ''} reimportada${formulaIds.length !== 1 ? 's' : ''} com sucesso!`,
+        description: comHistorico > 0
+          ? `${comHistorico} fórmula${comHistorico !== 1 ? 's' : ''} com OPs concluídas — histórico ordens_formula preservado.`
+          : undefined,
+      });
     } catch {
       setErroFormulas('Erro ao ler o arquivo. Verifique se é um TXT válido com encoding Windows-1252.');
     }
@@ -224,7 +273,7 @@ export default function ImportarProgramacao() {
         <p className="font-mono text-xs bg-muted px-2 py-1 rounded">
           lote;…;…;formula_id;produto;…;status;…;quantidade;…;…;…;classe;…
         </p>
-        <p>• Campos usados: <strong>1</strong>=lote, <strong>4</strong>=formula_id, <strong>5</strong>=produto, <strong>9</strong>=quantidade, <strong>13</strong>=classe</p>
+        <p>• Campos usados: <strong>1</strong>=lote, <strong>4</strong>=formula_id, <strong>5</strong>=produto, <strong>6</strong>=data_emissao, <strong>9</strong>=quantidade, <strong>13</strong>=classe</p>
         <p>• Lotes novos são inseridos; existentes (mesmo <strong>lote</strong>) são atualizados</p>
         <p>• Linhas vazias são ignoradas automaticamente</p>
       </div>
@@ -262,7 +311,7 @@ export default function ImportarProgramacao() {
             <div>
               <p className="font-semibold text-status-done">Importação concluída!</p>
               <p className="text-sm text-muted-foreground">
-                {resultadoFormulas.total} registro{resultadoFormulas.total !== 1 ? 's' : ''} de fórmula importado{resultadoFormulas.total !== 1 ? 's' : ''}/atualizado{resultadoFormulas.total !== 1 ? 's' : ''}.
+                {resultadoFormulas.totalFormulas} fórmula{resultadoFormulas.totalFormulas !== 1 ? 's' : ''} · {resultadoFormulas.totalLinhas} linha{resultadoFormulas.totalLinhas !== 1 ? 's' : ''} de ingredientes reimportadas.
               </p>
             </div>
           </div>

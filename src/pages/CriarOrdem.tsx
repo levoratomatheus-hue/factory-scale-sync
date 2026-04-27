@@ -44,6 +44,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     { qty: '', mp: '' },
   ]);
   const [requerMistura, setRequerMistura] = useState(true);
+  const [orientacoes, setOrientacoes] = useState('');
+  const [dataEmissao, setDataEmissao] = useState<string | null>(null);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -88,7 +90,20 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setFormulaId(data.formula_id ?? null);
     setTamanhoBatelada(data.tamanho_batelada ?? null);
     setSemFormula(!data.formula_id);
+    setDataEmissao((data as any).data_emissao ?? null);
     setLoteEncontrado(true);
+
+    if (data.formula_id) {
+      const { data: formulaData } = await supabase
+        .from('formulas')
+        .select('orientacoes')
+        .eq('id', data.formula_id)
+        .single();
+      setOrientacoes((formulaData as any)?.orientacoes ?? '');
+    } else {
+      setOrientacoes('');
+    }
+
     toast({ title: 'Lote encontrado!', description: data.produto });
     onPrefillConsumed?.();
   }, [form, onPrefillConsumed]);
@@ -120,6 +135,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
           return filled.length > 0 ? JSON.stringify(filled) : null;
         })(),
         requer_mistura: requerMistura,
+        orientacoes: orientacoes.trim() || null,
+        data_emissao: dataEmissao ?? null,
       } as any)
       .select()
       .single();
@@ -128,6 +145,14 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       setSaving(false);
       toast({ title: 'Erro ao salvar', description: error?.message, variant: 'destructive' });
       return;
+    }
+
+    // Update orientacoes on formulas table for future orders
+    if (formulaId) {
+      await supabase
+        .from('formulas')
+        .update({ orientacoes: orientacoes.trim() || null } as any)
+        .eq('id', formulaId);
     }
 
     // Save customized formula quantities if the gestor edited them
@@ -151,6 +176,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setSemFormula(false);
     setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
     setRequerMistura(true);
+    setOrientacoes('');
+    setDataEmissao(null);
   };
 
   return (
@@ -216,6 +243,14 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                   />
                 </div>
 
+                {dataEmissao && (
+                  <p className="text-xs text-muted-foreground">
+                    Data de emissão: <span className="font-medium text-foreground">
+                      {dataEmissao.split('-').reverse().join('/')}
+                    </span>
+                  </p>
+                )}
+
                 {formulaId && (
                   <p className="text-xs text-muted-foreground">
                     Fórmula: <span className="font-medium text-foreground">{formulaId}</span>
@@ -232,6 +267,20 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 {erroFormula && (
                   <p className="text-sm text-destructive">{erroFormula}</p>
                 )}
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Orientações para Produção</label>
+                  <textarea
+                    value={orientacoes}
+                    onChange={(e) => setOrientacoes(e.target.value)}
+                    rows={3}
+                    placeholder="Instruções especiais para a linha de produção (opcional)"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  />
+                  {formulaId && (
+                    <p className="text-xs text-muted-foreground">Será salvo na fórmula e pré-preenchido nas próximas OPs deste produto.</p>
+                  )}
+                </div>
 
                 {itens.length > 0 && (
                   <div className="space-y-2">

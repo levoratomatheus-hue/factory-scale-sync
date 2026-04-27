@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { MetricCard } from "@/components/MetricCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   CalendarPlus,
   CalendarClock,
+  CalendarCheck2,
   Pencil,
   Undo2,
 } from "lucide-react";
@@ -33,10 +34,88 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn, sortOrdens } from "@/lib/utils";
+
+function pascoa(ano: number): Date {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(ano, mes - 1, dia, 12, 0, 0);
+}
+
+function feriadosDoAno(ano: number): Set<string> {
+  const fmtKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const fixos = [
+    [1, 1], [4, 21], [5, 1], [9, 7], [10, 12], [11, 2], [11, 15], [12, 25],
+  ].map(([m, d]) => fmtKey(new Date(ano, m - 1, d, 12, 0, 0)));
+
+  const easter = pascoa(ano);
+  const addDias = (base: Date, n: number) => {
+    const d = new Date(base);
+    d.setDate(d.getDate() + n);
+    return fmtKey(d);
+  };
+  const moveis = [
+    addDias(easter, -48), // Segunda de Carnaval
+    addDias(easter, -47), // Terça de Carnaval
+    addDias(easter, -2),  // Sexta-feira Santa
+    fmtKey(easter),       // Páscoa
+    addDias(easter, 60),  // Corpus Christi
+  ];
+
+  return new Set([...fixos, ...moveis]);
+}
+
+function proximoDiaUtil(dataStr: string): string {
+  const d = new Date(dataStr + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  let cacheAno = -1;
+  let feriados = new Set<string>();
+  while (true) {
+    const ano = d.getFullYear();
+    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
+    const day = d.getDay();
+    const key = `${ano}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (day !== 0 && day !== 6 && !feriados.has(key)) break;
+    d.setDate(d.getDate() + 1);
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function diasUteis(de: string, ate: string): number {
+  const start = new Date(de + 'T12:00:00');
+  const end = new Date(ate + 'T12:00:00');
+  let count = 0;
+  const cur = new Date(start);
+  cur.setDate(cur.getDate() + 1);
+  let cacheAno = -1;
+  let feriados = new Set<string>();
+  while (cur <= end) {
+    const ano = cur.getFullYear();
+    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
+    const day = cur.getDay();
+    const key = `${ano}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+    if (day !== 0 && day !== 6 && !feriados.has(key)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { EditarOrdemDialog, type OrdemEditavel } from "@/components/EditarOrdemDialog";
+import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
 
 interface LoteSemOP {
   lote: number;
@@ -68,8 +147,23 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [ordemEditando, setOrdemEditando] = useState<OrdemEditavel | null>(null);
   const [ordemParaVoltar, setOrdemParaVoltar] = useState<{ id: string; produto: string } | null>(null);
   const [voltando, setVoltando] = useState(false);
+  const [ordemParaForcar, setOrdemParaForcar] = useState<{ id: string; produto: string; dataProgramacao: string; statusAnterior: string } | null>(null);
+  const [forcarHoraInicio, setForcarHoraInicio] = useState("");
+  const [forcarHoraFim, setForcarHoraFim] = useState("");
+  const [forcarProdItems, setForcarProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [forcarQtdReal, setForcarQtdReal] = useState("");
+  const [forcando, setForcando] = useState(false);
   const [novaData, setNovaData] = useState<Record<string, string>>({});
   const [reprogramando, setReprogramando] = useState<Record<string, boolean>>({});
+  const [registrosDoDia, setRegistrosDoDia] = useState<Record<string, any>>({});
+  const [ordensDeRegistros, setOrdensDeRegistros] = useState<any[]>([]);
+  const [ordemParaRegistrar, setOrdemParaRegistrar] = useState<{ id: string; produto: string } | null>(null);
+  const [ordemDetalhe, setOrdemDetalhe] = useState<any | null>(null);
+  const [regDia, setRegDia] = useState(todayStr);
+  const [regHoraInicio, setRegHoraInicio] = useState("");
+  const [regHoraFim, setRegHoraFim] = useState("");
+  const [regProdItems, setRegProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [registrando, setRegistrando] = useState(false);
 
   const isHoje = isToday(selectedDate);
   const isPassado = isPast(selectedDate) && !isHoje;
@@ -81,7 +175,39 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const emAberto = ordens.filter((o) => o.status === "pendente").length;
   const taxaConclusao = total > 0 ? Math.round((concluidas / total) * 100) : 0;
 
-  const ordensPorLinha = (linha: number) => sortOrdens(ordens.filter((o) => o.linha === linha));
+  const fetchRegistrosDoDia = useCallback(async () => {
+    const { data: regs } = await (supabase as any)
+      .from("registros_diarios")
+      .select("ordem_id, registro_producao, hora_inicio, hora_fim")
+      .eq("data", dateStr);
+
+    if (!regs?.length) {
+      setRegistrosDoDia({});
+      setOrdensDeRegistros([]);
+      return;
+    }
+
+    const regMap: Record<string, any> = {};
+    regs.forEach((r: any) => { regMap[r.ordem_id] = r; });
+    setRegistrosDoDia(regMap);
+
+    const ids = regs.map((r: any) => r.ordem_id);
+    const { data: ops } = await supabase.from("ordens").select("*").in("id", ids);
+    setOrdensDeRegistros(ops ?? []);
+  }, [dateStr]);
+
+  useEffect(() => {
+    fetchRegistrosDoDia();
+  }, [fetchRegistrosDoDia]);
+
+  const ordensPorLinha = (linha: number) => {
+    const doDia = ordens.filter((o) => o.linha === linha);
+    const visto = new Set(doDia.map((o) => o.id));
+    const deRegistros = ordensDeRegistros.filter(
+      (o) => Number(o.linha) === linha && !visto.has(o.id)
+    );
+    return sortOrdens([...doDia, ...deRegistros]);
+  };
   const ordensPorBalanca = (balanca: number) =>
     sortOrdens(todasPendentes.filter((o) => o.balanca === balanca && o.status !== "concluido"));
 
@@ -157,12 +283,105 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     setOrdemParaVoltar(null);
   };
 
+  const handleForcarConclusao = async () => {
+    if (!ordemParaForcar) return;
+    setForcando(true);
+
+    const filledItems = forcarProdItems.filter((r) => r.qty.trim() || r.peso.trim());
+    if (filledItems.length > 0) {
+      const { error: errReg } = await (supabase as any).from("registros_diarios").insert({
+        ordem_id: ordemParaForcar.id,
+        data: ordemParaForcar.dataProgramacao,
+        hora_inicio: forcarHoraInicio || null,
+        hora_fim: forcarHoraFim || null,
+        registro_producao: filledItems.map((r) => ({
+          qty: parseInt(r.qty) || 0,
+          peso: parseFloat(r.peso.replace(",", ".")) || 0,
+        })),
+      });
+
+      if (errReg) {
+        toast({ title: "Erro ao salvar registro de produção", description: errReg.message, variant: "destructive" });
+        setForcando(false);
+        return;
+      }
+    }
+
+    const payload: any = { status: "aguardando_liberacao", hora_inicio: forcarHoraInicio || null, hora_fim: forcarHoraFim || null, motivo_reprovacao: null };
+    if (forcarQtdReal.trim()) payload.quantidade_real = parseFloat(forcarQtdReal.replace(",", "."));
+
+    const { error } = await supabase.from("ordens").update(payload as any).eq("id", ordemParaForcar.id);
+    if (!error) {
+      await supabase.from("historico").insert({
+        ordem_id: ordemParaForcar.id,
+        status_anterior: ordemParaForcar.statusAnterior,
+        status_novo: "aguardando_liberacao",
+      });
+      toast({ title: "Ordem enviada para aguardando liberação" });
+    } else {
+      toast({ title: "Erro ao concluir ordem", description: error.message, variant: "destructive" });
+    }
+    setForcando(false);
+    setOrdemParaForcar(null);
+    setForcarHoraInicio("");
+    setForcarHoraFim("");
+    setForcarProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    setForcarQtdReal("");
+  };
+
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const { error } = await supabase.from("ordens").update(payload as any).eq("id", id);
     if (error) {
       toast({ title: "Erro ao editar ordem", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Ordem atualizada com sucesso" });
+    }
+  };
+
+  const handleRegistrarDia = async () => {
+    if (!ordemParaRegistrar) return;
+    const dataRegistro = (regDia || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataRegistro)) {
+      toast({ title: "Data inválida", description: "Selecione uma data válida no formato YYYY-MM-DD.", variant: "destructive" });
+      return;
+    }
+    setRegistrando(true);
+    const filledItems = regProdItems.filter((r) => r.qty.trim() || r.peso.trim());
+    const { error } = await (supabase as any).from("registros_diarios").insert({
+      ordem_id: ordemParaRegistrar.id,
+      data: dataRegistro,
+      hora_inicio: regHoraInicio || null,
+      hora_fim: regHoraFim || null,
+      registro_producao: filledItems.map((r) => ({
+        qty: parseInt(r.qty) || 0,
+        peso: parseFloat(r.peso.replace(",", ".")) || 0,
+      })),
+    });
+    if (error) {
+      setRegistrando(false);
+      toast({ title: "Erro ao registrar dia", description: error.message, variant: "destructive" });
+      return;
+    }
+    const proximaData = proximoDiaUtil(dataRegistro);
+    const { error: errUpdate } = await supabase.from("ordens").update({ data_programacao: proximaData } as any).eq("id", ordemParaRegistrar.id);
+    if (errUpdate) {
+      setRegistrando(false);
+      toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate.message, variant: "destructive" });
+      return;
+    }
+    setRegistrando(false);
+    const dataFmt = format(new Date(dataRegistro + "T12:00:00"), "dd/MM/yyyy");
+    toast({ title: `Registro de ${dataFmt} salvo — próxima data: ${format(new Date(proximaData + "T12:00:00"), "dd/MM/yyyy")}` });
+    setOrdemParaRegistrar(null);
+    setRegDia(todayStr);
+    setRegHoraInicio("");
+    setRegHoraFim("");
+    setRegProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    if (dataRegistro !== dateStr) {
+      // Navega para a data salva para o gestor confirmar o registro visualmente
+      setSelectedDate(new Date(dataRegistro + "T12:00:00"));
+    } else {
+      fetchRegistrosDoDia();
     }
   };
 
@@ -410,8 +629,18 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
               <h3 className="font-semibold text-sm text-muted-foreground mb-3">Linha {linha}</h3>
               <div className="space-y-2">
                 {ordensPorLinha(linha).length === 0 && <p className="text-sm text-muted-foreground">Nenhuma ordem</p>}
-                {ordensPorLinha(linha).map((ordem) => (
-                  <div key={ordem.id} className="bg-card border rounded-lg p-2.5 flex items-start gap-1.5">
+                {ordensPorLinha(linha).map((ordem) => {
+                  const du = ordem.data_emissao ? diasUteis(ordem.data_emissao, ordem.data_programacao) : 0;
+                  const atrasado = du > 7;
+                  return (
+                  <div
+                    key={ordem.id}
+                    className={`bg-card border rounded-lg p-2.5 flex items-start gap-1.5 ${atrasado ? 'border-red-500' : ''} ${(ordem.status === "em_linha" || ordem.status === "aguardando_linha") ? "cursor-pointer" : ""}`}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest("button")) return;
+                      if (ordem.status === "em_linha" || ordem.status === "aguardando_linha") setOrdemDetalhe(ordem);
+                    }}
+                  >
                     <div className="flex-1 space-y-1 overflow-hidden">
                       <p className="text-xs font-semibold leading-tight break-words">{ordem.produto}</p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
@@ -419,6 +648,31 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                         <MarcaBadge marca={ordem.marca} size="sm" />
                       </p>
                       <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
+                      {atrasado && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
+                          <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                          {du}du em atraso
+                        </span>
+                      )}
+                      {!registrosDoDia[ordem.id] && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded px-1 py-0 leading-4">
+                          <Clock className="h-2.5 w-2.5 shrink-0" />
+                          aguardando registro
+                        </span>
+                      )}
+                      {registrosDoDia[ordem.id] && (() => {
+                        const reg = registrosDoDia[ordem.id];
+                        const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
+                        const total = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+                        const hi = reg.hora_inicio ? String(reg.hora_inicio).slice(0, 5) : null;
+                        const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
+                        return (
+                          <span className="inline-flex flex-col gap-0 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
+                            {total > 0 && <span>{total.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
+                            {hi && hf && <span>{hi}–{hf}</span>}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <button
                       onClick={() => setOrdemEditando(ordem as OrdemEditavel)}
@@ -427,6 +681,27 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
+                    {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+                      <button
+                        onClick={() => {
+                          setOrdemParaRegistrar({ id: ordem.id, produto: ordem.produto });
+                          setRegDia(ordem.data_programacao || dateStr);
+                        }}
+                        className="mt-0.5 text-muted-foreground/50 hover:text-blue-600 shrink-0"
+                        title="Registrar Dia"
+                      >
+                        <CalendarCheck2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+                      <button
+                        onClick={() => setOrdemParaForcar({ id: ordem.id, produto: ordem.produto, dataProgramacao: ordem.data_programacao, statusAnterior: ordem.status })}
+                        className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
+                        title="Forçar Conclusão"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {ordem.status === "em_linha" && (
                       <button
                         onClick={() => setOrdemParaVoltar({ id: ordem.id, produto: ordem.produto })}
@@ -444,7 +719,8 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -531,11 +807,110 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
         </div>
       </div>
 
+      <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
+
       <EditarOrdemDialog
         ordem={ordemEditando}
         onClose={() => setOrdemEditando(null)}
         onSalvar={handleEditar}
       />
+
+      <Dialog
+        open={!!ordemParaForcar}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrdemParaForcar(null);
+            setForcarHoraInicio("");
+            setForcarHoraFim("");
+            setForcarProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+            setForcarQtdReal("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Forçar Conclusão</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaForcar?.produto}</span>
+              <br />
+              Registre os dados de produção para concluir esta OP manualmente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={forcarHoraInicio}
+                  onChange={(e) => setForcarHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={forcarHoraFim}
+                  onChange={(e) => setForcarHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Registro de Produção</label>
+              {forcarProdItems.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.qty}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setForcarProdItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                    }}
+                    placeholder="0"
+                    className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.peso}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9,]/g, "");
+                      setForcarProdItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
+                    }}
+                    placeholder="0,000 kg"
+                    className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Quantidade Real (kg)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={forcarQtdReal}
+                onChange={(e) => setForcarQtdReal(e.target.value.replace(/[^0-9,]/g, ""))}
+                placeholder="Opcional"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaForcar(null)} disabled={forcando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleForcarConclusao} disabled={forcando} className="bg-green-600 hover:bg-green-700 text-white">
+              {forcando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <CheckCircle2 className="mr-1.5 h-4 w-4" />
+              Enviar para Liberação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!ordemParaVoltar} onOpenChange={(open) => !open && setOrdemParaVoltar(null)}>
         <DialogContent className="max-w-sm">
@@ -576,6 +951,101 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
             <Button variant="destructive" onClick={excluirOrdem} disabled={excluindo}>
               {excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!ordemParaRegistrar}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrdemParaRegistrar(null);
+            setRegDia(todayStr);
+            setRegHoraInicio("");
+            setRegHoraFim("");
+            setRegProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar Dia</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaRegistrar?.produto}</span>
+              <br />
+              Insira o registro de produção para o dia.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data</label>
+              <input
+                type="date"
+                value={regDia}
+                onChange={(e) => setRegDia(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={regHoraInicio}
+                  onChange={(e) => setRegHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={regHoraFim}
+                  onChange={(e) => setRegHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Registro de Produção</label>
+              {regProdItems.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.qty}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setRegProdItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                    }}
+                    placeholder="0"
+                    className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.peso}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9,]/g, "");
+                      setRegProdItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
+                    }}
+                    placeholder="0,000 kg"
+                    className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaRegistrar(null)} disabled={registrando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleRegistrarDia} disabled={registrando || !regDia} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {registrando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <CalendarCheck2 className="mr-1.5 h-4 w-4" />
+              Salvar Registro
             </Button>
           </DialogFooter>
         </DialogContent>

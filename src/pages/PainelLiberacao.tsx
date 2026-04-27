@@ -63,6 +63,9 @@ export default function PainelLiberacao() {
   const [loading, setLoading] = useState(true);
   const [registrosPorOrdem, setRegistrosPorOrdem] = useState<Record<string, any[]>>({});
   const [qtdReal, setQtdReal] = useState<Record<string, string>>({});
+  const [horaInicioEdit, setHoraInicioEdit] = useState<Record<string, string>>({});
+  const [horaFimEdit, setHoraFimEdit] = useState<Record<string, string>>({});
+  const [prodItemsEdit, setProdItemsEdit] = useState<Record<string, Array<{ qty: string; peso: string }>>>({});
   const [liberarOrdem, setLiberarOrdem] = useState<any | null>(null);
   const [reprovarOrdem, setReprovarOrdem] = useState<any | null>(null);
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
@@ -109,10 +112,32 @@ export default function PainelLiberacao() {
               const total = items.reduce((acc, i) => acc + i.qty * i.peso, 0);
               next[o.id] = total.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
             } else {
-              next[o.id] = String(o.quantidade);
+              next[o.id] = "";
             }
           }
         }
+      }
+      return next;
+    });
+
+    setHoraInicioEdit((prev) => {
+      const next = { ...prev };
+      for (const o of data) {
+        if (!(o.id in next)) next[o.id] = o.hora_inicio?.slice(0, 5) ?? "";
+      }
+      return next;
+    });
+    setHoraFimEdit((prev) => {
+      const next = { ...prev };
+      for (const o of data) {
+        if (!(o.id in next)) next[o.id] = o.hora_fim?.slice(0, 5) ?? "";
+      }
+      return next;
+    });
+    setProdItemsEdit((prev) => {
+      const next = { ...prev };
+      for (const o of data) {
+        if (!(o.id in next)) next[o.id] = [{ qty: "", peso: "" }, { qty: "", peso: "" }];
       }
       return next;
     });
@@ -276,7 +301,31 @@ export default function PainelLiberacao() {
   };
 
   const liberar = async (ordem: any) => {
-    const raw = qtdReal[ordem.id] ?? String(ordem.quantidade);
+    const regs = registrosPorOrdem[ordem.id] ?? [];
+    const semDados = !ordem.hora_inicio && !ordem.hora_fim && regs.length === 0 && !ordem.obs_linha;
+
+    if (semDados) {
+      const hi = horaInicioEdit[ordem.id] ?? "";
+      const hf = horaFimEdit[ordem.id] ?? "";
+      const items = (prodItemsEdit[ordem.id] ?? []).filter((r) => r.qty.trim() || r.peso.trim());
+
+      if (items.length > 0) {
+        await (supabase as any).from("registros_diarios").insert({
+          ordem_id: ordem.id,
+          data: ordem.data_programacao,
+          hora_inicio: hi || null,
+          hora_fim: hf || null,
+          registro_producao: items.map((r) => ({
+            qty: parseInt(r.qty) || 0,
+            peso: parseFloat(r.peso.replace(",", ".")) || 0,
+          })),
+        });
+      } else if (hi || hf) {
+        await supabase.from("ordens").update({ hora_inicio: hi || null, hora_fim: hf || null } as any).eq("id", ordem.id);
+      }
+    }
+
+    const raw = qtdReal[ordem.id] ?? "";
     const parsed = parseFloat(raw.replace(",", "."));
     const { error } = await supabase
       .from("ordens")
@@ -295,6 +344,9 @@ export default function PainelLiberacao() {
     setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
     setQtdReal((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
     setRegistrosPorOrdem((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraInicioEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraFimEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setProdItemsEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
 
     await supabase.from("historico").insert({
       ordem_id: ordem.id,
@@ -304,27 +356,46 @@ export default function PainelLiberacao() {
   };
 
   const reprovar = async (ordem: any) => {
+    if (ordem.hora_inicio && ordem.hora_fim) {
+      await supabase.from("paradas").insert({
+        linha: ordem.linha,
+        data: ordem.data_programacao,
+        motivo: "problema_processo",
+        hora_inicio: ordem.hora_inicio,
+        hora_fim: ordem.hora_fim,
+      });
+    }
+
     const { error } = await supabase
       .from("ordens")
       .update({
         status: "em_linha",
         motivo_reprovacao: motivoReprovacao.trim() || null,
+        quantidade_real: null,
         hora_inicio: null,
         hora_fim: null,
+        obs_linha: null,
       } as any)
       .eq("id", ordem.id);
     if (error) {
       toast({ title: "Erro ao reprovar ordem", description: error.message, variant: "destructive" });
       return;
     }
+
+    await (supabase as any).from("registros_diarios").delete().eq("ordem_id", ordem.id);
+
     await supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_liberacao",
       status_novo: "em_linha",
     });
+
     setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
     setQtdReal((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
     setRegistrosPorOrdem((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraInicioEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraFimEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setProdItemsEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
     setMotivoReprovacao("");
   };
 
@@ -456,6 +527,73 @@ export default function PainelLiberacao() {
                   </div>
                 ) : null}
 
+                {/* Campos inline para gestor preencher quando dados estão vazios */}
+                {!ordem.hora_inicio && !ordem.hora_fim && regs.length === 0 && !ordem.obs_linha && (
+                  <div className="rounded-md border border-dashed border-orange-300 bg-orange-50/60 p-3 space-y-3">
+                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
+                      Dados de produção (opcional — preencha antes de liberar)
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Hora Início</label>
+                        <input
+                          type="time"
+                          value={horaInicioEdit[ordem.id] ?? ""}
+                          onChange={(e) => setHoraInicioEdit((prev) => ({ ...prev, [ordem.id]: e.target.value }))}
+                          className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Hora Fim</label>
+                        <input
+                          type="time"
+                          value={horaFimEdit[ordem.id] ?? ""}
+                          onChange={(e) => setHoraFimEdit((prev) => ({ ...prev, [ordem.id]: e.target.value }))}
+                          className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Registro de Produção (qtd × peso)</label>
+                      {(prodItemsEdit[ordem.id] ?? [{ qty: "", peso: "" }, { qty: "", peso: "" }]).map((row, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={row.qty}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "");
+                              setProdItemsEdit((prev) => {
+                                const items = [...(prev[ordem.id] ?? [{ qty: "", peso: "" }, { qty: "", peso: "" }])];
+                                items[i] = { ...items[i], qty: val };
+                                return { ...prev, [ordem.id]: items };
+                              });
+                            }}
+                            placeholder="0"
+                            className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                          />
+                          <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={row.peso}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9,]/g, "");
+                              setProdItemsEdit((prev) => {
+                                const items = [...(prev[ordem.id] ?? [{ qty: "", peso: "" }, { qty: "", peso: "" }])];
+                                items[i] = { ...items[i], peso: val };
+                                return { ...prev, [ordem.id]: items };
+                              });
+                            }}
+                            placeholder="0,000 kg"
+                            className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Quantidade real */}
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium shrink-0">Quantidade Real (kg)</label>
@@ -513,14 +651,7 @@ export default function PainelLiberacao() {
                   <Button
                     size="sm"
                     className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
-                    onClick={() => {
-                      const val = qtdReal[ordem.id] ?? "";
-                      if (!val.trim() || isNaN(parseFloat(val.replace(",", ".")))) {
-                        toast({ title: "Informe a quantidade real produzida", variant: "destructive" });
-                        return;
-                      }
-                      setLiberarOrdem(ordem);
-                    }}
+                    onClick={() => setLiberarOrdem(ordem)}
                   >
                     <CheckCircle2 className="mr-1 h-4 w-4" />
                     Liberar

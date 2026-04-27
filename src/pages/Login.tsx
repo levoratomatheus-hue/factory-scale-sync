@@ -33,7 +33,7 @@ export default function Login() {
           <div className="flex justify-center">
             <Scale className="h-10 w-10 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold">Sistema de Pesagem</h1>
+          <h1 className="text-2xl font-bold">Zan Collor Produção</h1>
           <p className="text-sm text-muted-foreground">Faça login para continuar</p>
         </div>
 

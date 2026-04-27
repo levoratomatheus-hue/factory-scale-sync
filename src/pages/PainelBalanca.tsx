@@ -304,6 +304,13 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </div>
             );
           })()}
+
+          {emPesagem.orientacoes && (
+            <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-2 shadow-md">
+              <p className="text-sm font-extrabold text-white uppercase tracking-widest">📋 ORIENTAÇÕES DE PRODUÇÃO</p>
+              <p className="text-base font-bold text-white whitespace-pre-wrap">{emPesagem.orientacoes}</p>
+            </div>
+          )}
           </div>
         </>
       ) : (

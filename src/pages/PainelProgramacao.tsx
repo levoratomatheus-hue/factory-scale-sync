@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2 } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -12,6 +12,7 @@ import { useFormula } from "@/hooks/useFormula";
 import { formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { EditarOrdemDialog } from "@/components/EditarOrdemDialog";
+import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
 import {
   DndContext,
   closestCorners,
@@ -44,6 +45,84 @@ interface Ordem {
   marca: string | null;
   requer_mistura: boolean | null;
   data_programacao: string;
+  data_emissao: string | null;
+}
+
+function pascoa(ano: number): Date {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31); // 1-based
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(ano, mes - 1, dia, 12, 0, 0);
+}
+
+function feriadosDoAno(ano: number): Set<string> {
+  const fmtKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const fixos = [
+    [1, 1], [4, 21], [5, 1], [9, 7], [10, 12], [11, 2], [11, 15], [12, 25],
+  ].map(([m, d]) => fmtKey(new Date(ano, m - 1, d, 12, 0, 0)));
+
+  const easter = pascoa(ano);
+  const addDias = (base: Date, n: number) => {
+    const d = new Date(base);
+    d.setDate(d.getDate() + n);
+    return fmtKey(d);
+  };
+  const moveis = [
+    addDias(easter, -48), // Segunda de Carnaval
+    addDias(easter, -47), // Terça de Carnaval
+    addDias(easter, -2),  // Sexta-feira Santa
+    fmtKey(easter),       // Páscoa
+    addDias(easter, 60),  // Corpus Christi
+  ];
+
+  return new Set([...fixos, ...moveis]);
+}
+
+function proximoDiaUtil(dataStr: string): string {
+  const d = new Date(dataStr + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  let cacheAno = -1;
+  let feriados = new Set<string>();
+  while (true) {
+    const ano = d.getFullYear();
+    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
+    const day = d.getDay();
+    const key = `${ano}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (day !== 0 && day !== 6 && !feriados.has(key)) break;
+    d.setDate(d.getDate() + 1);
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function diasUteis(de: string, ate: string): number {
+  const start = new Date(de + 'T12:00:00');
+  const end = new Date(ate + 'T12:00:00');
+  let count = 0;
+  const cur = new Date(start);
+  cur.setDate(cur.getDate() + 1);
+  let cacheAno = -1;
+  let feriados = new Set<string>();
+  while (cur <= end) {
+    const ano = cur.getFullYear();
+    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
+    const day = cur.getDay();
+    const key = `${ano}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+    if (day !== 0 && day !== 6 && !feriados.has(key)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
 }
 
 
@@ -183,24 +262,35 @@ function FormulaDialog({
 
 function SortableCard({
   ordem,
+  registro,
   onReprogramar,
   onDblClick,
   onEditar,
   onExcluir,
   onVoltarFila,
+  onForcarConclusao,
+  onRegistrarDia,
+  onVerDetalhes,
 }: {
   ordem: Ordem;
+  registro?: any;
   onReprogramar: (id: string, novaData: string) => Promise<void>;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
   onVoltarFila: (ordem: Ordem) => void;
+  onForcarConclusao: (ordem: Ordem) => void;
+  onRegistrarDia: (ordem: Ordem) => void;
+  onVerDetalhes: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
   const [novaData, setNovaData] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [salvando, setSalvando] = useState(false);
+
+  const du = ordem.data_emissao ? diasUteis(ordem.data_emissao, ordem.data_programacao) : 0;
+  const atrasado = du > 7;
 
   return (
     <div
@@ -210,7 +300,11 @@ function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className="bg-card border rounded-lg p-2.5 flex items-start gap-1.5 select-none cursor-pointer"
+      className={`bg-card border rounded-lg p-2.5 flex items-start gap-1.5 select-none cursor-pointer ${atrasado ? 'border-red-500' : ''}`}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        if (ordem.status === "em_linha" || ordem.status === "aguardando_linha") onVerDetalhes(ordem);
+      }}
       onDoubleClick={() => onDblClick(ordem)}
     >
       <button
@@ -227,6 +321,31 @@ function SortableCard({
           <MarcaBadge marca={ordem.marca} size="sm" />
         </p>
         <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
+        {!registro && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded px-1 py-0 leading-4">
+            <Clock className="h-2.5 w-2.5 shrink-0" />
+            aguardando registro
+          </span>
+        )}
+        {registro && (() => {
+          const items: any[] = Array.isArray(registro.registro_producao) ? registro.registro_producao : [];
+          const total = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+          const hi = registro.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : null;
+          const hf = registro.hora_fim ? String(registro.hora_fim).slice(0, 5) : null;
+          if (!total && !(hi && hf)) return null;
+          return (
+            <span className="inline-flex flex-col gap-0 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
+              {total > 0 && <span>{total.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
+              {hi && hf && <span>{hi}–{hf}</span>}
+            </span>
+          );
+        })()}
+        {atrasado && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
+            <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+            {du}du em atraso
+          </span>
+        )}
       </div>
       <button
         onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
@@ -235,6 +354,24 @@ function SortableCard({
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>
+      {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }}
+          className="mt-0.5 text-muted-foreground/50 hover:text-blue-600 shrink-0"
+          title="Registrar Dia"
+        >
+          <CalendarCheck2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }}
+          className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
+          title="Forçar Conclusão"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+        </button>
+      )}
       {ordem.status === "em_linha" && (
         <button
           onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }}
@@ -292,19 +429,27 @@ function SortableCard({
 function LinhaColumn({
   linha,
   ordens,
+  registrosDoDia,
   onReprogramar,
   onDblClick,
   onEditar,
   onExcluir,
   onVoltarFila,
+  onForcarConclusao,
+  onRegistrarDia,
+  onVerDetalhes,
 }: {
   linha: number;
   ordens: Ordem[];
+  registrosDoDia: Record<string, any>;
   onReprogramar: (id: string, novaData: string) => Promise<void>;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
   onVoltarFila: (ordem: Ordem) => void;
+  onForcarConclusao: (ordem: Ordem) => void;
+  onRegistrarDia: (ordem: Ordem) => void;
+  onVerDetalhes: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -331,7 +476,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} />
+              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} />
             ))
           )}
         </div>
@@ -357,9 +502,23 @@ export default function PainelProgramacao() {
   const [ordemFormula, setOrdemFormula] = useState<Ordem | null>(null);
   const [ordemEditando, setOrdemEditando] = useState<Ordem | null>(null);
   const [ordemParaExcluir, setOrdemParaExcluir] = useState<Ordem | null>(null);
+  const [registrosDoDia, setRegistrosDoDia] = useState<Record<string, any>>({});
   const [excluindo, setExcluindo] = useState(false);
   const [ordemParaVoltar, setOrdemParaVoltar] = useState<Ordem | null>(null);
   const [voltando, setVoltando] = useState(false);
+  const [ordemParaForcar, setOrdemParaForcar] = useState<Ordem | null>(null);
+  const [forcarHoraInicio, setForcarHoraInicio] = useState("");
+  const [forcarHoraFim, setForcarHoraFim] = useState("");
+  const [forcarProdItems, setForcarProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [forcarQtdReal, setForcarQtdReal] = useState("");
+  const [forcando, setForcando] = useState(false);
+  const [ordemParaRegistrar, setOrdemParaRegistrar] = useState<Ordem | null>(null);
+  const [ordemDetalhe, setOrdemDetalhe] = useState<Ordem | null>(null);
+  const [regDia, setRegDia] = useState(todayStr);
+  const [regHoraInicio, setRegHoraInicio] = useState("");
+  const [regHoraFim, setRegHoraFim] = useState("");
+  const [regProdItems, setRegProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [registrando, setRegistrando] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -367,13 +526,44 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = async (dataSel: string) => {
     setLoading(true);
-    const { data: rows } = await supabase
-      .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao")
-      .eq("data_programacao", dataSel)
-      .not("linha", "is", null)
-      .order("posicao", { ascending: true, nullsFirst: false });
-    setOrdens((rows as Ordem[]) ?? []);
+    const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
+
+    // Busca em paralelo: OPs programadas para a data + registros do dia
+    const [{ data: programadas }, { data: regs }] = await Promise.all([
+      supabase
+        .from("ordens")
+        .select(fields)
+        .eq("data_programacao", dataSel)
+        .not("linha", "is", null)
+        .order("posicao", { ascending: true, nullsFirst: false }),
+      (supabase as any)
+        .from("registros_diarios")
+        .select("ordem_id, registro_producao, hora_inicio, hora_fim")
+        .eq("data", dataSel),
+    ]);
+
+    // Mapa de registros do dia
+    const regMap: Record<string, any> = {};
+    (regs ?? []).forEach((r: any) => { regMap[r.ordem_id] = r; });
+    setRegistrosDoDia(regMap);
+
+    // OPs com registro nesta data mas data_programacao diferente
+    const programadasIds = new Set((programadas ?? []).map((o: any) => o.id));
+    const extraIds = Object.keys(regMap).filter((id) => !programadasIds.has(id));
+
+    let extraOrdens: Ordem[] = [];
+    if (extraIds.length > 0) {
+      const { data: extraRows } = await supabase
+        .from("ordens")
+        .select(fields)
+        .in("id", extraIds)
+        .not("linha", "is", null);
+      extraOrdens = (extraRows as Ordem[]) ?? [];
+    }
+
+    const all = [...(programadas ?? []) as Ordem[], ...extraOrdens];
+    const deduped = [...new Map(all.map((o) => [o.id, o])).values()];
+    setOrdens(deduped);
     setLoading(false);
   };
 
@@ -495,6 +685,54 @@ export default function PainelProgramacao() {
     setOrdemParaVoltar(null);
   };
 
+  const handleForcarConclusao = async () => {
+    if (!ordemParaForcar) return;
+    setForcando(true);
+
+    const filledItems = forcarProdItems.filter((r) => r.qty.trim() || r.peso.trim());
+    if (filledItems.length > 0) {
+      const { error: errReg } = await (supabase as any).from("registros_diarios").insert({
+        ordem_id: ordemParaForcar.id,
+        data: ordemParaForcar.data_programacao,
+        hora_inicio: forcarHoraInicio || null,
+        hora_fim: forcarHoraFim || null,
+        registro_producao: filledItems.map((r) => ({
+          qty: parseInt(r.qty) || 0,
+          peso: parseFloat(r.peso.replace(",", ".")) || 0,
+        })),
+      });
+
+      if (errReg) {
+        toast({ title: "Erro ao salvar registro de produção", description: errReg.message, variant: "destructive" });
+        setForcando(false);
+        return;
+      }
+    }
+
+    const statusAnterior = ordemParaForcar.status;
+    const payload: any = { status: "aguardando_liberacao", hora_inicio: forcarHoraInicio || null, hora_fim: forcarHoraFim || null, motivo_reprovacao: null };
+    if (forcarQtdReal.trim()) payload.quantidade_real = parseFloat(forcarQtdReal.replace(",", "."));
+
+    const { error } = await supabase.from("ordens").update(payload as any).eq("id", ordemParaForcar.id);
+    if (!error) {
+      await supabase.from("historico").insert({
+        ordem_id: ordemParaForcar.id,
+        status_anterior: statusAnterior,
+        status_novo: "aguardando_liberacao",
+      });
+      setOrdens((prev) => prev.map((o) => o.id === ordemParaForcar.id ? { ...o, status: "aguardando_liberacao" } : o));
+      toast({ title: "Ordem enviada para aguardando liberação" });
+    } else {
+      toast({ title: "Erro ao concluir ordem", description: error.message, variant: "destructive" });
+    }
+    setForcando(false);
+    setOrdemParaForcar(null);
+    setForcarHoraInicio("");
+    setForcarHoraFim("");
+    setForcarProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    setForcarQtdReal("");
+  };
+
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const { error } = await supabase
       .from("ordens")
@@ -506,6 +744,54 @@ export default function PainelProgramacao() {
     }
     await fetchOrdens(data);
     toast({ title: "Ordem atualizada com sucesso" });
+  };
+
+  const handleRegistrarDia = async () => {
+    if (!ordemParaRegistrar) return;
+    const dataRegistro = (regDia || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataRegistro)) {
+      toast({ title: "Data inválida", description: "Selecione uma data válida no formato YYYY-MM-DD.", variant: "destructive" });
+      return;
+    }
+    setRegistrando(true);
+    const filledItems = regProdItems.filter((r) => r.qty.trim() || r.peso.trim());
+    const { error } = await (supabase as any).from("registros_diarios").insert({
+      ordem_id: ordemParaRegistrar.id,
+      data: dataRegistro,
+      hora_inicio: regHoraInicio || null,
+      hora_fim: regHoraFim || null,
+      registro_producao: filledItems.map((r) => ({
+        qty: parseInt(r.qty) || 0,
+        peso: parseFloat(r.peso.replace(",", ".")) || 0,
+      })),
+    });
+    if (error) {
+      setRegistrando(false);
+      toast({ title: "Erro ao registrar dia", description: error.message, variant: "destructive" });
+      return;
+    }
+    const proximaData = proximoDiaUtil(dataRegistro);
+    const { error: errUpdate } = await supabase.from("ordens").update({ data_programacao: proximaData } as any).eq("id", ordemParaRegistrar.id);
+    if (errUpdate) {
+      setRegistrando(false);
+      toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate.message, variant: "destructive" });
+      return;
+    }
+    setOrdens((prev) => prev.map((o) => o.id === ordemParaRegistrar!.id ? { ...o, data_programacao: proximaData } : o));
+    setRegistrando(false);
+    const dataFmt = format(new Date(dataRegistro + "T12:00:00"), "dd/MM/yyyy");
+    toast({ title: `Registro de ${dataFmt} salvo — próxima data: ${format(new Date(proximaData + "T12:00:00"), "dd/MM/yyyy")}` });
+    setOrdemParaRegistrar(null);
+    setRegDia(todayStr);
+    setRegHoraInicio("");
+    setRegHoraFim("");
+    setRegProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    if (dataRegistro !== data) {
+      // Navega para a data salva para confirmar o registro visualmente
+      setData(dataRegistro);
+    } else {
+      fetchOrdens(data);
+    }
   };
 
   const ordensParaLinha = (l: number) => sortOrdens(ordens.filter((o) => o.linha === l));
@@ -573,11 +859,18 @@ export default function PainelProgramacao() {
                 key={l}
                 linha={l}
                 ordens={ordensParaLinha(l)}
+                registrosDoDia={registrosDoDia}
                 onReprogramar={handleReprogramar}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
                 onVoltarFila={setOrdemParaVoltar}
+                onForcarConclusao={setOrdemParaForcar}
+                onRegistrarDia={(o) => {
+                  setOrdemParaRegistrar(o);
+                  setRegDia(o.data_programacao || data);
+                }}
+                onVerDetalhes={setOrdemDetalhe}
               />
             ))}
           </div>
@@ -585,6 +878,104 @@ export default function PainelProgramacao() {
       )}
 
       <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} onMoverLinha={handleMoverLinha} />
+      <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
+
+      <Dialog
+        open={!!ordemParaForcar}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrdemParaForcar(null);
+            setForcarHoraInicio("");
+            setForcarHoraFim("");
+            setForcarProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+            setForcarQtdReal("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Forçar Conclusão</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaForcar?.produto}</span>
+              <br />
+              Registre os dados de produção para concluir esta OP manualmente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={forcarHoraInicio}
+                  onChange={(e) => setForcarHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={forcarHoraFim}
+                  onChange={(e) => setForcarHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Registro de Produção</label>
+              {forcarProdItems.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.qty}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setForcarProdItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                    }}
+                    placeholder="0"
+                    className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.peso}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9,]/g, "");
+                      setForcarProdItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
+                    }}
+                    placeholder="0,000 kg"
+                    className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Quantidade Real (kg)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={forcarQtdReal}
+                onChange={(e) => setForcarQtdReal(e.target.value.replace(/[^0-9,]/g, ""))}
+                placeholder="Opcional"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaForcar(null)} disabled={forcando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleForcarConclusao} disabled={forcando} className="bg-green-600 hover:bg-green-700 text-white">
+              {forcando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <CheckCircle2 className="mr-1.5 h-4 w-4" />
+              Enviar para Liberação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!ordemParaVoltar} onOpenChange={(open) => !open && setOrdemParaVoltar(null)}>
         <DialogContent className="max-w-sm">
@@ -625,6 +1016,101 @@ export default function PainelProgramacao() {
             <Button variant="destructive" onClick={handleExcluir} disabled={excluindo}>
               {excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!ordemParaRegistrar}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrdemParaRegistrar(null);
+            setRegDia(todayStr);
+            setRegHoraInicio("");
+            setRegHoraFim("");
+            setRegProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar Dia</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaRegistrar?.produto}</span>
+              <br />
+              Insira o registro de produção para o dia.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data</label>
+              <input
+                type="date"
+                value={regDia}
+                onChange={(e) => setRegDia(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={regHoraInicio}
+                  onChange={(e) => setRegHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={regHoraFim}
+                  onChange={(e) => setRegHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Registro de Produção</label>
+              {regProdItems.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.qty}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setRegProdItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                    }}
+                    placeholder="0"
+                    className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.peso}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9,]/g, "");
+                      setRegProdItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
+                    }}
+                    placeholder="0,000 kg"
+                    className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaRegistrar(null)} disabled={registrando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleRegistrarDia} disabled={registrando || !regDia} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {registrando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <CalendarCheck2 className="mr-1.5 h-4 w-4" />
+              Salvar Registro
             </Button>
           </DialogFooter>
         </DialogContent>

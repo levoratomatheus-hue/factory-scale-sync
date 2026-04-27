@@ -226,6 +226,13 @@ export default function PainelMistura() {
               })()}
             </div>
 
+            {emMistura.orientacoes && (
+              <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-2 shadow-md">
+                <p className="text-sm font-extrabold text-white uppercase tracking-widest">📋 ORIENTAÇÕES DE PRODUÇÃO</p>
+                <p className="text-base font-bold text-white whitespace-pre-wrap">{emMistura.orientacoes}</p>
+              </div>
+            )}
+
             {isLoadingFormula && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />

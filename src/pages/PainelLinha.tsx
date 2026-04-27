@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Factory, Layers, OctagonX, Play, Trash2 } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, Loader2, Factory, Layers, OctagonX, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -46,6 +46,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // kg produzidos hoje por ordem (para exibir nos cards de fila)
+  const [kgHoje, setKgHoje] = useState<Record<string, number>>({});
 
   // Etapa 1 — registrar hora início
   const [horaInicioInput, setHoraInicioInput] = useState("");
@@ -55,6 +57,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [horaFim, setHoraFim] = useState("");
   const [prodItems, setProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [obsLinha, setObsLinha] = useState("");
+  const [savingDia, setSavingDia] = useState(false);
 
   // Paradas
   const { paradas } = useParadasLinha(linha, today);
@@ -86,14 +89,49 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   }, [emLinha?.id]);
 
   const fetchOrdens = async () => {
-    const { data } = await supabase
-      .from("ordens")
-      .select("*")
-      .eq("linha", linha)
-      .eq("data_programacao", today)
-      .in("status", ["aguardando_linha", "em_linha"])
-      .order("posicao", { ascending: true, nullsFirst: false });
-    setOrdens(data ?? []);
+    const [{ data: emLinhaData }, { data: aguardandoData }] = await Promise.all([
+      supabase.from("ordens").select("*").eq("linha", linha).eq("status", "em_linha"),
+      supabase
+        .from("ordens")
+        .select("*")
+        .eq("linha", linha)
+        .eq("status", "aguardando_linha")
+        .eq("data_programacao", today)
+        .order("posicao", { ascending: true, nullsFirst: false }),
+    ]);
+
+    // Busca registros de hoje para: filtrar em_linha e calcular kg da fila
+    const allIds = [
+      ...(emLinhaData ?? []).map((o: any) => o.id),
+      ...(aguardandoData ?? []).map((o: any) => o.id),
+    ];
+
+    const hasRegHoje = new Set<string>();
+    const kgMap: Record<string, number> = {};
+
+    if (allIds.length > 0) {
+      const { data: regsHoje } = await (supabase as any)
+        .from("registros_diarios")
+        .select("ordem_id, registro_producao")
+        .in("ordem_id", allIds)
+        .eq("data", today);
+
+      (regsHoje ?? []).forEach((r: any) => {
+        hasRegHoje.add(r.ordem_id);
+        const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+        kgMap[r.ordem_id] = (kgMap[r.ordem_id] || 0) +
+          items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      });
+    }
+
+    // Exibe OP em_linha apenas se: hora_inicio definida (sendo trabalhada agora)
+    // OU ainda não tem registro de hoje (não foi salva hoje ainda)
+    const emLinhaFiltradas = (emLinhaData ?? []).filter(
+      (o: any) => o.hora_inicio !== null || !hasRegHoje.has(o.id)
+    );
+
+    setOrdens([...emLinhaFiltradas, ...(aguardandoData ?? [])]);
+    setKgHoje(kgMap);
     setLoading(false);
   };
 
@@ -145,6 +183,48 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     toast({ title: "Hora de início registrada" });
   };
 
+  const salvarDia = async () => {
+    if (!emLinha) return;
+    if (!horaFim) {
+      toast({ title: "Informe a hora de fim", variant: "destructive" });
+      return;
+    }
+    const filledItems = prodItems.filter((r) => r.qty.trim() || r.peso.trim());
+    if (filledItems.length === 0) {
+      toast({ title: "Informe pelo menos um registro de produção", variant: "destructive" });
+      return;
+    }
+    setSavingDia(true);
+
+    const { error: errReg } = await (supabase as any).from("registros_diarios").insert({
+      ordem_id: emLinha.id,
+      data: today,
+      hora_inicio: emLinha.hora_inicio ?? null,
+      hora_fim: horaFim,
+      registro_producao: filledItems.map((r) => ({
+        qty: parseInt(r.qty) || 0,
+        peso: parseFloat(r.peso.replace(",", ".")) || 0,
+      })),
+    });
+
+    if (errReg) {
+      toast({ title: "Erro ao salvar registro do dia", description: errReg.message, variant: "destructive" });
+      setSavingDia(false);
+      return;
+    }
+
+    // Reseta hora_inicio para o próximo dia
+    await supabase.from("ordens").update({ hora_inicio: null } as any).eq("id", emLinha.id);
+
+    setSavingDia(false);
+    setHoraFim("");
+    setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    setObsLinha("");
+    await fetchRegistros();
+    await fetchOrdens();
+    toast({ title: "Dia salvo! OP continua em andamento amanhã." });
+  };
+
   const concluirOrdem = async (ordemId: string) => {
     if (!horaFim) {
       toast({ title: "Informe a hora de fim antes de concluir", variant: "destructive" });
@@ -155,12 +235,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       toast({ title: "Informe pelo menos um registro de produção", variant: "destructive" });
       return;
     }
-    if (emLinha?.hora_inicio && horaFim <= emLinha.hora_inicio) {
-      toast({ title: "Hora fim deve ser após hora início", variant: "destructive" });
-      return;
-    }
 
-    // Salva registro de produção do dia
+    // Salva registro do último dia
     const { error: errReg } = await (supabase as any).from("registros_diarios").insert({
       ordem_id: ordemId,
       data: today,
@@ -176,14 +252,27 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       return;
     }
 
+    // Calcula quantidade_real somando todos os registros_diarios
+    const { data: todosRegistros } = await (supabase as any)
+      .from("registros_diarios")
+      .select("registro_producao")
+      .eq("ordem_id", ordemId);
+
+    let quantidadeReal = 0;
+    (todosRegistros ?? []).forEach((r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      items.forEach((it: any) => { quantidadeReal += (it.qty || 0) * (it.peso || 0); });
+    });
+
     const { error } = await supabase
       .from("ordens")
       .update({
         status: "aguardando_liberacao",
         hora_fim: horaFim,
+        hora_inicio: null,
         obs_linha: obsLinha.trim() || null,
         motivo_reprovacao: null,
-        hora_inicio: null,
+        ...(quantidadeReal > 0 ? { quantidade_real: quantidadeReal } : {}),
       } as any)
       .eq("id", ordemId);
 
@@ -315,6 +404,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             );
           })()}
 
+          {emLinha.orientacoes && (
+            <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-2 shadow-md">
+              <p className="text-sm font-extrabold text-white uppercase tracking-widest">📋 ORIENTAÇÕES DE PRODUÇÃO</p>
+              <p className="text-base font-bold text-white whitespace-pre-wrap">{emLinha.orientacoes}</p>
+            </div>
+          )}
+
           {loadingFormula && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -435,43 +531,18 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                 />
               </div>
 
-              {/* Registros anteriores (histórico) */}
-              {registros.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Registros anteriores</p>
-                  {registros.map((r) => {
-                    const items: any[] | null = Array.isArray(r.registro_producao) ? r.registro_producao : null;
-                    const prodStr = items?.filter((i: any) => i.qty || i.peso)
-                      .map((i: any) => `${i.qty}× ${formatKg(i.peso)}`)
-                      .join(" / ") ?? "";
-                    const horas = parseHoras(r.hora_inicio, r.hora_fim);
-                    return (
-                      <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 flex items-start justify-between gap-2">
-                        <div className="space-y-0.5 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold">
-                              {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                            </span>
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {r.hora_inicio.slice(0, 5)} – {r.hora_fim.slice(0, 5)}
-                              {horas !== null && <span className="ml-1">({horas.toFixed(1)}h)</span>}
-                            </span>
-                          </div>
-                          {prodStr && <p className="text-sm font-mono text-foreground">{prodStr}</p>}
-                        </div>
-                        <button
-                          onClick={() => excluirRegistro(r.id)}
-                          className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={savingDia}
+                  onClick={salvarDia}
+                >
+                  {savingDia
+                    ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    : <CalendarCheck2 className="mr-1 h-4 w-4" />}
+                  Salvar Dia
+                </Button>
                 <Button
                   size="sm"
                   className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
@@ -481,6 +552,53 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   Concluir
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Histórico de registros diários */}
+          {registros.length > 0 && (
+            <div className="space-y-2 pt-3 border-t">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Histórico de registros ({registros.length})
+              </p>
+              {registros.map((r) => {
+                const items: any[] | null = Array.isArray(r.registro_producao) ? r.registro_producao : null;
+                const filled = items?.filter((i: any) => i.qty || i.peso) ?? [];
+                const total = filled.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+                const prodStr = filled.map((i: any) => `${i.qty}× ${formatKg(i.peso)} kg`).join(" + ");
+                const horas = parseHoras(r.hora_inicio, r.hora_fim);
+                return (
+                  <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 flex items-start justify-between gap-2">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold">
+                          {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                        {r.hora_inicio && r.hora_fim && (
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {String(r.hora_inicio).slice(0, 5)} – {String(r.hora_fim).slice(0, 5)}
+                            {horas !== null && ` (${horas.toFixed(1)}h)`}
+                          </span>
+                        )}
+                      </div>
+                      {prodStr && (
+                        <p className="text-sm font-mono text-foreground">
+                          {prodStr}
+                          {total > 0 && (
+                            <span className="ml-2 text-xs font-semibold text-primary">= {formatKg(total)} kg</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => excluirRegistro(r.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -527,6 +645,11 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                     )}
                     <MarcaBadge marca={ordem.marca} size="sm" />
                   </div>
+                  {(kgHoje[ordem.id] ?? 0) > 0 && (
+                    <div className="text-xs text-primary font-medium mt-0.5">
+                      {formatKg(kgHoje[ordem.id])} kg produzidos hoje
+                    </div>
+                  )}
                 </div>
                 {!emLinha && (
                   <Button size="sm" variant="outline" onClick={() => iniciarOrdem(ordem)} className="shrink-0">

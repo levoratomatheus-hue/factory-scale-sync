@@ -311,13 +311,18 @@ export default function PainelAnalises() {
         label: format(d, "MMM/yy", { locale: ptBR }),
       };
     });
+    const regsAnuaisFiltrados = linhaFiltro === 0
+      ? registrosDiariosAnuaisRaw
+      : registrosDiariosAnuaisRaw.filter((r: any) => Number(r.ordens?.linha) === linhaFiltro);
     const mapa: Record<string, number> = {};
-    ordensAnuais.forEach((o) => {
-      const chave = String(o.data_programacao).slice(0, 7);
-      mapa[chave] = (mapa[chave] || 0) + (o.quantidade_real || 0);
+    regsAnuaisFiltrados.forEach((r: any) => {
+      const chave = String(r.data).slice(0, 7);
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      mapa[chave] = (mapa[chave] || 0) + kgDia;
     });
     return meses.map(({ key, label }) => ({ mes: label, kg: Math.round(mapa[key] || 0) }));
-  }, [ordensAnuais]);
+  }, [registrosDiariosAnuaisRaw, linhaFiltro]);
 
   const dadosProdutividadeMensal = useMemo(() => {
     const meses = Array.from({ length: 12 }, (_, i) => {
@@ -327,17 +332,24 @@ export default function PainelAnalises() {
         label: format(d, "MMM/yy", { locale: ptBR }),
       };
     });
+    const regsAnuaisFiltrados = linhaFiltro === 0
+      ? registrosDiariosAnuaisRaw
+      : registrosDiariosAnuaisRaw.filter((r: any) => Number(r.ordens?.linha) === linhaFiltro);
     return meses.map(({ key, label }) => {
-      const ordensDoMes = ordensAnuais.filter((o) => String(o.data_programacao).slice(0, 7) === key);
+      const regsDoMes = regsAnuaisFiltrados.filter((r: any) => String(r.data).slice(0, 7) === key);
       let totalKg = 0, totalH = 0;
-      ordensDoMes.forEach((o) => {
-        const h = horasMapAnual[o.id] ?? null;
-        if (h !== null) { totalKg += o.quantidade_real || 0; totalH += h; }
+      regsDoMes.forEach((r: any) => {
+        const h = parseHoras(r.hora_inicio, r.hora_fim);
+        if (h !== null) {
+          const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+          totalKg += items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+          totalH += h;
+        }
       });
       const kgH = totalH > 0 ? parseFloat((totalKg / totalH).toFixed(1)) : null;
       return { mes: label, kgH };
     });
-  }, [ordensAnuais, horasMapAnual]);
+  }, [registrosDiariosAnuaisRaw, linhaFiltro]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {
     const producaoTotal = ordens.reduce((s, o) => s + (o.quantidade_real || 0), 0);
