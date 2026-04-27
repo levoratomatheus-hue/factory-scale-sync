@@ -5,7 +5,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFormula } from "@/hooks/useFormula";
@@ -263,7 +262,7 @@ function FormulaDialog({
 function SortableCard({
   ordem,
   registro,
-  onReprogramar,
+  onReprogramarClick,
   onDblClick,
   onEditar,
   onExcluir,
@@ -274,7 +273,7 @@ function SortableCard({
 }: {
   ordem: Ordem;
   registro?: any;
-  onReprogramar: (id: string, novaData: string) => Promise<void>;
+  onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
@@ -285,9 +284,6 @@ function SortableCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
-  const [novaData, setNovaData] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [salvando, setSalvando] = useState(false);
 
   const du = ordem.data_emissao ? diasUteis(ordem.data_emissao, ordem.data_programacao) : 0;
   const atrasado = du > 7;
@@ -388,40 +384,13 @@ function SortableCard({
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
-          <button
-            className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
-            title="Reprogramar"
-          >
-            <CalendarDays className="h-3.5 w-3.5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-56 p-3 space-y-3" side="right" align="start">
-          <p className="text-xs font-semibold">Mover para o dia:</p>
-          <input
-            type="date"
-            value={novaData}
-            onChange={(e) => setNovaData(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <Button
-            size="sm"
-            className="w-full"
-            disabled={!novaData || salvando}
-            onClick={async () => {
-              setSalvando(true);
-              await onReprogramar(ordem.id, novaData);
-              setSalvando(false);
-              setPopoverOpen(false);
-              setNovaData("");
-            }}
-          >
-            {salvando ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Confirmar
-          </Button>
-        </PopoverContent>
-      </Popover>
+      <button
+        onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
+        className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
+        title="Reprogramar"
+      >
+        <CalendarDays className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -430,7 +399,7 @@ function LinhaColumn({
   linha,
   ordens,
   registrosDoDia,
-  onReprogramar,
+  onReprogramarClick,
   onDblClick,
   onEditar,
   onExcluir,
@@ -442,7 +411,7 @@ function LinhaColumn({
   linha: number;
   ordens: Ordem[];
   registrosDoDia: Record<string, any>;
-  onReprogramar: (id: string, novaData: string) => Promise<void>;
+  onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
@@ -476,7 +445,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramar={onReprogramar} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} />
+              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} />
             ))
           )}
         </div>
@@ -513,6 +482,9 @@ export default function PainelProgramacao() {
   const [forcarQtdReal, setForcarQtdReal] = useState("");
   const [forcando, setForcando] = useState(false);
   const [ordemParaRegistrar, setOrdemParaRegistrar] = useState<Ordem | null>(null);
+  const [ordemParaReprogramar, setOrdemParaReprogramar] = useState<Ordem | null>(null);
+  const [novaDataReprogramar, setNovaDataReprogramar] = useState("");
+  const [salvandoReprogramar, setSalvandoReprogramar] = useState(false);
   const [ordemDetalhe, setOrdemDetalhe] = useState<Ordem | null>(null);
   const [regDia, setRegDia] = useState(todayStr);
   const [regHoraInicio, setRegHoraInicio] = useState("");
@@ -860,7 +832,7 @@ export default function PainelProgramacao() {
                 linha={l}
                 ordens={ordensParaLinha(l)}
                 registrosDoDia={registrosDoDia}
-                onReprogramar={handleReprogramar}
+                onReprogramarClick={(o) => { setOrdemParaReprogramar(o); setNovaDataReprogramar(""); }}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
@@ -876,6 +848,50 @@ export default function PainelProgramacao() {
           </div>
         </DndContext>
       )}
+
+      <Dialog
+        open={!!ordemParaReprogramar}
+        onOpenChange={(open) => { if (!open) { setOrdemParaReprogramar(null); setNovaDataReprogramar(""); } }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reprogramar OP</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaReprogramar?.produto}</span>
+              <br />
+              Selecione a nova data de programação.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-1.5">
+            <label className="text-sm font-medium">Nova data</label>
+            <input
+              type="date"
+              value={novaDataReprogramar}
+              onChange={(e) => setNovaDataReprogramar(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaReprogramar(null)} disabled={salvandoReprogramar}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!novaDataReprogramar || salvandoReprogramar}
+              onClick={async () => {
+                if (!ordemParaReprogramar) return;
+                setSalvandoReprogramar(true);
+                await handleReprogramar(ordemParaReprogramar.id, novaDataReprogramar);
+                setSalvandoReprogramar(false);
+                setOrdemParaReprogramar(null);
+                setNovaDataReprogramar("");
+              }}
+            >
+              {salvandoReprogramar && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} onMoverLinha={handleMoverLinha} />
       <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />

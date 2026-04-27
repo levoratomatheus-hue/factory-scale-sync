@@ -18,6 +18,7 @@ import {
   CalendarPlus,
   CalendarClock,
   CalendarCheck2,
+  CalendarDays,
   Pencil,
   Undo2,
 } from "lucide-react";
@@ -158,6 +159,9 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [registrosDoDia, setRegistrosDoDia] = useState<Record<string, any>>({});
   const [ordensDeRegistros, setOrdensDeRegistros] = useState<any[]>([]);
   const [ordemParaRegistrar, setOrdemParaRegistrar] = useState<{ id: string; produto: string } | null>(null);
+  const [ordemParaReprogramarCard, setOrdemParaReprogramarCard] = useState<{ id: string; produto: string } | null>(null);
+  const [novaDataReprogramarCard, setNovaDataReprogramarCard] = useState("");
+  const [salvandoRepr, setSalvandoRepr] = useState(false);
   const [ordemDetalhe, setOrdemDetalhe] = useState<any | null>(null);
   const [regDia, setRegDia] = useState(todayStr);
   const [regHoraInicio, setRegHoraInicio] = useState("");
@@ -247,6 +251,23 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     setReprogramando((prev) => ({ ...prev, [ordemId]: false }));
     if (error) { toast({ title: "Erro ao reprogramar", description: error.message, variant: "destructive" }); return; }
     toast({ title: `Ordem reprogramada para ${paraHoje ? "hoje" : data}` });
+  };
+
+  const reprogramarCard = async () => {
+    if (!ordemParaReprogramarCard || !novaDataReprogramarCard) return;
+    setSalvandoRepr(true);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ data_programacao: novaDataReprogramarCard } as any)
+      .eq("id", ordemParaReprogramarCard.id);
+    setSalvandoRepr(false);
+    if (error) {
+      toast({ title: "Erro ao reprogramar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Ordem reprogramada com sucesso" });
+      setOrdemParaReprogramarCard(null);
+      setNovaDataReprogramarCard("");
+    }
   };
 
   const excluirOrdem = async () => {
@@ -675,7 +696,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                       })()}
                     </div>
                     <button
-                      onClick={() => setOrdemEditando(ordem as OrdemEditavel)}
+                      onClick={(e) => { e.stopPropagation(); setOrdemEditando(ordem as OrdemEditavel); }}
                       className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
                       title="Editar OP"
                     >
@@ -683,10 +704,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                     </button>
                     {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
                       <button
-                        onClick={() => {
-                          setOrdemParaRegistrar({ id: ordem.id, produto: ordem.produto });
-                          setRegDia(ordem.data_programacao || dateStr);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setOrdemParaRegistrar({ id: ordem.id, produto: ordem.produto }); setRegDia(ordem.data_programacao || dateStr); }}
                         className="mt-0.5 text-muted-foreground/50 hover:text-blue-600 shrink-0"
                         title="Registrar Dia"
                       >
@@ -695,7 +713,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                     )}
                     {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
                       <button
-                        onClick={() => setOrdemParaForcar({ id: ordem.id, produto: ordem.produto, dataProgramacao: ordem.data_programacao, statusAnterior: ordem.status })}
+                        onClick={(e) => { e.stopPropagation(); setOrdemParaForcar({ id: ordem.id, produto: ordem.produto, dataProgramacao: ordem.data_programacao, statusAnterior: ordem.status }); }}
                         className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
                         title="Forçar Conclusão"
                       >
@@ -704,7 +722,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                     )}
                     {ordem.status === "em_linha" && (
                       <button
-                        onClick={() => setOrdemParaVoltar({ id: ordem.id, produto: ordem.produto })}
+                        onClick={(e) => { e.stopPropagation(); setOrdemParaVoltar({ id: ordem.id, produto: ordem.produto }); }}
                         className="mt-0.5 text-muted-foreground/50 hover:text-amber-600 shrink-0"
                         title="Voltar para Fila"
                       >
@@ -712,7 +730,14 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                       </button>
                     )}
                     <button
-                      onClick={() => setOrdemParaExcluir({ id: ordem.id, produto: ordem.produto })}
+                      onClick={(e) => { e.stopPropagation(); setOrdemParaReprogramarCard({ id: ordem.id, produto: ordem.produto }); setNovaDataReprogramarCard(ordem.data_programacao || dateStr); }}
+                      className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
+                      title="Reprogramar"
+                    >
+                      <CalendarDays className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setOrdemParaExcluir({ id: ordem.id, produto: ordem.produto }); }}
                       className="mt-0.5 text-muted-foreground/50 hover:text-destructive shrink-0"
                       title="Excluir OP"
                     >
@@ -806,6 +831,40 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           })}
         </div>
       </div>
+
+      <Dialog
+        open={!!ordemParaReprogramarCard}
+        onOpenChange={(open) => { if (!open) { setOrdemParaReprogramarCard(null); setNovaDataReprogramarCard(""); } }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reprogramar OP</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaReprogramarCard?.produto}</span>
+              <br />
+              Selecione a nova data de programação.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-1.5">
+            <label className="text-sm font-medium">Nova data</label>
+            <input
+              type="date"
+              value={novaDataReprogramarCard}
+              onChange={(e) => setNovaDataReprogramarCard(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaReprogramarCard(null)} disabled={salvandoRepr}>
+              Cancelar
+            </Button>
+            <Button onClick={reprogramarCard} disabled={!novaDataReprogramarCard || salvandoRepr}>
+              {salvandoRepr && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
 
