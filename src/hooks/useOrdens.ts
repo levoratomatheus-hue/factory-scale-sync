@@ -8,7 +8,7 @@ export function useOrdens(date?: string) {
   const today = date || format(new Date(), 'yyyy-MM-dd');
 
   const fetchOrdens = useCallback(async () => {
-    let query = supabase.from("ordens").select("*").order("posicao", { ascending: true, nullsFirst: false });
+    let query = supabase.from("ordens").select("*").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -23,14 +23,17 @@ export function useOrdens(date?: string) {
 
   useEffect(() => {
     fetchOrdens();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channelName = `ordens-realtime-${date ?? "all"}-${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
-        fetchOrdens();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchOrdens(), 300);
       })
       .subscribe();
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [fetchOrdens]);
@@ -117,7 +120,8 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
       .from("ordens")
       .select("*")
       .eq("status", "concluido")
-      .order("data_conclusao", { ascending: false });
+      .order("data_conclusao", { ascending: false })
+      .limit(500);
 
     if (dataInicio) query = query.gte("data_programacao", dataInicio);
     if (dataFim) query = query.lte("data_programacao", dataFim);
@@ -129,11 +133,16 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
 
   useEffect(() => {
     fetchHistorico();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`historico-realtime-${dataInicio ?? "all"}-${dataFim ?? ""}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetchHistorico)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchHistorico(), 300);
+      })
       .subscribe();
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [fetchHistorico]);

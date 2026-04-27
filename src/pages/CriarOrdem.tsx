@@ -45,7 +45,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   ]);
   const [requerMistura, setRequerMistura] = useState(true);
   const [orientacoes, setOrientacoes] = useState('');
-  const [dataEmissao, setDataEmissao] = useState<string | null>(null);
+  const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -90,7 +90,6 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setFormulaId(data.formula_id ?? null);
     setTamanhoBatelada(data.tamanho_batelada ?? null);
     setSemFormula(!data.formula_id);
-    setDataEmissao((data as any).data_emissao ?? null);
     setLoteEncontrado(true);
 
     if (data.formula_id) {
@@ -136,7 +135,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         })(),
         requer_mistura: requerMistura,
         orientacoes: orientacoes.trim() || null,
-        data_emissao: dataEmissao ?? null,
+        data_emissao: dataEmissao || null,
       } as any)
       .select()
       .single();
@@ -167,6 +166,15 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       );
     }
 
+    // Sync data_emissao back to cadastro_lotes so PainelProgramacao can read it
+    const loteNum = Number(values.lote.replace(/\./g, ''));
+    if (loteNum > 0 && dataEmissao) {
+      await (supabase as any)
+        .from('cadastro_lotes')
+        .update({ data_emissao: dataEmissao })
+        .eq('lote', loteNum);
+    }
+
     setSaving(false);
     toast({ title: 'Ordem criada com sucesso!' });
     form.reset({ lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' });
@@ -177,7 +185,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
     setRequerMistura(true);
     setOrientacoes('');
-    setDataEmissao(null);
+    setDataEmissao(new Date().toISOString().split("T")[0]);
   };
 
   return (
@@ -242,14 +250,6 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                     className="mt-1"
                   />
                 </div>
-
-                {dataEmissao && (
-                  <p className="text-xs text-muted-foreground">
-                    Data de emissão: <span className="font-medium text-foreground">
-                      {dataEmissao.split('-').reverse().join('/')}
-                    </span>
-                  </p>
-                )}
 
                 {formulaId && (
                   <p className="text-xs text-muted-foreground">
@@ -329,6 +329,15 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 )}
               </div>
             )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data de Emissão</label>
+              <Input
+                type="date"
+                value={dataEmissao}
+                onChange={(e) => setDataEmissao(e.target.value)}
+              />
+            </div>
 
             <FormField control={form.control} name="quantidade" render={({ field }) => (
               <FormItem>

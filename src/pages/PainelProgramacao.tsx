@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFormula } from "@/hooks/useFormula";
 import { formatKg, sortOrdens } from "@/lib/utils";
+import { diasUteis, proximoDiaUtil } from "@/lib/diasUteis";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { EditarOrdemDialog } from "@/components/EditarOrdemDialog";
 import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
@@ -46,84 +47,6 @@ interface Ordem {
   data_programacao: string;
   data_emissao: string | null;
 }
-
-function pascoa(ano: number): Date {
-  const a = ano % 19;
-  const b = Math.floor(ano / 100);
-  const c = ano % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const mes = Math.floor((h + l - 7 * m + 114) / 31); // 1-based
-  const dia = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(ano, mes - 1, dia, 12, 0, 0);
-}
-
-function feriadosDoAno(ano: number): Set<string> {
-  const fmtKey = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const fixos = [
-    [1, 1], [4, 21], [5, 1], [9, 7], [10, 12], [11, 2], [11, 15], [12, 25],
-  ].map(([m, d]) => fmtKey(new Date(ano, m - 1, d, 12, 0, 0)));
-
-  const easter = pascoa(ano);
-  const addDias = (base: Date, n: number) => {
-    const d = new Date(base);
-    d.setDate(d.getDate() + n);
-    return fmtKey(d);
-  };
-  const moveis = [
-    addDias(easter, -48), // Segunda de Carnaval
-    addDias(easter, -47), // Terça de Carnaval
-    addDias(easter, -2),  // Sexta-feira Santa
-    fmtKey(easter),       // Páscoa
-    addDias(easter, 60),  // Corpus Christi
-  ];
-
-  return new Set([...fixos, ...moveis]);
-}
-
-function proximoDiaUtil(dataStr: string): string {
-  const d = new Date(dataStr + 'T12:00:00');
-  d.setDate(d.getDate() + 1);
-  let cacheAno = -1;
-  let feriados = new Set<string>();
-  while (true) {
-    const ano = d.getFullYear();
-    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
-    const day = d.getDay();
-    const key = `${ano}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    if (day !== 0 && day !== 6 && !feriados.has(key)) break;
-    d.setDate(d.getDate() + 1);
-  }
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function diasUteis(de: string, ate: string): number {
-  const start = new Date(de + 'T12:00:00');
-  const end = new Date(ate + 'T12:00:00');
-  let count = 0;
-  const cur = new Date(start);
-  cur.setDate(cur.getDate() + 1);
-  let cacheAno = -1;
-  let feriados = new Set<string>();
-  while (cur <= end) {
-    const ano = cur.getFullYear();
-    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
-    const day = cur.getDay();
-    const key = `${ano}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
-    if (day !== 0 && day !== 6 && !feriados.has(key)) count++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return count;
-}
-
 
 function FormulaDialog({
   ordem,
@@ -339,7 +262,7 @@ function SortableCard({
         {atrasado && (
           <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
             <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-            {du}du em atraso
+            {du - 7} {du - 7 === 1 ? 'dia' : 'dias'} em atraso
           </span>
         )}
       </div>
@@ -766,7 +689,7 @@ export default function PainelProgramacao() {
     }
   };
 
-  const ordensParaLinha = (l: number) => sortOrdens(ordens.filter((o) => o.linha === l));
+  const ordensParaLinha = useCallback((l: number) => sortOrdens(ordens.filter((o) => o.linha === l)), [ordens]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;

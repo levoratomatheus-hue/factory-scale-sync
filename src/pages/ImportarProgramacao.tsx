@@ -29,7 +29,11 @@ function parseTxtWindows1252(buffer: ArrayBuffer): string {
 
 export default function ImportarProgramacao() {
   const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState<{ total: number } | null>(null);
+  const [resultado, setResultado] = useState<{
+    total: number;
+    comEmissao: number;
+    semEmissao: { lote: number; produto: string }[];
+  } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const [loadingFormulas, setLoadingFormulas] = useState(false);
@@ -63,6 +67,7 @@ export default function ImportarProgramacao() {
         const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
         return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
       };
+
       const lotes: LoteRow[] = lines
         .map((line) => {
           const p = line.split(';');
@@ -93,11 +98,15 @@ export default function ImportarProgramacao() {
       }, new Map());
       const lotesUnicos = Array.from(lotesMapa.values());
 
+      const semEmissaoLotes = lotesUnicos.filter((r) => r.data_emissao === null);
+      const comEmissao = lotesUnicos.length - semEmissaoLotes.length;
+
       const BATCH = 500;
       for (let i = 0; i < lotesUnicos.length; i += BATCH) {
+        const batch = lotesUnicos.slice(i, i + BATCH);
         const { error } = await (supabase as any)
           .from('cadastro_lotes')
-          .upsert(lotesUnicos.slice(i, i + BATCH), { onConflict: 'lote' });
+          .upsert(batch, { onConflict: 'lote' });
         if (error) {
           setErro(`Erro ao salvar (batch ${Math.floor(i / BATCH) + 1}): ${error.message}`);
           setLoading(false);
@@ -105,7 +114,11 @@ export default function ImportarProgramacao() {
         }
       }
 
-      setResultado({ total: lotesUnicos.length });
+      setResultado({
+        total: lotesUnicos.length,
+        comEmissao,
+        semEmissao: semEmissaoLotes.map((r) => ({ lote: r.lote, produto: r.produto })),
+      });
       toast({ title: `${lotesUnicos.length} lotes importados com sucesso!` });
     } catch {
       setErro('Erro ao ler o arquivo. Verifique se é um TXT válido com encoding Windows-1252.');
@@ -249,14 +262,49 @@ export default function ImportarProgramacao() {
         </label>
 
         {resultado && (
-          <div className="flex items-start gap-3 p-4 rounded-lg bg-status-done-bg border border-status-done/30">
-            <CheckCircle2 className="h-5 w-5 text-status-done mt-0.5" />
-            <div>
-              <p className="font-semibold text-status-done">Importação concluída!</p>
-              <p className="text-sm text-muted-foreground">
-                {resultado.total} lote{resultado.total !== 1 ? 's' : ''} importado{resultado.total !== 1 ? 's' : ''}/atualizado{resultado.total !== 1 ? 's' : ''}.
-              </p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-status-done-bg border border-status-done/30">
+              <CheckCircle2 className="h-5 w-5 text-status-done mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="font-semibold text-status-done">Importação concluída!</p>
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{resultado.total}</span> lote{resultado.total !== 1 ? 's' : ''} importado{resultado.total !== 1 ? 's' : ''} ·{' '}
+                  <span className="font-medium text-status-done">{resultado.comEmissao}</span> com data de emissão ·{' '}
+                  <span className={resultado.semEmissao.length > 0 ? 'font-medium text-amber-600' : 'font-medium text-status-done'}>
+                    {resultado.semEmissao.length}
+                  </span> sem data de emissão
+                </p>
+              </div>
             </div>
+
+            {resultado.semEmissao.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber-200 bg-amber-100/60">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <p className="text-sm font-semibold text-amber-800">
+                    {resultado.semEmissao.length} lote{resultado.semEmissao.length !== 1 ? 's' : ''} sem data de emissão — verifique no TI Soft
+                  </p>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-amber-700 border-b border-amber-200 bg-amber-50 sticky top-0">
+                      <tr>
+                        <th className="text-left px-4 py-1.5 font-semibold">Lote</th>
+                        <th className="text-left px-4 py-1.5 font-semibold">Produto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultado.semEmissao.map((r) => (
+                        <tr key={r.lote} className="border-b border-amber-100 last:border-0">
+                          <td className="px-4 py-1.5 font-mono text-amber-900">{r.lote}</td>
+                          <td className="px-4 py-1.5 text-amber-800 max-w-xs truncate">{r.produto}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

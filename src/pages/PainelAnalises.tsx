@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
-import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock } from "lucide-react";
+import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -240,6 +240,7 @@ export default function PainelAnalises() {
   const [dataFim, setDataFim] = useState(toStr(hoje));
   const [atalhoAtivo, setAtalhoAtivo] = useState<Atalho>("mes");
   const [linhaFiltro, setLinhaFiltro] = useState<number>(0);
+  const [materialFiltro, setMaterialFiltro] = useState("");
 
   const { ordens: ordensRaw, loading } = useAnalises(dataInicio, dataFim);
   const { paradas: paradasRaw } = useParadasAnalises(dataInicio, dataFim);
@@ -249,14 +250,25 @@ export default function PainelAnalises() {
   const { ordens: ordensAnuaisRaw } = useAnalises(inicioAnual, toStr(hoje));
   const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, toStr(hoje));
 
+  const matchesMaterial = (o: any) => {
+    if (!materialFiltro) return true;
+    const q = materialFiltro.toLowerCase();
+    return (
+      (o.produto ?? "").toLowerCase().includes(q) ||
+      String(o.formula_id ?? "").toLowerCase().includes(q)
+    );
+  };
+
   const ordens = useMemo(
-    () => linhaFiltro === 0 ? ordensRaw : ordensRaw.filter((o) => Number(o.linha) === linhaFiltro),
-    [ordensRaw, linhaFiltro],
+    () => ordensRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o)),
+    [ordensRaw, linhaFiltro, materialFiltro],
   );
   const ordensAnuais = useMemo(
-    () => linhaFiltro === 0 ? ordensAnuaisRaw : ordensAnuaisRaw.filter((o) => Number(o.linha) === linhaFiltro),
-    [ordensAnuaisRaw, linhaFiltro],
+    () => ordensAnuaisRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o)),
+    [ordensAnuaisRaw, linhaFiltro, materialFiltro],
   );
+
+  const ordensAnuaisIds = useMemo(() => new Set(ordensAnuais.map((o) => o.id)), [ordensAnuais]);
 
   const { horasMap, diasLinhaMap } = useMemo(() => {
     const hMap: Record<string, number> = {};
@@ -311,9 +323,11 @@ export default function PainelAnalises() {
         label: format(d, "MMM/yy", { locale: ptBR }),
       };
     });
-    const regsAnuaisFiltrados = linhaFiltro === 0
-      ? registrosDiariosAnuaisRaw
-      : registrosDiariosAnuaisRaw.filter((r: any) => Number(r.ordens?.linha) === linhaFiltro);
+    const regsAnuaisFiltrados = registrosDiariosAnuaisRaw.filter((r: any) => {
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return false;
+      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return false;
+      return true;
+    });
     const mapa: Record<string, number> = {};
     regsAnuaisFiltrados.forEach((r: any) => {
       const chave = String(r.data).slice(0, 7);
@@ -322,7 +336,7 @@ export default function PainelAnalises() {
       mapa[chave] = (mapa[chave] || 0) + kgDia;
     });
     return meses.map(({ key, label }) => ({ mes: label, kg: Math.round(mapa[key] || 0) }));
-  }, [registrosDiariosAnuaisRaw, linhaFiltro]);
+  }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   const dadosProdutividadeMensal = useMemo(() => {
     const meses = Array.from({ length: 12 }, (_, i) => {
@@ -332,9 +346,11 @@ export default function PainelAnalises() {
         label: format(d, "MMM/yy", { locale: ptBR }),
       };
     });
-    const regsAnuaisFiltrados = linhaFiltro === 0
-      ? registrosDiariosAnuaisRaw
-      : registrosDiariosAnuaisRaw.filter((r: any) => Number(r.ordens?.linha) === linhaFiltro);
+    const regsAnuaisFiltrados = registrosDiariosAnuaisRaw.filter((r: any) => {
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return false;
+      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return false;
+      return true;
+    });
     return meses.map(({ key, label }) => {
       const regsDoMes = regsAnuaisFiltrados.filter((r: any) => String(r.data).slice(0, 7) === key);
       let totalKg = 0, totalH = 0;
@@ -349,7 +365,7 @@ export default function PainelAnalises() {
       const kgH = totalH > 0 ? parseFloat((totalKg / totalH).toFixed(1)) : null;
       return { mes: label, kgH };
     });
-  }, [registrosDiariosAnuaisRaw, linhaFiltro]);
+  }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {
     const producaoTotal = ordens.reduce((s, o) => s + (o.quantidade_real || 0), 0);
@@ -440,6 +456,7 @@ export default function PainelAnalises() {
           <p style={{ fontSize: "0.875rem", color: D.muted, margin: "0.25rem 0 0" }}>
             {ordens.length} OPs concluídas · {descPeriodo}
             {linhaFiltro !== 0 && <span style={{ marginLeft: "0.25rem", fontWeight: 600, color: D.cyan }}> · Linha {linhaFiltro}</span>}
+            {materialFiltro && <span style={{ marginLeft: "0.25rem", fontWeight: 600, color: D.amber }}> · {materialFiltro}</span>}
           </p>
         </div>
       </div>
@@ -520,6 +537,50 @@ export default function PainelAnalises() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Filtro de material */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Search size={16} style={{ color: D.muted, flexShrink: 0 }} />
+          <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
+            <input
+              type="text"
+              placeholder="Filtrar por produto ou fórmula..."
+              value={materialFiltro}
+              onChange={(e) => setMaterialFiltro(e.target.value)}
+              style={{
+                width: "100%",
+                borderRadius: "0.375rem",
+                border: `1px solid ${materialFiltro ? D.amber : D.border}`,
+                background: D.cardAlt,
+                color: D.text,
+                padding: "0.375rem 2rem 0.375rem 0.75rem",
+                fontSize: "0.875rem",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+            {materialFiltro && (
+              <button
+                onClick={() => setMaterialFiltro("")}
+                style={{
+                  position: "absolute",
+                  right: "0.5rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: D.muted,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 0,
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         </div>
       </div>

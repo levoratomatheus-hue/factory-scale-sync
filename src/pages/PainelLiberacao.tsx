@@ -147,11 +147,18 @@ export default function PainelLiberacao() {
 
   useEffect(() => {
     fetchOrdens();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel("liberacao-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetchOrdens)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchOrdens(), 300);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openEdit = (ordem: any) => {
