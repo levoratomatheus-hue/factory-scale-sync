@@ -356,25 +356,34 @@ export default function PainelLiberacao() {
   };
 
   const reprovar = async (ordem: any) => {
-    if (ordem.hora_inicio && ordem.hora_fim) {
-      await supabase.from("paradas").insert({
-        linha: ordem.linha,
-        data: ordem.data_programacao,
-        motivo: "problema_processo",
-        hora_inicio: ordem.hora_inicio,
-        hora_fim: ordem.hora_fim,
-      });
+    const regs = registrosPorOrdem[ordem.id] ?? [];
+
+    if (regs.length > 0) {
+      const paradasPayload = regs
+        .filter((r) => r.hora_inicio && r.hora_fim)
+        .map((r) => ({
+          linha: ordem.linha,
+          data: r.data,
+          motivo: "problema_processo",
+          hora_inicio: r.hora_inicio,
+          hora_fim: r.hora_fim,
+        }));
+      if (paradasPayload.length > 0) {
+        await (supabase as any).from("paradas").insert(paradasPayload);
+      }
     }
 
+    const hoje = new Date().toISOString().split("T")[0];
     const { error } = await supabase
       .from("ordens")
       .update({
-        status: "em_linha",
+        status: "aguardando_linha",
         motivo_reprovacao: motivoReprovacao.trim() || null,
         quantidade_real: null,
         hora_inicio: null,
         hora_fim: null,
         obs_linha: null,
+        data_programacao: hoje,
       } as any)
       .eq("id", ordem.id);
     if (error) {
@@ -382,12 +391,10 @@ export default function PainelLiberacao() {
       return;
     }
 
-    await (supabase as any).from("registros_diarios").delete().eq("ordem_id", ordem.id);
-
     await supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_liberacao",
-      status_novo: "em_linha",
+      status_novo: "aguardando_linha",
     });
 
     setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
@@ -975,7 +982,7 @@ export default function PainelLiberacao() {
             <AlertDialogTitle>Reprovar ordem</AlertDialogTitle>
             <AlertDialogDescription>
               <strong>{reprovarOrdem?.produto}</strong> (Lote {reprovarOrdem?.lote}) voltará para{" "}
-              <strong>Em Linha</strong> para retrabalho.
+              <strong>Aguardando Linha</strong>. Os registros diários serão mantidos e as paradas registradas automaticamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-6 pb-2 space-y-1">
