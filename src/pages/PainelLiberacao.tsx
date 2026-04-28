@@ -62,6 +62,7 @@ export default function PainelLiberacao() {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [registrosPorOrdem, setRegistrosPorOrdem] = useState<Record<string, any[]>>({});
+  const [paradasPorOrdem, setParadasPorOrdem] = useState<Record<string, any[]>>({});
   const [qtdReal, setQtdReal] = useState<Record<string, string>>({});
   const [horaInicioEdit, setHoraInicioEdit] = useState<Record<string, string>>({});
   const [horaFimEdit, setHoraFimEdit] = useState<Record<string, string>>({});
@@ -72,6 +73,8 @@ export default function PainelLiberacao() {
   const [editOrdem, setEditOrdem] = useState<any | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteRegistro, setDeleteRegistro] = useState<{ id: string; ordemId: string } | null>(null);
+  const [deletandoRegistro, setDeletandoRegistro] = useState(false);
 
   const fetchOrdens = async () => {
     const { data } = await supabase
@@ -97,6 +100,22 @@ export default function PainelLiberacao() {
       });
     }
     setRegistrosPorOrdem(regMap);
+
+    // Busca paradas por linha+data a partir dos registros de cada OP
+    const paradaMap: Record<string, any[]> = {};
+    for (const o of data) {
+      const datas = (regMap[o.id] ?? []).map((r: any) => r.data);
+      if (datas.length > 0) {
+        const { data: pRows } = await (supabase as any)
+          .from("paradas")
+          .select("*")
+          .eq("linha", o.linha)
+          .in("data", datas)
+          .order("hora_inicio", { ascending: true });
+        if (pRows && pRows.length > 0) paradaMap[o.id] = pRows;
+      }
+    }
+    setParadasPorOrdem(paradaMap);
 
     setQtdReal((prev) => {
       const next = { ...prev };
@@ -160,6 +179,40 @@ export default function PainelLiberacao() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const handleDeleteParada = async (paradaId: string, ordemId: string) => {
+    if (!window.confirm("Excluir esta parada? Esta ação não pode ser desfeita.")) return;
+    const { error } = await (supabase as any).from("paradas").delete().eq("id", paradaId);
+    if (error) {
+      toast({ title: "Erro ao excluir parada", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Parada excluída" });
+      setParadasPorOrdem((prev) => ({
+        ...prev,
+        [ordemId]: (prev[ordemId] ?? []).filter((p: any) => p.id !== paradaId),
+      }));
+    }
+  };
+
+  const handleDeleteRegistro = async () => {
+    if (!deleteRegistro) return;
+    setDeletandoRegistro(true);
+    const { error } = await (supabase as any)
+      .from("registros_diarios")
+      .delete()
+      .eq("id", deleteRegistro.id);
+    if (error) {
+      toast({ title: "Erro ao excluir registro", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Registro excluído" });
+      setRegistrosPorOrdem((prev) => ({
+        ...prev,
+        [deleteRegistro.ordemId]: (prev[deleteRegistro.ordemId] ?? []).filter((r: any) => r.id !== deleteRegistro.id),
+      }));
+    }
+    setDeletandoRegistro(false);
+    setDeleteRegistro(null);
+  };
 
   const openEdit = (ordem: any) => {
     const regs: any[] = registrosPorOrdem[ordem.id] ?? [];
@@ -502,11 +555,22 @@ export default function PainelLiberacao() {
                                   {horas > 0 && <span className="ml-1 text-blue-500">({(horas / 60).toFixed(1)}h)</span>}
                                 </span>
                               </div>
-                              {diaTotal > 0 && (
-                                <span className="text-sm font-bold text-blue-800 font-mono">
-                                  {formatKg(diaTotal)} kg
-                                </span>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {diaTotal > 0 && (
+                                  <span className="text-sm font-bold text-blue-800 font-mono">
+                                    {formatKg(diaTotal)} kg
+                                  </span>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
+                                  title="Excluir registro"
+                                  onClick={() => setDeleteRegistro({ id: r.id, ordemId: ordem.id })}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </div>
                             {filled.length > 0 && (
                               <p className="text-xs text-blue-700 font-mono pl-0.5">
@@ -540,6 +604,40 @@ export default function PainelLiberacao() {
                     </p>
                   </div>
                 ) : null}
+
+                {/* Paradas associadas à OP */}
+                {(paradasPorOrdem[ordem.id] ?? []).length > 0 && (
+                  <div className="rounded-md border border-orange-200 bg-orange-50 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-orange-100/60 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Paradas</p>
+                      <span className="text-xs text-orange-600 font-medium">
+                        {(paradasPorOrdem[ordem.id] ?? []).length} registro{(paradasPorOrdem[ordem.id] ?? []).length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-orange-100">
+                      {(paradasPorOrdem[ordem.id] ?? []).map((p: any) => (
+                        <div key={p.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-orange-900">{p.motivo}</p>
+                            <p className="text-xs font-mono text-orange-600">
+                              {String(p.hora_inicio).slice(0, 5)} – {String(p.hora_fim).slice(0, 5)}
+                              {" · "}{p.data}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500 shrink-0"
+                            title="Excluir parada"
+                            onClick={() => handleDeleteParada(p.id, ordem.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Campos inline para gestor preencher quando dados estão vazios */}
                 {!ordem.hora_inicio && !ordem.hora_fim && regs.length === 0 && !ordem.obs_linha && (
@@ -977,6 +1075,29 @@ export default function PainelLiberacao() {
               onClick={async () => { await liberar(liberarOrdem); setLiberarOrdem(null); }}
             >
               Confirmar Liberação
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog — Excluir registro diário */}
+      <AlertDialog open={!!deleteRegistro} onOpenChange={(open) => { if (!open) setDeleteRegistro(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir registro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este registro de produção será deletado permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletandoRegistro}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleDeleteRegistro}
+              disabled={deletandoRegistro}
+            >
+              {deletandoRegistro && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

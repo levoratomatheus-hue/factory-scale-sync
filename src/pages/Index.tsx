@@ -10,6 +10,7 @@ import PainelAnalises from './PainelAnalises';
 import PainelLiberacao from './PainelLiberacao';
 import ImportarProgramacao from './ImportarProgramacao';
 import PainelProgramacao from './PainelProgramacao';
+import PainelProgramacaoBalanca from './PainelProgramacaoBalanca';
 import PainelComercial from './PainelComercial';
 import Login from './Login';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,7 +32,7 @@ import {
 } from '@/components/ui/sidebar';
 
 type TabGestorId =
-  | 'gestor' | 'programacao' | 'criar' | 'historico' | 'importar'
+  | 'gestor' | 'programacao' | 'programacao_balanca' | 'criar' | 'historico' | 'importar'
   | 'balanca1' | 'balanca2'
   | 'mistura'
   | 'linha1' | 'linha2' | 'linha3' | 'linha4' | 'linha5'
@@ -91,8 +92,9 @@ const gruposGestor = [
     icon: LayoutDashboard,
     items: [
       { id: 'gestor'      as TabGestorId, label: 'Painel do Gestor', icon: LayoutDashboard },
-      { id: 'programacao' as TabGestorId, label: 'Programação',      icon: CalendarDays },
-      { id: 'criar'       as TabGestorId, label: 'Nova Ordem',       icon: PlusCircle },
+      { id: 'programacao'         as TabGestorId, label: 'Programação',           icon: CalendarDays },
+      { id: 'programacao_balanca' as TabGestorId, label: 'Programação Balanças',  icon: CalendarDays },
+      { id: 'criar'               as TabGestorId, label: 'Nova Ordem',            icon: PlusCircle },
       { id: 'historico'   as TabGestorId, label: 'Histórico',        icon: History },
       { id: 'importar'    as TabGestorId, label: 'Importar',         icon: FileUp },
     ],
@@ -346,7 +348,8 @@ export default function Index() {
         </header>
         <main className="p-6">
           {activeTab === 'gestor'       && <PainelGestor onCriarOP={handleCriarOP} />}
-          {activeTab === 'programacao'  && <PainelProgramacao />}
+          {activeTab === 'programacao'         && <PainelProgramacao />}
+          {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
           {activeTab === 'criar'        && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
           {activeTab === 'balanca1'  && <PainelBalanca balanca={1} />}
           {activeTab === 'balanca2'  && <PainelBalanca balanca={2} />}

@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -87,7 +86,8 @@ function FormulaDialog({
             {nbateladas && (
               <>
                 <span className="mx-2">·</span>
-                <span className="font-semibold text-foreground">{nbateladas}</span> batelada{nbateladas !== 1 ? "s" : ""} de{" "}
+                <span className="font-semibold text-foreground">{nbateladas}</span>{" "}
+                batelada{nbateladas !== 1 ? "s" : ""} de{" "}
                 <span className="font-semibold text-foreground">{ordem.tamanho_batelada} kg</span>
               </>
             )}
@@ -149,12 +149,14 @@ function SortableCard({
   onDblClick,
   onEditar,
   onExcluir,
+  onAvancar,
 }: {
   ordem: Ordem;
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
+  onAvancar: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -170,7 +172,7 @@ function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-start gap-1.5 select-none ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card border rounded-lg p-2.5 flex items-start gap-1.5 select-none ${atrasado ? "border-red-500" : ""}`}
       onDoubleClick={() => onDblClick(ordem)}
     >
       <button
@@ -180,6 +182,7 @@ function SortableCard({
       >
         <GripVertical className="h-4 w-4" />
       </button>
+
       <div className="flex-1 space-y-1 overflow-hidden">
         <p className="text-xs font-semibold leading-tight break-words">{ordem.produto}</p>
         <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
@@ -190,10 +193,11 @@ function SortableCard({
         {atrasado && (
           <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
             <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-            {du - 7} {du - 7 === 1 ? 'dia' : 'dias'} em atraso
+            {du - 7} {du - 7 === 1 ? "dia" : "dias"} em atraso
           </span>
         )}
       </div>
+
       <button
         onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
         className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
@@ -215,6 +219,13 @@ function SortableCard({
       >
         <CalendarDays className="h-3.5 w-3.5" />
       </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onAvancar(ordem); }}
+        className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
+        title="Forçar Avanço"
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -226,6 +237,7 @@ function BalancaColumn({
   onDblClick,
   onEditar,
   onExcluir,
+  onAvancar,
 }: {
   balanca: number;
   ordens: Ordem[];
@@ -233,6 +245,7 @@ function BalancaColumn({
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
+  onAvancar: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `balanca-${balanca}` });
 
@@ -248,7 +261,7 @@ function BalancaColumn({
         <div
           ref={setNodeRef}
           className={`flex-1 overflow-y-auto space-y-1.5 rounded-lg transition-colors ${isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}
-          style={{ maxHeight: "calc(100vh - 230px)", minHeight: "200px" }}
+          style={{ maxHeight: "calc(100vh - 200px)", minHeight: "200px" }}
         >
           {ordens.length === 0 ? (
             <div className="flex items-center justify-center h-20 rounded-lg border border-dashed text-xs text-muted-foreground">
@@ -263,6 +276,7 @@ function BalancaColumn({
                 onDblClick={onDblClick}
                 onEditar={onEditar}
                 onExcluir={onExcluir}
+                onAvancar={onAvancar}
               />
             ))
           )}
@@ -280,9 +294,10 @@ function BalancaColumn({
   );
 }
 
+const FIELDS =
+  "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
+
 export default function PainelProgramacaoBalanca() {
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const [data, setData] = useState(todayStr);
   const [ordens, setOrdens] = useState<Ordem[]>([]);
   const [loading, setLoading] = useState(true);
   const [ordemFormula, setOrdemFormula] = useState<Ordem | null>(null);
@@ -297,23 +312,21 @@ export default function PainelProgramacaoBalanca() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
-
-  const fetchOrdens = async (dataSel: string) => {
+  const fetchOrdens = async () => {
     setLoading(true);
-    const { data: programadas } = await supabase
+    const { data } = await supabase
       .from("ordens")
-      .select(fields)
-      .eq("data_programacao", dataSel)
+      .select(FIELDS)
+      .in("status", ["pendente", "em_pesagem"])
       .not("balanca", "is", null)
       .order("posicao", { ascending: true, nullsFirst: false });
-    setOrdens((programadas as Ordem[]) ?? []);
+    setOrdens((data as Ordem[]) ?? []);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchOrdens(data);
-  }, [data]);
+    fetchOrdens();
+  }, []);
 
   const ordensParaBalanca = useCallback(
     (b: number) => sortOrdens(ordens.filter((o) => o.balanca === b)),
@@ -342,7 +355,7 @@ export default function PainelProgramacaoBalanca() {
     const { count } = await supabase
       .from("ordens")
       .select("*", { count: "exact", head: true })
-      .eq("data_programacao", data)
+      .in("status", ["pendente", "em_pesagem"])
       .eq("balanca", novaBalanca)
       .neq("id", id);
 
@@ -364,23 +377,14 @@ export default function PainelProgramacaoBalanca() {
   };
 
   const handleReprogramar = async (id: string, novaData: string) => {
-    const ordem = ordens.find((o) => o.id === id);
-    if (!ordem) return;
-    const { count } = await supabase
-      .from("ordens")
-      .select("*", { count: "exact", head: true })
-      .eq("data_programacao", novaData)
-      .eq("balanca", ordem.balanca)
-      .neq("id", id);
-    const novaPosicao = (count ?? 0) + 1;
     const { error } = await supabase
       .from("ordens")
-      .update({ data_programacao: novaData, posicao: novaPosicao } as any)
+      .update({ data_programacao: novaData } as any)
       .eq("id", id);
     if (error) {
       toast({ title: "Erro ao reprogramar ordem", description: error.message, variant: "destructive" });
     } else {
-      setOrdens((prev) => prev.filter((o) => o.id !== id));
+      setOrdens((prev) => prev.map((o) => o.id === id ? { ...o, data_programacao: novaData } : o));
       toast({ title: "Ordem reprogramada com sucesso" });
     }
   };
@@ -399,13 +403,42 @@ export default function PainelProgramacaoBalanca() {
     }
   };
 
+  const avancarStatus = async (ordem: Ordem) => {
+    let novoStatus = "";
+
+    if (ordem.status === "pendente") {
+      novoStatus = "em_pesagem";
+    } else if (ordem.status === "em_pesagem") {
+      novoStatus = ordem.requer_mistura ? "aguardando_mistura" : "aguardando_linha";
+    }
+
+    if (!novoStatus) return;
+
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: novoStatus } as any)
+      .eq("id", ordem.id);
+
+    if (!error) {
+      await supabase.from("historico").insert({
+        ordem_id: ordem.id,
+        status_anterior: ordem.status,
+        status_novo: novoStatus,
+      });
+      toast({ title: `Ordem avançada para ${novoStatus}` });
+      fetchOrdens();
+    } else {
+      toast({ title: "Erro ao avançar status", description: error.message, variant: "destructive" });
+    }
+  };
+
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const { error } = await supabase.from("ordens").update(payload as any).eq("id", id);
     if (error) {
       toast({ title: "Erro ao editar ordem", description: error.message, variant: "destructive" });
       return;
     }
-    await fetchOrdens(data);
+    await fetchOrdens();
     toast({ title: "Ordem atualizada com sucesso" });
   };
 
@@ -429,10 +462,6 @@ export default function PainelProgramacaoBalanca() {
     }
 
     if (activeOrdem.balanca !== targetBalanca) {
-      if (["aguardando_liberacao", "concluido"].includes(activeOrdem.status)) {
-        toast({ title: "Não é possível mover esta OP pois já foi produzida.", variant: "destructive" });
-        return;
-      }
       await handleMoverBalanca(activeId, targetBalanca);
     } else {
       if (activeId === overId) return;
@@ -447,16 +476,6 @@ export default function PainelProgramacaoBalanca() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-muted-foreground">Data:</label>
-        <input
-          type="date"
-          value={data}
-          onChange={(e) => setData(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -473,6 +492,7 @@ export default function PainelProgramacaoBalanca() {
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
+                onAvancar={avancarStatus}
               />
             ))}
           </div>

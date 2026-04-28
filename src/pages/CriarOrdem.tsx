@@ -12,6 +12,7 @@ import { Save, Loader2, Search, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
+import { recalcularPosicoes } from '@/lib/recalcularPosicoes';
 
 const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
@@ -174,6 +175,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         .update({ data_emissao: dataEmissao })
         .eq('lote', loteNum);
     }
+
+    await recalcularPosicoes(parseInt(values.linha));
 
     setSaving(false);
     toast({ title: 'Ordem criada com sucesso!' });

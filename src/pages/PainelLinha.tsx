@@ -89,22 +89,19 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   }, [emLinha?.id]);
 
   const fetchOrdens = async () => {
-    const [{ data: emLinhaData }, { data: aguardandoData }] = await Promise.all([
-      supabase.from("ordens").select("*").eq("linha", linha).eq("status", "em_linha"),
-      supabase
-        .from("ordens")
-        .select("*")
-        .eq("linha", linha)
-        .eq("status", "aguardando_linha")
-        .eq("data_programacao", today)
-        .order("posicao", { ascending: true, nullsFirst: false }),
-    ]);
+    const { data: allData } = await supabase
+      .from("ordens")
+      .select("*")
+      .eq("linha", linha)
+      .in("status", ["em_linha", "aguardando_linha"])
+      .order("data_programacao", { ascending: true })
+      .order("posicao", { ascending: true, nullsFirst: false });
+
+    const emLinhaData = (allData ?? []).filter((o: any) => o.status === "em_linha");
+    const aguardandoData = (allData ?? []).filter((o: any) => o.status === "aguardando_linha");
 
     // Busca registros de hoje para: filtrar em_linha e calcular kg da fila
-    const allIds = [
-      ...(emLinhaData ?? []).map((o: any) => o.id),
-      ...(aguardandoData ?? []).map((o: any) => o.id),
-    ];
+    const allIds = (allData ?? []).map((o: any) => o.id);
 
     const hasRegHoje = new Set<string>();
     const kgMap: Record<string, number> = {};
@@ -130,7 +127,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       (o: any) => o.hora_inicio !== null || !hasRegHoje.has(o.id)
     );
 
-    setOrdens([...emLinhaFiltradas, ...(aguardandoData ?? [])]);
+    const combinadas = [...emLinhaFiltradas, ...(aguardandoData ?? [])];
+    const ordenadas = [...combinadas].sort((a: any, b: any) => {
+      if (a.status === "em_linha" && b.status !== "em_linha") return -1;
+      if (b.status === "em_linha" && a.status !== "em_linha") return 1;
+      return 0;
+    });
+    setOrdens(ordenadas);
     setKgHoje(kgMap);
     setLoading(false);
   };
