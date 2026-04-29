@@ -514,7 +514,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = async (dataSel: string) => {
     setLoading(true);
-    const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao";
+    const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em";
 
     // Busca em paralelo: OPs programadas para a data + registros do dia
     const [{ data: programadas }, { data: regs }] = await Promise.all([
@@ -562,7 +562,7 @@ export default function PainelProgramacao() {
       .channel('programacao-ordens')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(data), 300);
+        debounceTimer = setTimeout(() => fetchOrdens(data), 500);
       })
       .subscribe();
     return () => {
@@ -597,14 +597,14 @@ export default function PainelProgramacao() {
 
   const handleToggleConfirmado = async (ordem: Ordem) => {
     const novoValor = !ordem.programacao_confirmada;
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: novoValor } : o));
     const { error } = await supabase
       .from("ordens")
       .update({ programacao_confirmada: novoValor } as any)
       .eq("id", ordem.id);
     if (error) {
+      setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: ordem.programacao_confirmada } : o));
       toast({ title: "Erro ao atualizar confirmação", description: error.message, variant: "destructive" });
-    } else {
-      setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: novoValor } : o));
     }
   };
 
