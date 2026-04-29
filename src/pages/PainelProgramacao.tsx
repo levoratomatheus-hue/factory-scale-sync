@@ -557,6 +557,18 @@ export default function PainelProgramacao() {
 
   useEffect(() => {
     fetchOrdens(data);
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const channel = supabase
+      .channel('programacao-ordens')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchOrdens(data), 300);
+      })
+      .subscribe();
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
   }, [data]);
 
   const handleReorder = async (linha: number, reordered: Ordem[]) => {
