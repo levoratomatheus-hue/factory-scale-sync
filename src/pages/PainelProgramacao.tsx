@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -251,6 +251,7 @@ function SortableCard({
   onRegistrarDia,
   onVerDetalhes,
   onLab,
+  onToggleConfirmado,
 }: {
   ordem: Ordem;
   registro?: any;
@@ -263,6 +264,7 @@ function SortableCard({
   onRegistrarDia: (ordem: Ordem) => void;
   onVerDetalhes: (ordem: Ordem) => void;
   onLab: (ordem: Ordem) => void;
+  onToggleConfirmado: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -330,6 +332,13 @@ function SortableCard({
           </span>
         )}
       </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }}
+        className={`mt-0.5 shrink-0 ${ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"}`}
+        title={ordem.programacao_confirmada ? "Confirmado — clique para desconfirmar" : "Não confirmado — clique para confirmar"}
+      >
+        {ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+      </button>
       <button
         onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
         className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
@@ -402,6 +411,7 @@ function LinhaColumn({
   onRegistrarDia,
   onVerDetalhes,
   onLab,
+  onToggleConfirmado,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -415,6 +425,7 @@ function LinhaColumn({
   onRegistrarDia: (ordem: Ordem) => void;
   onVerDetalhes: (ordem: Ordem) => void;
   onLab: (ordem: Ordem) => void;
+  onToggleConfirmado: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -441,7 +452,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} />
+              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} />
             ))
           )}
         </div>
@@ -562,6 +573,19 @@ export default function PainelProgramacao() {
     if (falhou) {
       setOrdens(anterior);
       toast({ title: "Erro ao salvar sequência", description: "Tente novamente.", variant: "destructive" });
+    }
+  };
+
+  const handleToggleConfirmado = async (ordem: Ordem) => {
+    const novoValor = !ordem.programacao_confirmada;
+    const { error } = await supabase
+      .from("ordens")
+      .update({ programacao_confirmada: novoValor } as any)
+      .eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao atualizar confirmação", description: error.message, variant: "destructive" });
+    } else {
+      setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: novoValor } : o));
     }
   };
 
@@ -842,6 +866,7 @@ export default function PainelProgramacao() {
                 }}
                 onVerDetalhes={setOrdemDetalhe}
                 onLab={setOrdemLab}
+                onToggleConfirmado={handleToggleConfirmado}
               />
             ))}
           </div>

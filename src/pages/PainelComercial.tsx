@@ -73,6 +73,7 @@ interface OrdemComercial {
   status: string;
   data_programacao: string;
   formula_id: string | null;
+  programacao_confirmada: boolean | null;
 }
 
 function deduplicar(rows: OrdemComercial[]): OrdemComercial[] {
@@ -112,7 +113,7 @@ export default function PainelComercial() {
         if (modoTexto) {
           const { data, error } = await supabase
             .from('ordens')
-            .select('id, produto, lote, quantidade, status, data_programacao, formula_id')
+            .select('id, produto, lote, quantidade, status, data_programacao, formula_id, programacao_confirmada')
             .in('status', STATUS_VISIVEIS)
             .or(`produto.ilike.%${term}%,lote.ilike.%${term}%`)
             .order('data_programacao', { ascending: false })
@@ -126,7 +127,7 @@ export default function PainelComercial() {
           const dataMin = subDias(dataSelecionada, 10);
           const { data, error } = await supabase
             .from('ordens')
-            .select('id, produto, lote, quantidade, status, data_programacao, formula_id')
+            .select('id, produto, lote, quantidade, status, data_programacao, formula_id, programacao_confirmada')
             .in('status', STATUS_VISIVEIS)
             .gte('data_programacao', dataMin)
             .lt('data_programacao', dataSelecionada)
@@ -233,18 +234,38 @@ export default function PainelComercial() {
         </div>
       ) : (
         <div className="space-y-2">
+          {/* Legenda */}
+          <div className="flex items-center gap-4 text-xs text-muted-foreground pb-1">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+              Programação confirmada
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400" />
+              Aguardando confirmação
+            </span>
+          </div>
           {ordens.map((ordem) => {
             const concluido = ordem.status === 'concluido';
+            const confirmada = ordem.programacao_confirmada === true;
             const disp = proximoDiaUtil(ordem.data_programacao);
             let dispFormatted = '—';
             try {
               if (disp) dispFormatted = format(new Date(disp + 'T12:00:00'), 'dd/MM/yyyy');
             } catch { /* data inválida */ }
             const jaDisponivel = concluido && disp !== null && disp <= hoje();
+            const borderClass = confirmada ? 'border-green-300 bg-green-50/50' : 'border-orange-300 bg-orange-50/50';
             return (
-              <div key={ordem.id} className="flex items-center gap-4 rounded-xl border bg-card px-4 py-3">
+              <div key={ordem.id} className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${borderClass}`}>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm leading-tight truncate">{ordem.produto}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm leading-tight truncate">{ordem.produto}</p>
+                    {confirmada ? (
+                      <span className="shrink-0 text-[10px] font-semibold text-green-700 bg-green-100 border border-green-300 rounded-full px-1.5 py-0 leading-4">Confirmado</span>
+                    ) : (
+                      <span className="shrink-0 text-[10px] font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded-full px-1.5 py-0 leading-4">Não confirmado</span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
                   </p>
