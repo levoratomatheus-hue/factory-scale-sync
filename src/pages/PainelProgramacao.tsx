@@ -280,21 +280,24 @@ function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-start gap-1.5 select-none cursor-pointer ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         if (ordem.status === "em_linha" || ordem.status === "aguardando_linha") onVerDetalhes(ordem);
       }}
       onDoubleClick={() => onDblClick(ordem)}
     >
+      {/* Grip */}
       <button
         {...attributes}
         {...listeners}
-        className="mt-0.5 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+        className="text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0 self-start mt-0.5"
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <div className="flex-1 space-y-1 overflow-hidden">
+
+      {/* Conteúdo */}
+      <div className="flex-1 space-y-1 overflow-hidden min-w-0">
         <p className="text-xs font-semibold leading-tight line-clamp-2">{ordem.produto}</p>
         <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap leading-snug">
           <span>Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg</span>
@@ -332,68 +335,72 @@ function SortableCard({
           </span>
         )}
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }}
-        className={`mt-0.5 shrink-0 ${ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"}`}
-        title={ordem.programacao_confirmada ? "Confirmado — clique para desconfirmar" : "Não confirmado — clique para confirmar"}
-      >
-        {ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
-      </button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
-        title="Editar"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
-      {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+
+      {/* Coluna de ações vertical */}
+      <div className="flex flex-col items-center gap-1 shrink-0 border-l pl-1.5">
         <button
-          onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }}
-          className="mt-0.5 text-muted-foreground/50 hover:text-blue-600 shrink-0"
-          title="Registrar Dia"
+          onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }}
+          className={`${ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"}`}
+          title={ordem.programacao_confirmada ? "Confirmado — clique para desconfirmar" : "Não confirmado — clique para confirmar"}
         >
-          <CalendarCheck2 className="h-3.5 w-3.5" />
+          {ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
         </button>
-      )}
-      {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
         <button
-          onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }}
-          className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
-          title="Forçar Conclusão"
+          onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
+          className="text-muted-foreground/50 hover:text-primary"
+          title="Editar"
         >
-          <CheckCircle2 className="h-3.5 w-3.5" />
+          <Pencil className="h-3.5 w-3.5" />
         </button>
-      )}
-      {ordem.status === "em_linha" && (
         <button
-          onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }}
-          className="mt-0.5 text-muted-foreground/50 hover:text-amber-600 shrink-0"
-          title="Voltar para Fila"
+          onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
+          className="text-muted-foreground/50 hover:text-primary"
+          title="Reprogramar"
         >
-          <Undo2 className="h-3.5 w-3.5" />
+          <CalendarDays className="h-3.5 w-3.5" />
         </button>
-      )}
-      <button
-        onClick={(e) => { e.stopPropagation(); onLab(ordem); }}
-        className={`mt-0.5 shrink-0 ${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`}
-        title="Obs. Laboratório"
-      >
-        <FlaskConical className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-destructive shrink-0"
-        title="Excluir"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
-        title="Reprogramar"
-      >
-        <CalendarDays className="h-3.5 w-3.5" />
-      </button>
+        {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }}
+            className="text-muted-foreground/50 hover:text-blue-600"
+            title="Registrar Dia"
+          >
+            <CalendarCheck2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }}
+            className="text-muted-foreground/50 hover:text-green-600"
+            title="Forçar Conclusão"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {ordem.status === "em_linha" && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }}
+            className="text-muted-foreground/50 hover:text-amber-600"
+            title="Voltar para Fila"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onLab(ordem); }}
+          className={`${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`}
+          title="Obs. Laboratório"
+        >
+          <FlaskConical className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
+          className="text-muted-foreground/50 hover:text-destructive"
+          title="Excluir"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
