@@ -246,14 +246,19 @@ export default function PainelComercial() {
             </span>
           </div>
           {ordens.map((ordem) => {
-            const concluido = ordem.status === 'concluido';
+            const hj = hoje();
             const confirmada = ordem.programacao_confirmada === true;
             const disp = proximoDiaUtil(ordem.data_programacao);
-            let dispFormatted = '—';
-            try {
-              if (disp) dispFormatted = format(new Date(disp + 'T12:00:00'), 'dd/MM/yyyy');
-            } catch { /* data inválida */ }
-            const jaDisponivel = concluido && disp !== null && disp <= hoje();
+            let textoData = '—';
+            if (disp) {
+              try {
+                const dispFormatted = format(new Date(disp + 'T12:00:00'), 'dd/MM/yyyy');
+                if (disp < hj) textoData = `Disponível desde ${dispFormatted}`;
+                else if (disp === hj) textoData = 'Disponível a partir de hoje';
+                else textoData = `Disponível a partir de ${dispFormatted}`;
+              } catch { /* data inválida */ }
+            }
+            const jaDisponivel = ordem.status === 'concluido' && disp !== null && disp <= hj;
             const borderClass = confirmada ? 'border-green-300 bg-green-50/50' : 'border-orange-300 bg-orange-50/50';
             return (
               <div key={ordem.id} className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${borderClass}`}>
@@ -273,12 +278,11 @@ export default function PainelComercial() {
                 {jaDisponivel ? (
                   <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-green-50 border border-green-200 text-green-700 px-3 py-1 text-xs font-semibold whitespace-nowrap">
                     <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block shrink-0" />
-                    Disponível desde {dispFormatted}
+                    {textoData}
                   </span>
                 ) : (
                   <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">
-                    Disponível em{' '}
-                    <span className="font-semibold text-foreground">{dispFormatted}</span>
+                    {textoData}
                   </span>
                 )}
               </div>
