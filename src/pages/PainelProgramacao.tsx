@@ -298,6 +298,11 @@ function SortableCard({
           <span>Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg</span>
           <MarcaBadge marca={ordem.marca} size="sm" />
         </p>
+        {ordem.criado_em && (
+          <p className="text-xs text-muted-foreground">
+            Criado: {format(new Date(ordem.criado_em), "dd/MM/yyyy")}
+          </p>
+        )}
         <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
         {!registro && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
           <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded px-1 py-0 leading-4">
