@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -43,6 +44,7 @@ interface Ordem {
   formula_id: string | null;
   tamanho_batelada: number | null;
   obs: string | null;
+  obs_laboratorio: string | null;
   marca: string | null;
   requer_mistura: boolean | null;
   data_programacao: string;
@@ -183,6 +185,59 @@ function FormulaDialog({
   );
 }
 
+function LabObsDialog({
+  ordem,
+  onClose,
+  onSalvo,
+}: {
+  ordem: Ordem;
+  onClose: () => void;
+  onSalvo: (id: string, obs: string) => void;
+}) {
+  const [texto, setTexto] = useState(ordem.obs_laboratorio ?? "");
+  const [salvando, setSalvando] = useState(false);
+
+  const handleSalvar = async () => {
+    setSalvando(true);
+    const { error } = await supabase.from("ordens").update({ obs_laboratorio: texto } as any).eq("id", ordem.id);
+    setSalvando(false);
+    if (error) {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    } else {
+      onSalvo(ordem.id, texto);
+      onClose();
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-violet-500" />
+            Obs. Laboratório
+          </DialogTitle>
+          <DialogDescription className="text-xs">{ordem.produto} · Lote {ordem.lote}</DialogDescription>
+        </DialogHeader>
+        <textarea
+          className="w-full rounded-md border bg-muted/30 p-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+          rows={5}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Anotações do laboratório..."
+          autoFocus
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSalvar} disabled={salvando}>
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SortableCard({
   ordem,
   registro,
@@ -194,6 +249,7 @@ function SortableCard({
   onForcarConclusao,
   onRegistrarDia,
   onVerDetalhes,
+  onLab,
 }: {
   ordem: Ordem;
   registro?: any;
@@ -205,6 +261,7 @@ function SortableCard({
   onForcarConclusao: (ordem: Ordem) => void;
   onRegistrarDia: (ordem: Ordem) => void;
   onVerDetalhes: (ordem: Ordem) => void;
+  onLab: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -302,6 +359,13 @@ function SortableCard({
         </button>
       )}
       <button
+        onClick={(e) => { e.stopPropagation(); onLab(ordem); }}
+        className={`mt-0.5 shrink-0 ${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`}
+        title="Obs. Laboratório"
+      >
+        <FlaskConical className="h-3.5 w-3.5" />
+      </button>
+      <button
         onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
         className="mt-0.5 text-muted-foreground/50 hover:text-destructive shrink-0"
         title="Excluir"
@@ -331,6 +395,7 @@ function LinhaColumn({
   onForcarConclusao,
   onRegistrarDia,
   onVerDetalhes,
+  onLab,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -343,6 +408,7 @@ function LinhaColumn({
   onForcarConclusao: (ordem: Ordem) => void;
   onRegistrarDia: (ordem: Ordem) => void;
   onVerDetalhes: (ordem: Ordem) => void;
+  onLab: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -369,7 +435,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} />
+              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} />
             ))
           )}
         </div>
@@ -415,6 +481,7 @@ export default function PainelProgramacao() {
   const [regHoraFim, setRegHoraFim] = useState("");
   const [regProdItems, setRegProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [registrando, setRegistrando] = useState(false);
+  const [ordemLab, setOrdemLab] = useState<Ordem | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -422,7 +489,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = async (dataSel: string) => {
     setLoading(true);
-    const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
+    const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao";
 
     // Busca em paralelo: OPs programadas para a data + registros do dia
     const [{ data: programadas }, { data: regs }] = await Promise.all([
@@ -730,6 +797,9 @@ export default function PainelProgramacao() {
           onChange={(e) => setData(e.target.value)}
           className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
+        <span className="text-sm text-muted-foreground capitalize">
+          {format(new Date(data + "T12:00:00"), "EEEE", { locale: ptBR })}
+        </span>
       </div>
 
       {loading ? (
@@ -756,6 +826,7 @@ export default function PainelProgramacao() {
                   setRegDia(o.data_programacao || data);
                 }}
                 onVerDetalhes={setOrdemDetalhe}
+                onLab={setOrdemLab}
               />
             ))}
           </div>
@@ -808,6 +879,15 @@ export default function PainelProgramacao() {
 
       <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} onMoverLinha={handleMoverLinha} />
       <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
+      {ordemLab && (
+        <LabObsDialog
+          ordem={ordemLab}
+          onClose={() => setOrdemLab(null)}
+          onSalvo={(id, obs) =>
+            setOrdens((prev) => prev.map((o) => o.id === id ? { ...o, obs_laboratorio: obs } : o))
+          }
+        />
+      )}
 
       <Dialog
         open={!!ordemParaForcar}

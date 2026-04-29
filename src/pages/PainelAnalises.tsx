@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -241,6 +242,23 @@ export default function PainelAnalises() {
   const [atalhoAtivo, setAtalhoAtivo] = useState<Atalho>("mes");
   const [linhaFiltro, setLinhaFiltro] = useState<number>(0);
   const [materialFiltro, setMaterialFiltro] = useState("");
+  const [materialLabel, setMaterialLabel] = useState("");
+
+  useEffect(() => {
+    if (!materialFiltro) { setMaterialLabel(""); return; }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from("ordens")
+        .select("produto")
+        .ilike("produto", `%${materialFiltro}%`)
+        .eq("status", "concluido")
+        .limit(1)
+        .single();
+      if (data?.produto) setMaterialLabel(data.produto);
+      else setMaterialLabel(materialFiltro);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [materialFiltro]);
 
   const { ordens: ordensRaw, loading } = useAnalises(dataInicio, dataFim);
   const { paradas: paradasRaw } = useParadasAnalises(dataInicio, dataFim);
@@ -249,6 +267,7 @@ export default function PainelAnalises() {
   const inicioAnual = toStr(new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1));
   const { ordens: ordensAnuaisRaw } = useAnalises(inicioAnual, toStr(hoje));
   const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, toStr(hoje));
+  const { paradas: paradasAnuaisRaw } = useParadasAnalises(inicioAnual, toStr(hoje));
 
   const matchesMaterial = (o: any) => {
     if (!materialFiltro) return true;
@@ -273,9 +292,16 @@ export default function PainelAnalises() {
   const { horasMap, diasLinhaMap } = useMemo(() => {
     const hMap: Record<string, number> = {};
     const dMap: Record<number, Set<string>> = {};
+    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
     registrosDiariosRaw.forEach((r: any) => {
       const h = parseHoras(r.hora_inicio, r.hora_fim);
-      if (h !== null) hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + h;
+      if (h !== null) {
+        const linhaNum = Number(r.ordens?.linha);
+        const horasParadas = paradasRaw
+          .filter((p: any) => Number(p.linha) === linhaNum && p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+          .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
+        hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
+      }
       const linhaNum = Number(r.ordens?.linha);
       if (linhaNum) {
         if (!dMap[linhaNum]) dMap[linhaNum] = new Set();
@@ -283,7 +309,7 @@ export default function PainelAnalises() {
       }
     });
     return { horasMap: hMap, diasLinhaMap: dMap };
-  }, [registrosDiariosRaw]);
+  }, [registrosDiariosRaw, paradasRaw]);
 
   const paradas = useMemo(
     () => linhaFiltro === 0 ? paradasRaw : paradasRaw.filter((p) => Number(p.linha) === linhaFiltro),
@@ -308,12 +334,19 @@ export default function PainelAnalises() {
 
   const horasMapAnual = useMemo(() => {
     const hMap: Record<string, number> = {};
+    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
     registrosDiariosAnuaisRaw.forEach((r: any) => {
       const h = parseHoras(r.hora_inicio, r.hora_fim);
-      if (h !== null) hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + h;
+      if (h !== null) {
+        const linhaNum = Number(r.ordens?.linha);
+        const horasParadas = paradasAnuaisRaw
+          .filter((p: any) => Number(p.linha) === linhaNum && p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+          .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
+        hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
+      }
     });
     return hMap;
-  }, [registrosDiariosAnuaisRaw]);
+  }, [registrosDiariosAnuaisRaw, paradasAnuaisRaw]);
 
   const dadosMensais = useMemo(() => {
     const meses = Array.from({ length: 12 }, (_, i) => {
@@ -584,6 +617,33 @@ export default function PainelAnalises() {
           </div>
         </div>
       </div>
+
+      {materialFiltro && materialLabel && (
+        <div style={{ paddingInline: "1.5rem", paddingBottom: "0.5rem" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              background: `${D.amber}18`,
+              color: D.amber,
+              border: `1px solid ${D.amber}44`,
+              borderRadius: "9999px",
+              padding: "0.25rem 0.75rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+            }}
+          >
+            {materialLabel}
+            <button
+              onClick={() => setMaterialFiltro("")}
+              style={{ background: "none", border: "none", cursor: "pointer", color: D.amber, display: "flex", alignItems: "center", padding: 0 }}
+            >
+              <X size={12} />
+            </button>
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "5rem 0" }}>

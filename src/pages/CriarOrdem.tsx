@@ -47,6 +47,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [requerMistura, setRequerMistura] = useState(true);
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [dataProgramacao, setDataProgramacao] = useState<string>(new Date().toISOString().split("T")[0]);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -124,7 +125,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         linha: parseInt(values.linha),
         balanca: parseInt(values.balanca),
         status: 'pendente',
-        data_programacao: format(new Date(), 'yyyy-MM-dd'),
+        data_programacao: dataProgramacao || format(new Date(), 'yyyy-MM-dd'),
         formula_id: formulaId,
         tamanho_batelada: tamanhoBatelada,
         marca: values.marca || null,
@@ -333,13 +334,23 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Data de Emissão</label>
-              <Input
-                type="date"
-                value={dataEmissao}
-                onChange={(e) => setDataEmissao(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Data de Emissão</label>
+                <Input
+                  type="date"
+                  value={dataEmissao}
+                  onChange={(e) => setDataEmissao(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Data de Programação</label>
+                <Input
+                  type="date"
+                  value={dataProgramacao}
+                  onChange={(e) => setDataProgramacao(e.target.value)}
+                />
+              </div>
             </div>
 
             <FormField control={form.control} name="quantidade" render={({ field }) => (

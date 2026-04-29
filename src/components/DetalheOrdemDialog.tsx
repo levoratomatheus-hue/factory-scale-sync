@@ -229,7 +229,12 @@ export function DetalheOrdemDialog({
                     const prodStr = filled.map((i) => `${i.qty}× ${formatKg(i.peso)} kg`).join(" + ");
                     const totalReg = filled.reduce((s, i) => s + (i.qty || 0) * (i.peso || 0), 0);
                     const horas = parseHoras(r.hora_inicio, r.hora_fim);
-                    const kgH = horas && horas > 0 && totalReg > 0 ? totalReg / horas : null;
+                    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
+                    const horasParadas = paradas
+                      .filter((p: any) => p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+                      .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
+                    const horasNet = horas !== null ? Math.max(0, horas - horasParadas) : null;
+                    const kgH = horasNet && horasNet > 0 && totalReg > 0 ? totalReg / horasNet : null;
                     return (
                       <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm space-y-0.5">
                         <div className="flex items-center gap-3 flex-wrap">

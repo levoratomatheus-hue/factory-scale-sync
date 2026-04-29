@@ -1,5 +1,5 @@
 import { useState, ReactNode } from 'react';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList } from 'lucide-react';
 import PainelGestor from './PainelGestor';
 import PainelBalanca from './PainelBalanca';
 import PainelMistura from './PainelMistura';
@@ -11,6 +11,7 @@ import PainelLiberacao from './PainelLiberacao';
 import ImportarProgramacao from './ImportarProgramacao';
 import PainelProgramacao from './PainelProgramacao';
 import PainelProgramacaoBalanca from './PainelProgramacaoBalanca';
+import PainelConsultaFormula from './PainelConsultaFormula';
 import PainelComercial from './PainelComercial';
 import Login from './Login';
 import { useAuth } from '@/hooks/useAuth';
@@ -38,6 +39,7 @@ type TabGestorId =
   | 'linha1' | 'linha2' | 'linha3' | 'linha4' | 'linha5'
   | 'liberacao'
   | 'analises'
+  | 'consulta_formula'
   | 'comercial';
 
 const gruposGestor = [
@@ -96,6 +98,7 @@ const gruposGestor = [
       { id: 'programacao_balanca' as TabGestorId, label: 'Programação Balanças',  icon: CalendarDays },
       { id: 'criar'               as TabGestorId, label: 'Nova Ordem',            icon: PlusCircle },
       { id: 'historico'   as TabGestorId, label: 'Histórico',        icon: History },
+      { id: 'consulta_formula' as TabGestorId, label: 'Consulta por Fórmula', icon: ClipboardList },
       { id: 'importar'    as TabGestorId, label: 'Importar',         icon: FileUp },
     ],
   },
@@ -361,6 +364,7 @@ export default function Index() {
           {activeTab === 'linha5'     && <PainelLinha linha={5} />}
           {activeTab === 'liberacao'  && <PainelLiberacao />}
           {activeTab === 'historico'  && <PainelHistorico />}
+          {activeTab === 'consulta_formula' && <PainelConsultaFormula />}
           {activeTab === 'analises'   && <PainelAnalises />}
           {activeTab === 'importar'   && <ImportarProgramacao />}
           {activeTab === 'comercial'  && <PainelComercial />}

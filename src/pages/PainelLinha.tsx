@@ -60,7 +60,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [savingDia, setSavingDia] = useState(false);
 
   // Paradas
-  const { paradas } = useParadasLinha(linha, today);
+  const { paradas, fetchParadas } = useParadasLinha(linha, today);
   const [paradaOpen, setParadaOpen] = useState(false);
   const [paradaMotivo, setParadaMotivo] = useState("manutencao");
   const [paradaInicio, setParadaInicio] = useState("");
@@ -324,8 +324,10 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   };
 
   const excluirParada = async (id: string) => {
+    if (!window.confirm("Deseja excluir esta parada?")) return;
     const { error } = await supabase.from("paradas").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir parada", description: error.message, variant: "destructive" });
+    else await fetchParadas();
   };
 
   const excluirRegistro = async (id: string) => {
