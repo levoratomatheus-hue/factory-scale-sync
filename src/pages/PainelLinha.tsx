@@ -347,6 +347,19 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   return (
     <div className="space-y-4 w-full pb-16">
 
+      {/* Botão fixo: Registrar Parada */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur pb-2 pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full border-red-300 text-red-600 hover:bg-red-50"
+          onClick={() => setParadaOpen(true)}
+        >
+          <OctagonX className="h-4 w-4 mr-2" />
+          Registrar Parada
+        </Button>
+      </div>
+
       {/* Ordem atual em linha */}
       {emLinha ? (
         <>
