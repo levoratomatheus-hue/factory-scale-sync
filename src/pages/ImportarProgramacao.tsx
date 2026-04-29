@@ -112,6 +112,15 @@ export default function ImportarProgramacao() {
           setLoading(false);
           return;
         }
+        await Promise.all(
+          batch.map((lote) =>
+            supabase
+              .from('ordens')
+              .update({ quantidade: lote.quantidade })
+              .eq('lote', String(lote.lote))
+              .neq('status', 'concluido')
+          )
+        );
       }
 
       setResultado({

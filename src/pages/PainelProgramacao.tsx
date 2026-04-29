@@ -564,6 +564,14 @@ export default function PainelProgramacao() {
     const ordem = ordens.find((o) => o.id === id);
     if (!ordem) return;
 
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataSelecionada = new Date(novaData + "T00:00:00");
+    if (dataSelecionada < hoje) {
+      const confirmado = window.confirm("A data selecionada é anterior a hoje. Tem certeza que deseja reprogramar para o passado?");
+      if (!confirmado) return;
+    }
+
     const { error } = await supabase
       .from("ordens")
       .update({ data_programacao: novaData } as any)

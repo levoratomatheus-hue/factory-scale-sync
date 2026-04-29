@@ -103,7 +103,8 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
         .from('ordens')
         .select('id, produto, lote, data_emissao, data_programacao, linha, status')
         .not('data_emissao', 'is', null)
-        .not('status', 'in', '("concluido","aguardando_liberacao")');
+        .not('status', 'in', '("concluido","aguardando_liberacao")')
+        .limit(500);
       setOpsComEmissao(data ?? []);
     };
     fetchOpsComEmissao();

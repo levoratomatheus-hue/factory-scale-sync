@@ -101,18 +101,21 @@ export default function PainelLiberacao() {
     }
     setRegistrosPorOrdem(regMap);
 
-    // Busca paradas por linha+data a partir dos registros de cada OP
+    // Busca todas as paradas de uma vez e distribui por OP
     const paradaMap: Record<string, any[]> = {};
-    for (const o of data) {
-      const datas = (regMap[o.id] ?? []).map((r: any) => r.data);
-      if (datas.length > 0) {
-        const { data: pRows } = await (supabase as any)
-          .from("paradas")
-          .select("*")
-          .eq("linha", o.linha)
-          .in("data", datas)
-          .order("hora_inicio", { ascending: true });
-        if (pRows && pRows.length > 0) paradaMap[o.id] = pRows;
+    const allDatas = [...new Set(Object.values(regMap).flatMap((regs) => regs.map((r: any) => r.data)))];
+    const allLinhas = [...new Set(data.map((o: any) => o.linha).filter(Boolean))];
+    if (allDatas.length > 0 && allLinhas.length > 0) {
+      const { data: todasParadas } = await (supabase as any)
+        .from("paradas")
+        .select("id, linha, data, motivo, hora_inicio, hora_fim")
+        .in("linha", allLinhas)
+        .in("data", allDatas)
+        .order("hora_inicio", { ascending: true });
+      for (const o of data) {
+        const datas = new Set((regMap[o.id] ?? []).map((r: any) => r.data));
+        const paradas = (todasParadas ?? []).filter((p: any) => p.linha === o.linha && datas.has(p.data));
+        if (paradas.length > 0) paradaMap[o.id] = paradas;
       }
     }
     setParadasPorOrdem(paradaMap);

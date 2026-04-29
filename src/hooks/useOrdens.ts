@@ -24,7 +24,7 @@ export function useOrdens(date?: string) {
   useEffect(() => {
     fetchOrdens();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const channelName = `ordens-realtime-${date ?? "all"}-${Math.random().toString(36).slice(2, 8)}`;
+    const channelName = `ordens-realtime-${date ?? "all"}`;
     const channel = supabase
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
@@ -78,7 +78,7 @@ export function useOrdens(date?: string) {
   const initBalanca = useCallback(async (balanca: number): Promise<string | null> => {
     const { data } = await supabase
       .from("ordens")
-      .select("*")
+      .select("id, status, balanca, posicao, requer_mistura")
       .eq("balanca", balanca)
       .in("status", ["pendente", "em_pesagem"])
       .order("posicao", { ascending: true, nullsFirst: false });
