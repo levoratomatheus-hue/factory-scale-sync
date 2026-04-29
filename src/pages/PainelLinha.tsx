@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CalendarCheck2, CheckCircle2, Loader2, Factory, Layers, OctagonX, Play, Trash2 } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, ClipboardList, Loader2, Factory, Layers, OctagonX, PauseCircle, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -66,6 +66,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [paradaInicio, setParadaInicio] = useState("");
   const [paradaFim, setParadaFim] = useState("");
   const [savingParada, setSavingParada] = useState(false);
+  const [paradasListOpen, setParadasListOpen] = useState(false);
 
   const linhaOrdens = sortOrdens(
     ordens.filter((o) => ["aguardando_linha", "em_linha", "aguardando_liberacao", "concluido"].includes(o.status))
@@ -347,19 +348,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   return (
     <div className="space-y-4 w-full pb-16">
 
-      {/* Botão fixo: Registrar Parada */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur pb-2 pt-1">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full border-red-300 text-red-600 hover:bg-red-50"
-          onClick={() => setParadaOpen(true)}
-        >
-          <OctagonX className="h-4 w-4 mr-2" />
-          Registrar Parada
-        </Button>
-      </div>
-
       {/* Ordem atual em linha */}
       {emLinha ? (
         <>
@@ -371,6 +359,19 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               <StatusBadge status="em_linha" />
             </div>
             <span className="text-sm text-muted-foreground shrink-0">Lote {emLinha.lote}</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button size="sm" variant="outline" onClick={() => setParadaOpen(true)} className="h-7 px-2 text-xs gap-1">
+                <PauseCircle className="h-3.5 w-3.5" />
+                Nova Parada
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setParadasListOpen(true)} className="h-7 px-2 text-xs gap-1">
+                <ClipboardList className="h-3.5 w-3.5" />
+                Paradas do Dia
+                {paradas.length > 0 && (
+                  <span className="ml-0.5 bg-orange-100 text-orange-700 rounded-full px-1.5 text-[10px] font-semibold">{paradas.length}</span>
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-line/40 p-6 space-y-4">
@@ -640,6 +641,25 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
         </>
       ) : (
         <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-6 text-center text-muted-foreground">
+          <div className="flex items-center justify-between mb-2">
+            <span className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+              <Factory className="h-4 w-4 text-primary" />
+              Linha {linha}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" onClick={() => setParadaOpen(true)} className="h-7 px-2 text-xs gap-1">
+                <PauseCircle className="h-3.5 w-3.5" />
+                Nova Parada
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setParadasListOpen(true)} className="h-7 px-2 text-xs gap-1">
+                <ClipboardList className="h-3.5 w-3.5" />
+                Paradas do Dia
+                {paradas.length > 0 && (
+                  <span className="ml-0.5 bg-orange-100 text-orange-700 rounded-full px-1.5 text-[10px] font-semibold">{paradas.length}</span>
+                )}
+              </Button>
+            </div>
+          </div>
           <p>Nenhuma ordem em andamento</p>
         </div>
       )}
@@ -681,44 +701,37 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
         </div>
       )}
 
-      {/* Paradas do dia */}
-      <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <OctagonX className="h-4 w-4 text-orange-500" />
-            <h2 className="text-sm font-semibold">Paradas do dia</h2>
-            {paradas.length > 0 && (
-              <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5 font-medium">
-                {paradas.length}
-              </span>
-            )}
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setParadaOpen(true)}>
-            + Registrar Parada
-          </Button>
-        </div>
-
-        {paradas.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-2">Nenhuma parada registrada hoje</p>
-        ) : (
-          <div className="space-y-2">
-            {paradas.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">{MOTIVOS[p.motivo] ?? p.motivo}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{p.hora_inicio.slice(0, 5)} – {p.hora_fim.slice(0, 5)}</p>
+      {/* Dialog: Paradas do Dia */}
+      <Dialog open={paradasListOpen} onOpenChange={setParadasListOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Paradas do Dia — Linha {linha}</DialogTitle>
+          </DialogHeader>
+          {paradas.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma parada registrada hoje</p>
+          ) : (
+            <div className="space-y-2 py-2">
+              {paradas.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">{MOTIVOS[p.motivo] ?? p.motivo}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{p.hora_inicio.slice(0, 5)} – {p.hora_fim.slice(0, 5)}</p>
+                  </div>
+                  <button
+                    onClick={() => excluirParada(p.id)}
+                    className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => excluirParada(p.id)}
-                  className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setParadasListOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: Registrar Parada */}
       <Dialog open={paradaOpen} onOpenChange={setParadaOpen}>

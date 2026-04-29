@@ -226,13 +226,13 @@ export default function Index() {
             </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset>
+        <SidebarInset className="overflow-x-hidden">
           <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
             <SidebarTrigger />
             <span className="font-semibold text-sm">Painel Comercial</span>
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
-          <main className="p-6">
+          <main className="p-6 overflow-x-hidden">
             <PainelComercial />
           </main>
         </SidebarInset>
@@ -344,12 +344,12 @@ export default function Index() {
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset>
+      <SidebarInset className="overflow-x-hidden">
         <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
           <SidebarTrigger />
           <span className="font-semibold text-sm">{activeLabel}</span>
         </header>
-        <main className="p-6">
+        <main className="p-6 overflow-x-hidden">
           {activeTab === 'gestor'       && <PainelGestor onCriarOP={handleCriarOP} />}
           {activeTab === 'programacao'         && <PainelProgramacao />}
           {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}

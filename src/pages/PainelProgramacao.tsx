@@ -846,7 +846,7 @@ export default function PainelProgramacao() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative z-0">
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-muted-foreground">Data:</label>
         <input
