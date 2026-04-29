@@ -19,6 +19,7 @@ import {
   DndContext,
   closestCorners,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -292,9 +293,9 @@ function SortableCard({
         <GripVertical className="h-4 w-4" />
       </button>
       <div className="flex-1 space-y-1 overflow-hidden">
-        <p className="text-xs font-semibold leading-tight break-words">{ordem.produto}</p>
-        <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-          Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
+        <p className="text-xs font-semibold leading-tight line-clamp-2">{ordem.produto}</p>
+        <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap leading-snug">
+          <span>Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg</span>
           <MarcaBadge marca={ordem.marca} size="sm" />
         </p>
         <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
@@ -413,7 +414,7 @@ function LinhaColumn({
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
   return (
-    <div className="flex flex-col flex-1 min-w-0">
+    <div className="flex flex-col min-w-[260px] w-[260px]">
       <div className="mb-2">
         <div className="bg-muted rounded-md py-1.5 px-2 flex items-center justify-between">
           <span className="text-xs font-bold">Linha {linha}</span>
@@ -484,7 +485,8 @@ export default function PainelProgramacao() {
   const [ordemLab, setOrdemLab] = useState<Ordem | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
   const fetchOrdens = async (dataSel: string) => {
@@ -808,7 +810,7 @@ export default function PainelProgramacao() {
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-5 gap-3 w-full pb-4">
+          <div className="flex gap-3 w-full overflow-x-auto pb-4">
             {[1, 2, 3, 4, 5].map((l) => (
               <LinhaColumn
                 key={l}

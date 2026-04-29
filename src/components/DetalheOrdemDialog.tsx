@@ -188,6 +188,7 @@ export function DetalheOrdemDialog({
             )}
 
             {/* 6. Timeline de status */}
+            <div className="hidden">
             {hist.length > 0 && (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Timeline de Status</h3>
@@ -215,6 +216,7 @@ export function DetalheOrdemDialog({
                 </div>
               </section>
             )}
+            </div>
 
             {/* 7. Registros diários */}
             {registros.length > 0 ? (
