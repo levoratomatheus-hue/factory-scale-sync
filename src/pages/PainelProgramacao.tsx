@@ -301,7 +301,7 @@ function SortableCard({
       <div className="flex-1 space-y-1 overflow-hidden min-w-0">
         <p className="text-xs font-semibold leading-tight line-clamp-2">{ordem.produto}</p>
         <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap leading-snug">
-          <span>Lote {ordem.lote} · {formatKg(ordem.status === "concluido" && ordem.quantidade_real != null ? ordem.quantidade_real : ordem.quantidade)} kg</span>
+          <span>Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg</span>
           <MarcaBadge marca={ordem.marca} size="sm" />
         </p>
         {ordem.criado_em && (
@@ -316,15 +316,18 @@ function SortableCard({
             aguardando registro
           </span>
         )}
-        {registro && (() => {
-          const items: any[] = Array.isArray(registro.registro_producao) ? registro.registro_producao : [];
-          const total = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-          const hi = registro.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : null;
-          const hf = registro.hora_fim ? String(registro.hora_fim).slice(0, 5) : null;
-          if (!total && !(hi && hf)) return null;
+        {(() => {
+          const items: any[] = registro && Array.isArray(registro.registro_producao) ? registro.registro_producao : [];
+          const registroTotal = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+          const exibirKg = ordem.status === "concluido" && ordem.quantidade_real != null
+            ? ordem.quantidade_real
+            : registroTotal > 0 ? registroTotal : null;
+          const hi = registro?.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : null;
+          const hf = registro?.hora_fim ? String(registro.hora_fim).slice(0, 5) : null;
+          if (exibirKg == null && !(hi && hf)) return null;
           return (
             <span className="inline-flex flex-col gap-0 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
-              {total > 0 && <span>{total.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
+              {exibirKg != null && <span>{exibirKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
               {hi && hf && <span>{hi}–{hf}</span>}
             </span>
           );
