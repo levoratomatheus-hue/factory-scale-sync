@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Printer, Scale } from "lucide-react";
+import { CheckCircle2, Loader2, Play, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
@@ -33,8 +33,7 @@ interface FormulaRow {
 }
 
 export default function PainelBalanca({ balanca }: PainelBalancaProps) {
-  const { ordens, loading, concluirOrdem, initBalanca, fetchOrdens } = useOrdens();
-  const iniciado = useRef(false);
+  const { ordens, loading, concluirOrdem, fetchOrdens } = useOrdens();
 
   const [formulaId, setFormulaId] = useState<string | null>(null);
   const [tamanhoBatelada, setTamanhoBatelada] = useState<number | null>(null);
@@ -103,15 +102,19 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
   const totalHoje = ordens.filter((o) => o.balanca === balanca).length;
 
-  useEffect(() => {
-    if (!loading && balancaOrdens.length > 0 && !iniciado.current) {
-      iniciado.current = true;
-      initBalanca(balanca).then(async (err) => {
-        if (err) toast({ title: "Erro ao iniciar fila automaticamente", description: err, variant: "destructive" });
-        await fetchOrdens();
-      });
+  const iniciarPesagem = async (ordem: { id: string }) => {
+    const { error } = await supabase.from("ordens").update({ status: "em_pesagem" }).eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao iniciar pesagem", description: error.message, variant: "destructive" });
+      return;
     }
-  }, [loading, balancaOrdens.length]);
+    await supabase.from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: "pendente",
+      status_novo: "em_pesagem",
+    });
+    await fetchOrdens();
+  };
 
   if (loading) {
     return (
@@ -315,33 +318,18 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
         </>
       ) : (
         <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border p-6 text-center text-muted-foreground">
-          {emAberto.length === 0 && totalHoje > 0 ? (
-            "Todas as ordens foram pesadas!"
-          ) : (
-            <div className="space-y-3">
-              <p>Nenhuma ordem em pesagem</p>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  iniciado.current = false;
-                  const err = await initBalanca(balanca);
-                  if (err) {
-                    toast({ title: "Erro ao iniciar fila", description: err, variant: "destructive" });
-                  }
-                  await fetchOrdens();
-                }}
-              >
-                Iniciar fila
-              </Button>
-            </div>
-          )}
+          {emAberto.length === 0 && totalHoje > 0
+            ? "Todas as ordens foram pesadas!"
+            : "Nenhuma ordem em pesagem"}
         </div>
       )}
 
       {/* Próximas ordens */}
       {emAberto.length > 0 && (
         <div className="max-w-2xl mx-auto w-full">
-          <h2 className="text-sm font-semibold text-muted-foreground mb-3">Próximas ordens</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground mb-3">
+            Fila de pesagem ({emAberto.length})
+          </h2>
           <div className="space-y-2">
             {emAberto.map((ordem, i) => (
               <div key={ordem.id} className="bg-card rounded-lg border p-3 flex items-center gap-3">
@@ -355,6 +343,12 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                     <MarcaBadge marca={ordem.marca} size="sm" />
                   </div>
                 </div>
+                {!emPesagem && (
+                  <Button size="sm" variant="outline" onClick={() => iniciarPesagem(ordem)}>
+                    <Play className="h-3 w-3 mr-1" />
+                    Iniciar Pesagem
+                  </Button>
+                )}
               </div>
             ))}
           </div>
