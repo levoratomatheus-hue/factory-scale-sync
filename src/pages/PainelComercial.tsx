@@ -170,23 +170,25 @@ export default function PainelComercial() {
 
       {/* Seletor de data */}
       {!modoTexto && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
           <label className="text-sm text-muted-foreground whitespace-nowrap">Data de disponibilidade:</label>
-          <input
-            type="date"
-            value={dataSelecionada}
-            onChange={(e) => e.target.value && setDataSelecionada(e.target.value)}
-            className="rounded-lg border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
-          />
-          {dataSelecionada !== hoje() && (
-            <button
-              onClick={() => setDataSelecionada(hoje())}
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Hoje
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dataSelecionada}
+              onChange={(e) => e.target.value && setDataSelecionada(e.target.value)}
+              className="rounded-lg border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
+            />
+            {dataSelecionada !== hoje() && (
+              <button
+                onClick={() => setDataSelecionada(hoje())}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+              >
+                Hoje
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -261,14 +263,14 @@ export default function PainelComercial() {
             const jaDisponivel = ordem.status === 'concluido' && disp !== null && disp <= hj;
             const borderClass = confirmada ? 'border-green-300 bg-green-50/50' : 'border-orange-300 bg-orange-50/50';
             return (
-              <div key={ordem.id} className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${borderClass}`}>
+              <div key={ordem.id} className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 rounded-xl border px-4 py-3 ${borderClass}`}>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-sm leading-tight truncate">{ordem.produto}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm leading-tight">{ordem.produto}</p>
                     {confirmada ? (
-                      <span className="shrink-0 text-[10px] font-semibold text-green-700 bg-green-100 border border-green-300 rounded-full px-1.5 py-0 leading-4">Confirmado</span>
+                      <span className="text-[10px] font-semibold text-green-700 bg-green-100 border border-green-300 rounded-full px-1.5 py-0 leading-4">Confirmado</span>
                     ) : (
-                      <span className="shrink-0 text-[10px] font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded-full px-1.5 py-0 leading-4">Não confirmado</span>
+                      <span className="text-[10px] font-semibold text-orange-700 bg-orange-100 border border-orange-300 rounded-full px-1.5 py-0 leading-4">Não confirmado</span>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -276,12 +278,12 @@ export default function PainelComercial() {
                   </p>
                 </div>
                 {jaDisponivel ? (
-                  <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-green-50 border border-green-200 text-green-700 px-3 py-1 text-xs font-semibold whitespace-nowrap">
+                  <span className="self-start sm:self-auto inline-flex items-center gap-1.5 rounded-full bg-green-50 border border-green-200 text-green-700 px-3 py-1 text-xs font-semibold">
                     <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block shrink-0" />
                     {textoData}
                   </span>
                 ) : (
-                  <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">
+                  <span className="self-start sm:self-auto text-xs text-muted-foreground">
                     {textoData}
                   </span>
                 )}
