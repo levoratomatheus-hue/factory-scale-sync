@@ -60,18 +60,6 @@ export function useOrdens(date?: string) {
       status_novo: proximoStatus,
     });
 
-    const nextOrder = ordens.find(
-      (o) => o.balanca === ordem.balanca && o.status === "pendente" && o.id !== ordemId
-    );
-    if (nextOrder) {
-      await supabase.from("ordens").update({ status: "em_pesagem" }).eq("id", nextOrder.id);
-      await supabase.from("historico").insert({
-        ordem_id: nextOrder.id,
-        status_anterior: "pendente",
-        status_novo: "em_pesagem",
-      });
-    }
-
     return null;
   };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowRightLeft, Undo2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -150,6 +150,8 @@ function SortableCard({
   onEditar,
   onExcluir,
   onAvancar,
+  onMoverParaBalanca,
+  onDevolverParaFila,
 }: {
   ordem: Ordem;
   onReprogramarClick: (ordem: Ordem) => void;
@@ -157,6 +159,8 @@ function SortableCard({
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
   onAvancar: (ordem: Ordem) => void;
+  onMoverParaBalanca: (ordem: Ordem, novaBalanca: number) => void;
+  onDevolverParaFila: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -219,6 +223,24 @@ function SortableCard({
       >
         <CalendarDays className="h-3.5 w-3.5" />
       </button>
+      {ordem.status === 'em_pesagem' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDevolverParaFila(ordem); }}
+          className="mt-0.5 text-muted-foreground/50 hover:text-orange-500 shrink-0"
+          title="Devolver para fila"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {ordem.balanca !== null && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onMoverParaBalanca(ordem, ordem.balanca === 1 ? 2 : 1); }}
+          className="mt-0.5 text-muted-foreground/50 hover:text-blue-600 shrink-0"
+          title={`Mover para Balança ${ordem.balanca === 1 ? 2 : 1}`}
+        >
+          <ArrowRightLeft className="h-3.5 w-3.5" />
+        </button>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); onAvancar(ordem); }}
         className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
@@ -238,6 +260,8 @@ function BalancaColumn({
   onEditar,
   onExcluir,
   onAvancar,
+  onMoverParaBalanca,
+  onDevolverParaFila,
 }: {
   balanca: number;
   ordens: Ordem[];
@@ -246,6 +270,8 @@ function BalancaColumn({
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
   onAvancar: (ordem: Ordem) => void;
+  onMoverParaBalanca: (ordem: Ordem, novaBalanca: number) => void;
+  onDevolverParaFila: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `balanca-${balanca}` });
 
@@ -277,6 +303,8 @@ function BalancaColumn({
                 onEditar={onEditar}
                 onExcluir={onExcluir}
                 onAvancar={onAvancar}
+                onMoverParaBalanca={onMoverParaBalanca}
+                onDevolverParaFila={onDevolverParaFila}
               />
             ))
           )}
@@ -432,6 +460,21 @@ export default function PainelProgramacaoBalanca() {
     }
   };
 
+  const devolverParaFila = async (ordem: Ordem) => {
+    const { error } = await supabase.from("ordens").update({ status: "pendente" } as any).eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao devolver ordem", description: error.message, variant: "destructive" });
+      return;
+    }
+    await supabase.from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: "em_pesagem",
+      status_novo: "pendente",
+    });
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "pendente" } : o));
+    toast({ title: "Ordem devolvida para a fila" });
+  };
+
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const { error } = await supabase.from("ordens").update(payload as any).eq("id", id);
     if (error) {
@@ -493,6 +536,8 @@ export default function PainelProgramacaoBalanca() {
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
                 onAvancar={avancarStatus}
+                onMoverParaBalanca={(o, nova) => handleMoverBalanca(o.id, nova)}
+                onDevolverParaFila={devolverParaFila}
               />
             ))}
           </div>
