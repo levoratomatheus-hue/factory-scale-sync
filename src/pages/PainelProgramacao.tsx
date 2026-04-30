@@ -301,7 +301,7 @@ function SortableCard({
       <div className="flex-1 space-y-1 overflow-hidden min-w-0">
         <p className="text-xs font-semibold leading-tight line-clamp-2">{ordem.produto}</p>
         <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap leading-snug">
-          <span>Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg</span>
+          <span>Lote {ordem.lote} · {formatKg(ordem.status === "concluido" && ordem.quantidade_real != null ? ordem.quantidade_real : ordem.quantidade)} kg</span>
           <MarcaBadge marca={ordem.marca} size="sm" />
         </p>
         {ordem.criado_em && (
