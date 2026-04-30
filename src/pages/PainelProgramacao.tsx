@@ -526,7 +526,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = async (dataSel: string) => {
     setLoading(true);
-    const fields = "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em";
+    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em";
 
     // Busca em paralelo: OPs programadas para a data + registros do dia
     const [{ data: programadas }, { data: regs }] = await Promise.all([
