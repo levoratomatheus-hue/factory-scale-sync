@@ -1,4 +1,4 @@
-import { useState, ReactNode } from 'react';
+import { useState, useCallback, ReactNode } from 'react';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList } from 'lucide-react';
 import PainelGestor from './PainelGestor';
 import PainelBalanca from './PainelBalanca';
@@ -118,12 +118,13 @@ export default function Index() {
     () => new Set(gruposGestor.map((g) => g.id))
   );
 
-  const toggleGroup = (id: string) =>
+  const toggleGroup = useCallback((id: string) => {
     setOpenGroups((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }, []);
 
   const handleCriarOP = (lote: number) => {
     setPrefillLote(lote);

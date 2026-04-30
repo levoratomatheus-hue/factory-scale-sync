@@ -289,6 +289,16 @@ export default function PainelAnalises() {
 
   const ordensAnuaisIds = useMemo(() => new Set(ordensAnuais.map((o) => o.id)), [ordensAnuais]);
 
+  const paradasIdx = useMemo(() => {
+    const idx = new Map<string, any[]>();
+    paradasRaw.forEach((p: any) => {
+      const key = `${p.linha}-${p.data}`;
+      if (!idx.has(key)) idx.set(key, []);
+      idx.get(key)!.push(p);
+    });
+    return idx;
+  }, [paradasRaw]);
+
   const { horasMap, diasLinhaMap } = useMemo(() => {
     const hMap: Record<string, number> = {};
     const dMap: Record<number, Set<string>> = {};
@@ -297,8 +307,8 @@ export default function PainelAnalises() {
       const h = parseHoras(r.hora_inicio, r.hora_fim);
       if (h !== null) {
         const linhaNum = Number(r.ordens?.linha);
-        const horasParadas = paradasRaw
-          .filter((p: any) => Number(p.linha) === linhaNum && p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+        const horasParadas = (paradasIdx.get(`${linhaNum}-${r.data}`) ?? [])
+          .filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
           .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
         hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
       }
@@ -309,7 +319,7 @@ export default function PainelAnalises() {
       }
     });
     return { horasMap: hMap, diasLinhaMap: dMap };
-  }, [registrosDiariosRaw, paradasRaw]);
+  }, [registrosDiariosRaw, paradasIdx]);
 
   const paradas = useMemo(
     () => linhaFiltro === 0 ? paradasRaw : paradasRaw.filter((p) => Number(p.linha) === linhaFiltro),
@@ -332,6 +342,16 @@ export default function PainelAnalises() {
     return `${format(new Date(dataInicio + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })} – ${format(new Date(dataFim + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}`;
   }, [dataInicio, dataFim]);
 
+  const paradasAnuaisIdx = useMemo(() => {
+    const idx = new Map<string, any[]>();
+    paradasAnuaisRaw.forEach((p: any) => {
+      const key = `${p.linha}-${p.data}`;
+      if (!idx.has(key)) idx.set(key, []);
+      idx.get(key)!.push(p);
+    });
+    return idx;
+  }, [paradasAnuaisRaw]);
+
   const horasMapAnual = useMemo(() => {
     const hMap: Record<string, number> = {};
     const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
@@ -339,14 +359,14 @@ export default function PainelAnalises() {
       const h = parseHoras(r.hora_inicio, r.hora_fim);
       if (h !== null) {
         const linhaNum = Number(r.ordens?.linha);
-        const horasParadas = paradasAnuaisRaw
-          .filter((p: any) => Number(p.linha) === linhaNum && p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+        const horasParadas = (paradasAnuaisIdx.get(`${linhaNum}-${r.data}`) ?? [])
+          .filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
           .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
         hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
       }
     });
     return hMap;
-  }, [registrosDiariosAnuaisRaw, paradasAnuaisRaw]);
+  }, [registrosDiariosAnuaisRaw, paradasAnuaisIdx]);
 
   const dadosMensais = useMemo(() => {
     const meses = Array.from({ length: 12 }, (_, i) => {
