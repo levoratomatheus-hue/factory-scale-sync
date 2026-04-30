@@ -253,6 +253,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                   <Input
                     type="number"
                     value={tamanhoBatelada ?? ''}
+                    onWheel={(e) => e.currentTarget.blur()}
                     onChange={(e) => setTamanhoBatelada(e.target.value ? Number(e.target.value) : null)}
                     className="mt-1"
                   />
@@ -332,6 +333,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                                 <Input
                                   type="number"
                                   value={item.quantidade_kg}
+                                  onWheel={(e) => e.currentTarget.blur()}
                                   onChange={(e) => setQuantidade(item.id, Number(e.target.value))}
                                   className="h-7 w-24 text-right ml-auto"
                                 />
@@ -376,7 +378,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
             <FormField control={form.control} name="quantidade" render={({ field }) => (
               <FormItem>
                 <FormLabel>Quantidade (kg)</FormLabel>
-                <FormControl><Input type="number" placeholder="Ex: 500" {...field} /></FormControl>
+                <FormControl><Input type="number" placeholder="Ex: 500" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
