@@ -44,6 +44,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     { qty: '', mp: '' },
     { qty: '', mp: '' },
   ]);
+  const [nomes, setNomes] = useState<Record<string, string>>({});
   const [requerMistura, setRequerMistura] = useState(true);
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
@@ -66,6 +67,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setLoteEncontrado(null);
     setLoteJaTemOP(false);
     setSemFormula(false);
+    setNomes({});
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
       supabase.from('cadastro_lotes').select('*').eq('lote', loteNum).single(),
@@ -162,7 +164,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         itens.map((item) => ({
           ordem_id: (novaOrdem as any).id,
           sequencia: item.sequencia,
-          materia_prima: item.materia_prima,
+          materia_prima: nomes[item.id] ?? item.materia_prima,
           quantidade_kg: item.quantidade_kg,
         }))
       );
@@ -187,6 +189,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setTamanhoBatelada(null);
     setSemFormula(false);
     setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
+    setNomes({});
     setRequerMistura(true);
     setOrientacoes('');
     setDataEmissao(new Date().toISOString().split("T")[0]);
@@ -289,26 +292,43 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 {itens.length > 0 && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Matérias-Primas</label>
-                    <p className="text-xs text-muted-foreground">Edite as quantidades para customizar esta ordem.</p>
+                    <p className="text-xs text-muted-foreground">Edite nome ou quantidade para customizar esta OP — a fórmula original não é alterada.</p>
                     <div className="rounded-md border overflow-hidden">
                       <table className="w-full text-sm">
                         <thead className="bg-muted text-muted-foreground">
                           <tr>
-                            <th className="text-left px-3 py-2">Seq</th>
+                            <th className="text-left px-3 py-2 w-px whitespace-nowrap">Seq</th>
                             <th className="text-left px-3 py-2">Matéria-Prima</th>
-                            <th className="text-left px-3 py-2">Un</th>
-                            <th className="text-right px-3 py-2">%</th>
-                            <th className="text-right px-3 py-2">Qtd (kg)</th>
+                            <th className="text-left px-3 py-2 w-px whitespace-nowrap">Un</th>
+                            <th className="text-right px-3 py-2 w-px whitespace-nowrap">%</th>
+                            <th className="text-right px-3 py-2 w-px whitespace-nowrap">Qtd (kg)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {itens.map((item) => (
                             <tr key={item.id} className="border-t">
-                              <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
-                              <td className="px-3 py-2">{item.materia_prima}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? '-'}</td>
-                              <td className="px-3 py-2 text-right text-muted-foreground">{item.percentual}%</td>
+                              <td className="px-3 py-2 text-muted-foreground w-px whitespace-nowrap">{item.sequencia ?? '-'}</td>
                               <td className="px-3 py-2">
+                                <textarea
+                                  value={nomes[item.id] ?? item.materia_prima}
+                                  onChange={(e) => {
+                                    setNomes((prev) => ({ ...prev, [item.id]: e.target.value }));
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                  }}
+                                  rows={1}
+                                  ref={(el) => {
+                                    if (el) {
+                                      el.style.height = 'auto';
+                                      el.style.height = el.scrollHeight + 'px';
+                                    }
+                                  }}
+                                  className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm resize-none overflow-hidden hover:border-input focus:border-input focus:outline-none focus:ring-1 focus:ring-ring"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground w-px whitespace-nowrap">{item.unidade ?? '-'}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground w-px whitespace-nowrap">{item.percentual}%</td>
+                              <td className="px-3 py-2 w-px whitespace-nowrap">
                                 <Input
                                   type="number"
                                   value={item.quantidade_kg}
