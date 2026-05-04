@@ -10,6 +10,8 @@ import {
   CalendarPlus,
   CalendarClock,
   ListOrdered,
+  Search,
+  X,
 } from "lucide-react";
 import { format, isToday, isPast, isFuture } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -96,6 +98,14 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     ),
     [todasPendentes]
   );
+
+  const [filterMaterial, setFilterMaterial] = useState("");
+
+  const ordensFiltradas = useMemo(() => {
+    if (!filterMaterial.trim()) return todasPendentes;
+    const q = filterMaterial.trim().toLowerCase();
+    return todasPendentes.filter((op) => op.produto?.toLowerCase().includes(q));
+  }, [todasPendentes, filterMaterial]);
 
   const [lotesSeOP, setLotesSeOP] = useState<LoteSemOP[]>([]);
   const [loadingLotesSemOP, setLoadingLotesSemOP] = useState(false);
@@ -342,17 +352,37 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
       {/* Ordens Programadas */}
       <div className="bg-card rounded-lg border overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40 gap-3 flex-wrap">
+          <div className="flex items-center gap-2 shrink-0">
             <ListOrdered className="h-4 w-4 text-primary" />
             <h3 className="font-semibold text-sm">Ordens Programadas</h3>
           </div>
-          <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5">
-            {todasPendentes.length} OP{todasPendentes.length !== 1 ? "s" : ""}
+          <div className="relative flex-1 min-w-[160px] max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Filtrar por material..."
+              value={filterMaterial}
+              onChange={(e) => setFilterMaterial(e.target.value)}
+              className="w-full rounded-md border border-input bg-background pl-8 pr-7 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {filterMaterial && (
+              <button
+                onClick={() => setFilterMaterial("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5 shrink-0">
+            {ordensFiltradas.length}{filterMaterial ? `/${todasPendentes.length}` : ""} OP{todasPendentes.length !== 1 ? "s" : ""}
           </span>
         </div>
-        {todasPendentes.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Nenhuma ordem pendente.</p>
+        {ordensFiltradas.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            {filterMaterial ? "Nenhuma ordem encontrada para este material." : "Nenhuma ordem pendente."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -368,7 +398,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                 </tr>
               </thead>
               <tbody>
-                {todasPendentes.map((op) => (
+                {ordensFiltradas.map((op) => (
                   <tr key={op.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-2 max-w-xs truncate">{op.produto}</td>
                     <td className="px-4 py-2 font-mono">{op.lote}</td>
