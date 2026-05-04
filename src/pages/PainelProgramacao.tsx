@@ -673,34 +673,46 @@ export default function PainelProgramacao() {
   const handleExcluirDia = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
+
+    // 1. Apaga o registro_diario deste dia, se existir
     const { data: regsDia } = await (supabase as any)
       .from("registros_diarios")
       .select("id")
       .eq("ordem_id", ordemParaExcluir.id)
       .eq("data", data);
+
     if (regsDia && regsDia.length > 0) {
-      // Tem registro neste dia — apaga só o registro, mantém a OP
       const ids = regsDia.map((r: any) => r.id);
       console.log("[DELETE] tabela: registros_diarios | ids:", ids, "| data:", data);
       const { error } = await (supabase as any).from("registros_diarios").delete().in("id", ids);
       if (error) {
         toast({ title: "Erro ao excluir registro do dia", description: error.message, variant: "destructive" });
-      } else {
-        setRegistrosDoDia((prev) => { const n = { ...prev }; delete n[ordemParaExcluir.id]; return n; });
-        toast({ title: "Registro do dia excluído. A OP continua no histórico." });
-        await fetchOrdens(data);
-      }
-    } else {
-      // Sem registro neste dia — apaga a OP (não tem histórico para preservar)
-      console.log("[DELETE] sem registro, apagando tabela: ordens | id:", ordemParaExcluir.id);
-      const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
-      if (error) {
-        toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
-      } else {
-        setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
-        toast({ title: "Ordem excluída." });
+        setExcluindo(false);
+        setOrdemParaExcluir(null);
+        return;
       }
     }
+
+    // 2. Busca o registro mais recente de outros dias para reprogramar a OP
+    const { data: outrosDias } = await (supabase as any)
+      .from("registros_diarios")
+      .select("data")
+      .eq("ordem_id", ordemParaExcluir.id)
+      .neq("data", data)
+      .order("data", { ascending: false })
+      .limit(1);
+
+    const novaData = outrosDias && outrosDias.length > 0 ? outrosDias[0].data : null;
+
+    // 3. Move a data_programacao para o dia mais recente com registro (ou seta null)
+    //    para remover o card deste dia sem apagar a OP
+    console.log("[UPDATE] ordens.data_programacao →", novaData, "| id:", ordemParaExcluir.id);
+    await supabase.from("ordens").update({ data_programacao: novaData } as any).eq("id", ordemParaExcluir.id);
+
+    setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
+    setRegistrosDoDia((prev) => { const n = { ...prev }; delete n[ordemParaExcluir.id]; return n; });
+    toast({ title: "Registro do dia removido. Histórico anterior mantido." });
+
     setExcluindo(false);
     setOrdemParaExcluir(null);
   };
