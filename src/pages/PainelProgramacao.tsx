@@ -253,6 +253,7 @@ function SortableCard({
   onVerDetalhes,
   onLab,
   onToggleConfirmado,
+  onEditarRegistro,
 }: {
   ordem: Ordem;
   registro?: any;
@@ -260,6 +261,7 @@ function SortableCard({
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
+  onEditarRegistro: (ordem: Ordem, registro: any) => void;
   onVoltarFila: (ordem: Ordem) => void;
   onForcarConclusao: (ordem: Ordem) => void;
   onRegistrarDia: (ordem: Ordem) => void;
@@ -325,9 +327,20 @@ function SortableCard({
           const hf = registro?.hora_fim ? String(registro.hora_fim).slice(0, 5) : null;
           if (exibirKg == null && !(hi && hf)) return null;
           return (
-            <span className="inline-flex flex-col gap-0 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
-              {exibirKg != null && <span>{exibirKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
-              {hi && hf && <span>{hi}–{hf}</span>}
+            <span className="inline-flex items-center gap-0.5">
+              <span className="inline-flex flex-col gap-0 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
+                {exibirKg != null && <span>{exibirKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
+                {hi && hf && <span>{hi}–{hf}</span>}
+              </span>
+              {registro && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, registro); }}
+                  className="text-blue-400 hover:text-blue-600"
+                  title="Editar registro do dia"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
             </span>
           );
         })()}
@@ -422,6 +435,7 @@ function LinhaColumn({
   onVerDetalhes,
   onLab,
   onToggleConfirmado,
+  onEditarRegistro,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -436,6 +450,7 @@ function LinhaColumn({
   onVerDetalhes: (ordem: Ordem) => void;
   onLab: (ordem: Ordem) => void;
   onToggleConfirmado: (ordem: Ordem) => void;
+  onEditarRegistro: (ordem: Ordem, registro: any) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -462,7 +477,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} />
+              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} />
             ))
           )}
         </div>
@@ -517,6 +532,12 @@ export default function PainelProgramacao() {
   const [regProdItems, setRegProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [registrando, setRegistrando] = useState(false);
   const [ordemLab, setOrdemLab] = useState<Ordem | null>(null);
+  const [editRegOrdem, setEditRegOrdem] = useState<Ordem | null>(null);
+  const [editRegRegistro, setEditRegRegistro] = useState<any>(null);
+  const [editRegHoraInicio, setEditRegHoraInicio] = useState("");
+  const [editRegHoraFim, setEditRegHoraFim] = useState("");
+  const [editRegItems, setEditRegItems] = useState<{ qty: string; peso: string }[]>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [editandoRegistro, setEditandoRegistro] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -537,7 +558,7 @@ export default function PainelProgramacao() {
         .order("posicao", { ascending: true, nullsFirst: false }),
       (supabase as any)
         .from("registros_diarios")
-        .select("ordem_id, registro_producao, hora_inicio, hora_fim")
+        .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
         .eq("data", dataSel),
     ]);
 
@@ -863,6 +884,42 @@ export default function PainelProgramacao() {
     }
   };
 
+  const handleEditarRegistro = (ordem: Ordem, registro: any) => {
+    setEditRegOrdem(ordem);
+    setEditRegRegistro(registro);
+    setEditRegHoraInicio(registro.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : "");
+    setEditRegHoraFim(registro.hora_fim ? String(registro.hora_fim).slice(0, 5) : "");
+    const existingItems: any[] = Array.isArray(registro.registro_producao) ? registro.registro_producao : [];
+    setEditRegItems(
+      existingItems.length > 0
+        ? existingItems.map((it: any) => ({ qty: String(it.qty ?? ""), peso: String(it.peso ?? "").replace(".", ",") }))
+        : [{ qty: "", peso: "" }, { qty: "", peso: "" }]
+    );
+  };
+
+  const handleSalvarEditarRegistro = async () => {
+    if (!editRegOrdem || !editRegRegistro) return;
+    setEditandoRegistro(true);
+    const filledItems = editRegItems.filter((r) => r.qty.trim() || r.peso.trim());
+    const { error } = await (supabase as any).from("registros_diarios").update({
+      hora_inicio: editRegHoraInicio || null,
+      hora_fim: editRegHoraFim || null,
+      registro_producao: filledItems.map((r) => ({
+        qty: parseInt(r.qty) || 0,
+        peso: parseFloat(r.peso.replace(",", ".")) || 0,
+      })),
+    }).eq("id", editRegRegistro.id);
+    setEditandoRegistro(false);
+    if (error) {
+      toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
+      return;
+    }
+    await fetchOrdens(data);
+    toast({ title: "Registro atualizado" });
+    setEditRegOrdem(null);
+    setEditRegRegistro(null);
+  };
+
   const ordensParaLinha = useCallback((l: number) => sortOrdens(ordens.filter((o) => o.linha === l)), [ordens]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -945,6 +1002,7 @@ export default function PainelProgramacao() {
                 onVerDetalhes={setOrdemDetalhe}
                 onLab={setOrdemLab}
                 onToggleConfirmado={handleToggleConfirmado}
+                onEditarRegistro={handleEditarRegistro}
               />
             ))}
           </div>
@@ -1158,6 +1216,101 @@ export default function PainelProgramacao() {
               Cancelar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editRegOrdem}
+        onOpenChange={(open) => {
+          if (!open) { setEditRegOrdem(null); setEditRegRegistro(null); }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar Registro do Dia</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{editRegOrdem?.produto}</span>
+              {editRegRegistro?.data && (
+                <span className="text-muted-foreground"> — {format(new Date(editRegRegistro.data + "T12:00:00"), "dd/MM/yyyy")}</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={editRegHoraInicio}
+                  onChange={(e) => setEditRegHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={editRegHoraFim}
+                  onChange={(e) => setEditRegHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Registro de Produção</label>
+              {editRegItems.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.qty}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setEditRegItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
+                    }}
+                    placeholder="0"
+                    className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.peso}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9,]/g, "");
+                      setEditRegItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
+                    }}
+                    placeholder="0,000 kg"
+                    className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  {editRegItems.length > 1 && (
+                    <button
+                      onClick={() => setEditRegItems((prev) => prev.filter((_, j) => j !== i))}
+                      className="text-muted-foreground/50 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => setEditRegItems((prev) => [...prev, { qty: "", peso: "" }])}
+                className="text-xs text-blue-600 hover:underline mt-1"
+              >
+                + Adicionar linha
+              </button>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditRegOrdem(null)} disabled={editandoRegistro}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSalvarEditarRegistro} disabled={editandoRegistro} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {editandoRegistro && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <CalendarCheck2 className="mr-1.5 h-4 w-4" />
+              Salvar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
