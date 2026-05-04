@@ -334,10 +334,14 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   };
 
   const excluirRegistro = async (id: string) => {
+    if (!window.confirm("Deseja excluir este registro do dia?")) return;
     console.log("[DELETE] tabela: registros_diarios | id:", id);
     const { error } = await (supabase as any).from("registros_diarios").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir registro", description: error.message, variant: "destructive" });
-    else await fetchRegistros();
+    else {
+      await fetchRegistros();
+      await fetchOrdens();
+    }
   };
 
   if (loading) {
