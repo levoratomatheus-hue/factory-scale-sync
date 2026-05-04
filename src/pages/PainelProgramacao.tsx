@@ -284,9 +284,8 @@ function SortableCard({
       className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
-        if (ordem.status === "em_linha" || ordem.status === "aguardando_linha") onVerDetalhes(ordem);
+        onDblClick(ordem);
       }}
-      onDoubleClick={() => onDblClick(ordem)}
     >
       {/* Grip */}
       <button
