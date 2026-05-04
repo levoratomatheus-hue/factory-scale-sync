@@ -679,6 +679,7 @@ export default function PainelProgramacao() {
       .eq("ordem_id", ordemParaExcluir.id)
       .eq("data", data);
     if (regsDia && regsDia.length > 0) {
+      // Tem registro neste dia — apaga só o registro, mantém a OP
       const ids = regsDia.map((r: any) => r.id);
       console.log("[DELETE] tabela: registros_diarios | ids:", ids, "| data:", data);
       const { error } = await (supabase as any).from("registros_diarios").delete().in("id", ids);
@@ -690,7 +691,15 @@ export default function PainelProgramacao() {
         await fetchOrdens(data);
       }
     } else {
-      toast({ title: "Nenhum registro encontrado para este dia", variant: "destructive" });
+      // Sem registro neste dia — apaga a OP (não tem histórico para preservar)
+      console.log("[DELETE] sem registro, apagando tabela: ordens | id:", ordemParaExcluir.id);
+      const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
+      if (error) {
+        toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
+      } else {
+        setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
+        toast({ title: "Ordem excluída." });
+      }
     }
     setExcluindo(false);
     setOrdemParaExcluir(null);
