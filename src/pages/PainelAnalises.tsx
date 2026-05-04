@@ -368,7 +368,7 @@ export default function PainelAnalises() {
     return hMap;
   }, [registrosDiariosAnuaisRaw, paradasAnuaisIdx]);
 
-  const dadosMensais = useMemo(() => {
+  const { dadosMensais, dadosProdutividadeMensal } = useMemo(() => {
     const meses = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(hoje.getFullYear(), hoje.getMonth() - 11 + i, 1);
       return {
@@ -381,43 +381,28 @@ export default function PainelAnalises() {
       if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return false;
       return true;
     });
-    const mapa: Record<string, number> = {};
+    // Iteração única sobre registros anuais
+    const mapaKg: Record<string, number> = {};
+    const mapaProd: Record<string, { kg: number; h: number }> = {};
     regsAnuaisFiltrados.forEach((r: any) => {
       const chave = String(r.data).slice(0, 7);
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-      mapa[chave] = (mapa[chave] || 0) + kgDia;
+      mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
+      const h = parseHoras(r.hora_inicio, r.hora_fim);
+      if (h !== null) {
+        if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
+        mapaProd[chave].kg += kgDia;
+        mapaProd[chave].h += h;
+      }
     });
-    return meses.map(({ key, label }) => ({ mes: label, kg: Math.round(mapa[key] || 0) }));
-  }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
-
-  const dadosProdutividadeMensal = useMemo(() => {
-    const meses = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() - 11 + i, 1);
-      return {
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-        label: format(d, "MMM/yy", { locale: ptBR }),
-      };
-    });
-    const regsAnuaisFiltrados = registrosDiariosAnuaisRaw.filter((r: any) => {
-      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return false;
-      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return false;
-      return true;
-    });
-    return meses.map(({ key, label }) => {
-      const regsDoMes = regsAnuaisFiltrados.filter((r: any) => String(r.data).slice(0, 7) === key);
-      let totalKg = 0, totalH = 0;
-      regsDoMes.forEach((r: any) => {
-        const h = parseHoras(r.hora_inicio, r.hora_fim);
-        if (h !== null) {
-          const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-          totalKg += items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-          totalH += h;
-        }
-      });
-      const kgH = totalH > 0 ? parseFloat((totalKg / totalH).toFixed(1)) : null;
+    const dadosMensais = meses.map(({ key, label }) => ({ mes: label, kg: Math.round(mapaKg[key] || 0) }));
+    const dadosProdutividadeMensal = meses.map(({ key, label }) => {
+      const m = mapaProd[key];
+      const kgH = m && m.h > 0 ? parseFloat((m.kg / m.h).toFixed(1)) : null;
       return { mes: label, kgH };
     });
+    return { dadosMensais, dadosProdutividadeMensal };
   }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {

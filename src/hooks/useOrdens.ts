@@ -29,7 +29,7 @@ export function useOrdens(date?: string) {
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(), 300);
+        debounceTimer = setTimeout(() => fetchOrdens(), 600);
       })
       .subscribe();
     return () => {
@@ -126,7 +126,7 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
       .channel(`historico-realtime-${dataInicio ?? "all"}-${dataFim ?? ""}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchHistorico(), 300);
+        debounceTimer = setTimeout(() => fetchHistorico(), 600);
       })
       .subscribe();
     return () => {
@@ -172,7 +172,7 @@ export function useParadasLinha(linha: number, data: string) {
     setLoading(true);
     const { data: rows, error } = await supabase
       .from("paradas")
-      .select("*")
+      .select("id, linha, data, motivo, hora_inicio, hora_fim")
       .eq("linha", linha)
       .eq("data", data)
       .order("hora_inicio", { ascending: true });
@@ -221,7 +221,7 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
     if (!ordemId) { setRegistros([]); return; }
     const { data } = await (supabase as any)
       .from("registros_diarios")
-      .select("*")
+      .select("id, ordem_id, data, hora_inicio, hora_fim, registro_producao")
       .eq("ordem_id", ordemId)
       .order("data", { ascending: true });
     setRegistros(data ?? []);

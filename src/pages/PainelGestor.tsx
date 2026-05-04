@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -88,23 +88,13 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
   const emAberto = ordens.filter((o) => o.status === "pendente").length;
 
-  const [opsComEmissao, setOpsComEmissao] = useState<any[]>([]);
-
-  useEffect(() => {
-    const fetchOpsComEmissao = async () => {
-      const { data } = await supabase
-        .from('ordens')
-        .select('id, produto, lote, data_emissao, data_programacao, linha, status')
-        .not('data_emissao', 'is', null)
-        .not('status', 'in', '("concluido","aguardando_liberacao")')
-        .limit(500);
-      setOpsComEmissao(data ?? []);
-    };
-    fetchOpsComEmissao();
-  }, []);
-
-  const opsAtrasadas = opsComEmissao.filter(op =>
-    diasUteis(op.data_emissao, op.data_programacao) > 7
+  const opsAtrasadas = useMemo(() =>
+    todasPendentes.filter(op =>
+      op.data_emissao &&
+      op.status !== "aguardando_liberacao" &&
+      diasUteis(op.data_emissao, op.data_programacao) > 7
+    ),
+    [todasPendentes]
   );
 
   const [lotesSeOP, setLotesSeOP] = useState<LoteSemOP[]>([]);

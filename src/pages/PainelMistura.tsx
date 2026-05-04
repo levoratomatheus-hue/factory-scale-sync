@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
@@ -76,24 +76,31 @@ export default function PainelMistura() {
     return () => { cancelled = true; };
   }, [emMistura?.id]);
 
-  const fetchOrdens = async () => {
+  const fetchOrdens = useCallback(async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("*")
+      .select("id, produto, lote, quantidade, status, posicao, linha, formula_id, tamanho_batelada, obs, marca, requer_mistura, balanca")
       .in("status", ["aguardando_mistura", "em_mistura"])
       .order("posicao", { ascending: true, nullsFirst: false });
     if (data) setOrdens(data);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchOrdens();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel("mistura-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetchOrdens)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchOrdens(), 600);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [fetchOrdens]);
 
   const iniciarMistura = async (ordem: any) => {
     const { error } = await supabase.from("ordens").update({ status: "em_mistura" }).eq("id", ordem.id);

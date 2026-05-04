@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormula } from "@/hooks/useFormula";
 import { useParadasLinha, useRegistrosDiariosOrdem } from "@/hooks/useOrdens";
@@ -91,10 +91,10 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     setObsLinha("");
   }, [emLinha?.id]);
 
-  const fetchOrdens = async () => {
+  const fetchOrdens = useCallback(async () => {
     const { data: allData } = await supabase
       .from("ordens")
-      .select("*")
+      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim")
       .eq("linha", linha)
       .in("status", ["em_linha", "aguardando_linha"])
       .order("data_programacao", { ascending: true })
@@ -103,9 +103,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     const emLinhaData = (allData ?? []).filter((o: any) => o.status === "em_linha");
     const aguardandoData = (allData ?? []).filter((o: any) => o.status === "aguardando_linha");
 
-    // Busca registros de hoje para: filtrar em_linha e calcular kg da fila
     const allIds = (allData ?? []).map((o: any) => o.id);
-
     const hasRegHoje = new Set<string>();
     const kgMap: Record<string, number> = {};
 
@@ -124,8 +122,6 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       });
     }
 
-    // Exibe OP em_linha apenas se: hora_inicio definida (sendo trabalhada agora)
-    // OU ainda não tem registro de hoje (não foi salva hoje ainda)
     const emLinhaFiltradas = (emLinhaData ?? []).filter(
       (o: any) => o.hora_inicio !== null || !hasRegHoje.has(o.id)
     );
@@ -139,16 +135,23 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     setOrdens(ordenadas);
     setKgHoje(kgMap);
     setLoading(false);
-  };
+  }, [linha]);
 
   useEffect(() => {
     fetchOrdens();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`linha-${linha}-realtime`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, fetchOrdens)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchOrdens(), 600);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [linha]);
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [fetchOrdens]);
 
   const iniciarOrdem = async (ordem: any) => {
     const { error } = await supabase
