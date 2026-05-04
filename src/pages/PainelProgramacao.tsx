@@ -544,8 +544,8 @@ export default function PainelProgramacao() {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
-  const fetchOrdens = async (dataSel: string) => {
-    setLoading(true);
+  const fetchOrdens = async (dataSel: string, showLoading = true) => {
+    if (showLoading) setLoading(true);
     const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em";
 
     // Busca em paralelo: OPs programadas para a data + registros do dia
@@ -594,7 +594,7 @@ export default function PainelProgramacao() {
       .channel('programacao-ordens')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(data), 500);
+        debounceTimer = setTimeout(() => fetchOrdens(data, false), 500);
       })
       .subscribe();
     return () => {
@@ -831,7 +831,7 @@ export default function PainelProgramacao() {
       toast({ title: "Erro ao editar ordem", description: error.message, variant: "destructive" });
       return;
     }
-    await fetchOrdens(data);
+    await fetchOrdens(data, false);
     toast({ title: "Ordem atualizada com sucesso" });
   };
 
@@ -880,7 +880,7 @@ export default function PainelProgramacao() {
       // Navega para a data salva para confirmar o registro visualmente
       setData(dataRegistro);
     } else {
-      fetchOrdens(data);
+      fetchOrdens(data, false);
     }
   };
 
@@ -914,7 +914,7 @@ export default function PainelProgramacao() {
       toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
       return;
     }
-    await fetchOrdens(data);
+    await fetchOrdens(data, false);
     toast({ title: "Registro atualizado" });
     setEditRegOrdem(null);
     setEditRegRegistro(null);
