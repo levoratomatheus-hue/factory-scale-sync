@@ -58,6 +58,22 @@ function subDias(dataStr: string, n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function somarDiasUteis(dataStr: string, n: number): string {
+  const d = new Date(dataStr + 'T12:00:00');
+  let feriados = feriadosDoAno(d.getFullYear());
+  let cacheAno = d.getFullYear();
+  let count = 0;
+  while (count < n) {
+    d.setDate(d.getDate() + 1);
+    const ano = d.getFullYear();
+    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
+    const day = d.getDay();
+    const fmt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (day !== 0 && day !== 6 && !feriados.has(fmt)) count++;
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ── Tipos e helpers ───────────────────────────────────────────────────────────
 
 const STATUS_VISIVEIS = [
@@ -72,6 +88,7 @@ interface OrdemComercial {
   quantidade: number;
   status: string;
   data_programacao: string;
+  data_emissao: string | null;
   formula_id: string | null;
   programacao_confirmada: boolean | null;
 }
@@ -113,7 +130,7 @@ export default function PainelComercial() {
         if (modoTexto) {
           const { data, error } = await supabase
             .from('ordens')
-            .select('id, produto, lote, quantidade, status, data_programacao, formula_id, programacao_confirmada')
+            .select('id, produto, lote, quantidade, status, data_programacao, data_emissao, formula_id, programacao_confirmada')
             .in('status', STATUS_VISIVEIS)
             .or(`produto.ilike.%${term}%,lote.ilike.%${term}%`)
             .order('data_programacao', { ascending: false })
@@ -122,21 +139,40 @@ export default function PainelComercial() {
           if (error) throw new Error(error.message);
           rows = deduplicar((data as OrdemComercial[]) ?? []);
         } else {
-          // Busca num range de 10 dias antes da data selecionada e filtra
-          // client-side: disponibilidade = proximoDiaUtil(data_programacao) === dataSelecionada
-          const dataMin = subDias(dataSelecionada, 10);
-          const { data, error } = await supabase
-            .from('ordens')
-            .select('id, produto, lote, quantidade, status, data_programacao, formula_id, programacao_confirmada')
-            .in('status', STATUS_VISIVEIS)
-            .gte('data_programacao', dataMin)
-            .lt('data_programacao', dataSelecionada)
-            .order('produto', { ascending: true })
-            .limit(500);
+          // Busca confirmadas por data_programacao + não confirmadas por data_emissao em paralelo
+          const dataMinProg = subDias(dataSelecionada, 10);
+          const dataMinEmissao = subDias(dataSelecionada, 14);
 
-          if (error) throw new Error(error.message);
-          const todas = (data as OrdemComercial[]) ?? [];
-          rows = deduplicar(todas.filter(op => proximoDiaUtil(op.data_programacao) === dataSelecionada));
+          const [{ data: dataProg, error: errProg }, { data: dataEmissao, error: errEmissao }] = await Promise.all([
+            supabase
+              .from('ordens')
+              .select('id, produto, lote, quantidade, status, data_programacao, data_emissao, formula_id, programacao_confirmada')
+              .in('status', STATUS_VISIVEIS)
+              .eq('programacao_confirmada', true)
+              .gte('data_programacao', dataMinProg)
+              .lt('data_programacao', dataSelecionada)
+              .order('produto', { ascending: true })
+              .limit(500),
+            supabase
+              .from('ordens')
+              .select('id, produto, lote, quantidade, status, data_programacao, data_emissao, formula_id, programacao_confirmada')
+              .in('status', STATUS_VISIVEIS)
+              .neq('programacao_confirmada', true)
+              .gte('data_emissao', dataMinEmissao)
+              .lte('data_emissao', dataSelecionada)
+              .order('produto', { ascending: true })
+              .limit(500),
+          ]);
+
+          if (errProg) throw new Error(errProg.message);
+          if (errEmissao) throw new Error(errEmissao.message);
+
+          const confirmadas = ((dataProg as OrdemComercial[]) ?? [])
+            .filter(op => proximoDiaUtil(op.data_programacao) === dataSelecionada);
+          const naoConfirmadas = ((dataEmissao as OrdemComercial[]) ?? [])
+            .filter(op => op.data_emissao && somarDiasUteis(op.data_emissao, 7) === dataSelecionada);
+
+          rows = deduplicar([...confirmadas, ...naoConfirmadas]);
         }
 
         if (!cancelled) setOrdens(rows);
@@ -250,14 +286,16 @@ export default function PainelComercial() {
           {ordens.map((ordem) => {
             const hj = hoje();
             const confirmada = ordem.programacao_confirmada === true;
-            const disp = proximoDiaUtil(ordem.data_programacao);
+            const disp = confirmada
+              ? proximoDiaUtil(ordem.data_programacao)
+              : (ordem.data_emissao ? somarDiasUteis(ordem.data_emissao, 7) : proximoDiaUtil(ordem.data_programacao));
             let textoData = '—';
             if (disp) {
               try {
                 const dispFormatted = format(new Date(disp + 'T12:00:00'), 'dd/MM/yyyy');
                 if (disp < hj) textoData = `Disponível desde ${dispFormatted}`;
-                else if (disp === hj) textoData = 'Disponível a partir de hoje';
-                else textoData = `Disponível a partir de ${dispFormatted}`;
+                else if (disp === hj) textoData = confirmada ? 'Disponível a partir de hoje' : 'Disponível a partir de hoje (estimado)';
+                else textoData = confirmada ? `Disponível a partir de ${dispFormatted}` : `Disponível a partir de ${dispFormatted} (estimado)`;
               } catch { /* data inválida */ }
             }
             const jaDisponivel = ordem.status === 'concluido' && disp !== null && disp <= hj;
