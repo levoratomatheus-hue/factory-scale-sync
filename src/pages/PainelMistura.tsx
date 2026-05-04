@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, sortOrdens } from "@/lib/utils";
@@ -121,10 +120,9 @@ export default function PainelMistura() {
       toast({ title: "Linha de destino não definida", description: "Edite a ordem e defina a linha antes de concluir.", variant: "destructive" });
       return;
     }
-    const hoje = format(new Date(), 'yyyy-MM-dd');
     const { error } = await supabase
       .from("ordens")
-      .update({ status: "aguardando_linha", linha: ordem.linha, data_programacao: hoje })
+      .update({ status: "aguardando_linha", linha: ordem.linha })
       .eq("id", ordem.id);
     if (error) {
       toast({ title: "Erro ao concluir mistura", description: error.message, variant: "destructive" });
