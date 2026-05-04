@@ -670,46 +670,44 @@ export default function PainelProgramacao() {
     toast({ title: `Ordem movida para Linha ${novaLinha}` });
   };
 
-  const handleExcluir = async () => {
+  const handleExcluirDia = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
-
-    // Verifica se há registros_diarios para a data visualizada
     const { data: regsDia } = await (supabase as any)
       .from("registros_diarios")
       .select("id")
       .eq("ordem_id", ordemParaExcluir.id)
       .eq("data", data);
-
     if (regsDia && regsDia.length > 0) {
-      // Existem registros deste dia — apaga só eles, nunca a OP inteira
-      console.log("[DELETE] tabela: registros_diarios | ids:", regsDia.map((r: any) => r.id), "| ordem:", ordemParaExcluir.id, "| data:", data);
       const ids = regsDia.map((r: any) => r.id);
-      const { error } = await (supabase as any)
-        .from("registros_diarios")
-        .delete()
-        .in("id", ids);
-      setExcluindo(false);
-      setOrdemParaExcluir(null);
+      console.log("[DELETE] tabela: registros_diarios | ids:", ids, "| data:", data);
+      const { error } = await (supabase as any).from("registros_diarios").delete().in("id", ids);
       if (error) {
         toast({ title: "Erro ao excluir registro do dia", description: error.message, variant: "destructive" });
       } else {
         setRegistrosDoDia((prev) => { const n = { ...prev }; delete n[ordemParaExcluir.id]; return n; });
-        toast({ title: "Registro do dia excluído" });
+        toast({ title: "Registro do dia excluído. A OP continua no histórico." });
         await fetchOrdens(data);
       }
     } else {
-      // Nenhum registro para este dia — pode apagar a OP inteira
-      console.log("[DELETE] tabela: ordens | id:", ordemParaExcluir.id);
-      const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
-      setExcluindo(false);
-      setOrdemParaExcluir(null);
-      if (error) {
-        toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
-      } else {
-        setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
-        toast({ title: "Ordem excluída com sucesso!" });
-      }
+      toast({ title: "Nenhum registro encontrado para este dia", variant: "destructive" });
+    }
+    setExcluindo(false);
+    setOrdemParaExcluir(null);
+  };
+
+  const handleExcluirOP = async () => {
+    if (!ordemParaExcluir) return;
+    setExcluindo(true);
+    console.log("[DELETE] tabela: ordens | id:", ordemParaExcluir.id);
+    const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
+    setExcluindo(false);
+    setOrdemParaExcluir(null);
+    if (error) {
+      toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
+    } else {
+      setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
+      toast({ title: "Ordem excluída com sucesso!" });
     }
   };
 
@@ -1111,28 +1109,35 @@ export default function PainelProgramacao() {
       <Dialog open={!!ordemParaExcluir} onOpenChange={(open) => !open && setOrdemParaExcluir(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>
-              {ordemParaExcluir && registrosDoDia[ordemParaExcluir.id]
-                ? "Excluir registro do dia?"
-                : "Excluir ordem de produção?"}
-            </DialogTitle>
+            <DialogTitle>O que deseja excluir?</DialogTitle>
             <DialogDescription>
               <span className="font-medium text-foreground">{ordemParaExcluir?.produto}</span>
-              <br />
-              {ordemParaExcluir && registrosDoDia[ordemParaExcluir.id]
-                ? "Apenas o registro de produção deste dia será removido. A OP e o histórico dos outros dias são mantidos."
-                : "A ordem inteira será excluída permanentemente. Esta ação não pode ser desfeita."}
+              {ordemParaExcluir?.lote && <span className="text-muted-foreground"> — Lote {ordemParaExcluir.lote}</span>}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOrdemParaExcluir(null)} disabled={excluindo}>
+          <div className="flex flex-col gap-2 px-1 pb-2">
+            <Button
+              variant="outline"
+              className="justify-start border-orange-300 text-orange-700 hover:bg-orange-50"
+              onClick={handleExcluirDia}
+              disabled={excluindo}
+            >
+              {excluindo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Excluir só o registro de {format(new Date(data + "T12:00:00"), "dd/MM", { locale: ptBR })}
+            </Button>
+            <Button
+              variant="destructive"
+              className="justify-start"
+              onClick={handleExcluirOP}
+              disabled={excluindo}
+            >
+              {excluindo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Excluir a OP inteira (todo o histórico)
+            </Button>
+            <Button variant="ghost" onClick={() => setOrdemParaExcluir(null)} disabled={excluindo} className="mt-1">
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleExcluir} disabled={excluindo}>
-              {excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Excluir
-            </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
