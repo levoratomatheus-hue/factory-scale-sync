@@ -673,14 +673,43 @@ export default function PainelProgramacao() {
   const handleExcluir = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
-    const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
-    setExcluindo(false);
-    setOrdemParaExcluir(null);
-    if (error) {
-      toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
+
+    // Verifica se há registros_diarios para a data visualizada
+    const { data: regsDia } = await (supabase as any)
+      .from("registros_diarios")
+      .select("id")
+      .eq("ordem_id", ordemParaExcluir.id)
+      .eq("data", data);
+
+    if (regsDia && regsDia.length > 0) {
+      // Existem registros deste dia — apaga só eles, nunca a OP inteira
+      console.log("[DELETE] tabela: registros_diarios | ids:", regsDia.map((r: any) => r.id), "| ordem:", ordemParaExcluir.id, "| data:", data);
+      const ids = regsDia.map((r: any) => r.id);
+      const { error } = await (supabase as any)
+        .from("registros_diarios")
+        .delete()
+        .in("id", ids);
+      setExcluindo(false);
+      setOrdemParaExcluir(null);
+      if (error) {
+        toast({ title: "Erro ao excluir registro do dia", description: error.message, variant: "destructive" });
+      } else {
+        setRegistrosDoDia((prev) => { const n = { ...prev }; delete n[ordemParaExcluir.id]; return n; });
+        toast({ title: "Registro do dia excluído" });
+        await fetchOrdens(data);
+      }
     } else {
-      setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
-      toast({ title: "Ordem excluída com sucesso!" });
+      // Nenhum registro para este dia — pode apagar a OP inteira
+      console.log("[DELETE] tabela: ordens | id:", ordemParaExcluir.id);
+      const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
+      setExcluindo(false);
+      setOrdemParaExcluir(null);
+      if (error) {
+        toast({ title: "Erro ao excluir ordem", description: error.message, variant: "destructive" });
+      } else {
+        setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
+        toast({ title: "Ordem excluída com sucesso!" });
+      }
     }
   };
 
@@ -1082,11 +1111,17 @@ export default function PainelProgramacao() {
       <Dialog open={!!ordemParaExcluir} onOpenChange={(open) => !open && setOrdemParaExcluir(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Excluir ordem de produção?</DialogTitle>
+            <DialogTitle>
+              {ordemParaExcluir && registrosDoDia[ordemParaExcluir.id]
+                ? "Excluir registro do dia?"
+                : "Excluir ordem de produção?"}
+            </DialogTitle>
             <DialogDescription>
               <span className="font-medium text-foreground">{ordemParaExcluir?.produto}</span>
               <br />
-              Esta ação não pode ser desfeita.
+              {ordemParaExcluir && registrosDoDia[ordemParaExcluir.id]
+                ? "Apenas o registro de produção deste dia será removido. A OP e o histórico dos outros dias são mantidos."
+                : "A ordem inteira será excluída permanentemente. Esta ação não pode ser desfeita."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
