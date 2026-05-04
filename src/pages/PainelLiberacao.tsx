@@ -201,6 +201,7 @@ export default function PainelLiberacao() {
   const handleDeleteRegistro = async () => {
     if (!deleteRegistro) return;
     setDeletandoRegistro(true);
+    console.log("[DELETE] tabela: registros_diarios | id:", deleteRegistro.id);
     const { error } = await (supabase as any)
       .from("registros_diarios")
       .delete()

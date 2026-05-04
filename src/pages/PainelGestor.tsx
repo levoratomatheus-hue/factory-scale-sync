@@ -1,19 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
-import { MetricCard } from "@/components/MetricCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
-  ClipboardList,
-  CheckCircle2,
   Loader2,
-  Clock,
   CalendarIcon,
-  TrendingUp,
   PlusCircle,
   PackageSearch,
   AlertTriangle,
   CalendarPlus,
   CalendarClock,
+  ListOrdered,
 } from "lucide-react";
 import { format, isToday, isPast, isFuture } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -55,6 +51,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       .select("id, produto, lote, quantidade, status, posicao, linha, balanca, marca, data_programacao, data_emissao")
       .neq("status", "concluido")
       .limit(500)
+      .order("data_programacao", { ascending: true })
       .order("posicao", { ascending: true, nullsFirst: false });
     setTodasPendentes(data ?? []);
   }, []);
@@ -89,11 +86,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const isPassado = isPast(selectedDate) && !isHoje;
   const isFuturo = isFuture(selectedDate);
 
-  const total = ordens.length;
-  const concluidas = ordens.filter((o) => o.status === "concluido").length;
-  const emPesagem = ordens.filter((o) => o.status === "em_pesagem").length;
   const emAberto = ordens.filter((o) => o.status === "pendente").length;
-  const taxaConclusao = total > 0 ? Math.round((concluidas / total) * 100) : 0;
 
   const [opsComEmissao, setOpsComEmissao] = useState<any[]>([]);
 
@@ -185,95 +178,6 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           </PopoverContent>
         </Popover>
       </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          title="Total programado"
-          value={total}
-          variant="default"
-          icon={<ClipboardList className="h-4 w-4" />}
-        />
-        <MetricCard title="Concluídas" value={concluidas} variant="done" icon={<CheckCircle2 className="h-4 w-4" />} />
-        {isHoje && (
-          <MetricCard title="Em Pesagem" value={emPesagem} variant="weighing" icon={<Loader2 className="h-4 w-4" />} />
-        )}
-        {isPassado && (
-          <MetricCard
-            title="Taxa de conclusão"
-            value={`${taxaConclusao}%`}
-            variant="weighing"
-            icon={<TrendingUp className="h-4 w-4" />}
-          />
-        )}
-        {isFuturo && (
-          <MetricCard title="Previstas" value={total} variant="weighing" icon={<TrendingUp className="h-4 w-4" />} />
-        )}
-        <MetricCard
-          title={isPassado ? "Não concluídas" : "Pendentes"}
-          value={emAberto}
-          variant="open"
-          icon={<Clock className="h-4 w-4" />}
-        />
-      </div>
-
-      {/* Lotes sem OP */}
-      {(loadingLotesSemOP || lotesSeOP.length > 0) && (
-        <div className="bg-card rounded-lg border overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
-            <div className="flex items-center gap-2">
-              <PackageSearch className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold text-sm">Lotes Pendentes de Programação</h3>
-            </div>
-            {!loadingLotesSemOP && (
-              <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5">
-                {lotesSeOP.length} lote{lotesSeOP.length !== 1 ? 's' : ''} sem OP
-              </span>
-            )}
-          </div>
-
-          {loadingLotesSemOP ? (
-            <div className="flex items-center justify-center p-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground border-b">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium">Lote</th>
-                    <th className="text-left px-4 py-2 font-medium">Produto</th>
-                    <th className="text-right px-4 py-2 font-medium">Qtd (kg)</th>
-                    <th className="text-left px-4 py-2 font-medium">Classe</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {lotesSeOP.map((l) => (
-                    <tr key={l.lote} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-2 font-mono font-medium">{l.lote}</td>
-                      <td className="px-4 py-2 max-w-xs truncate">{l.produto}</td>
-                      <td className="px-4 py-2 text-right">{l.quantidade.toLocaleString('pt-BR')}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{l.classe || '—'}</td>
-                      <td className="px-4 py-2 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 h-7 text-xs"
-                          onClick={() => onCriarOP?.(l.lote)}
-                        >
-                          <PlusCircle className="h-3.5 w-3.5" />
-                          Criar OP
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Pendentes de dias anteriores */}
       {pendentesAnteriores.length > 0 && (
@@ -380,6 +284,64 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
         </div>
       )}
 
+      {/* Lotes sem OP */}
+      {(loadingLotesSemOP || lotesSeOP.length > 0) && (
+        <div className="bg-card rounded-lg border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+            <div className="flex items-center gap-2">
+              <PackageSearch className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-sm">Lotes Pendentes de Programação</h3>
+            </div>
+            {!loadingLotesSemOP && (
+              <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5">
+                {lotesSeOP.length} lote{lotesSeOP.length !== 1 ? 's' : ''} sem OP
+              </span>
+            )}
+          </div>
+
+          {loadingLotesSemOP ? (
+            <div className="flex items-center justify-center p-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground border-b">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium">Lote</th>
+                    <th className="text-left px-4 py-2 font-medium">Produto</th>
+                    <th className="text-right px-4 py-2 font-medium">Qtd (kg)</th>
+                    <th className="text-left px-4 py-2 font-medium">Classe</th>
+                    <th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotesSeOP.map((l) => (
+                    <tr key={l.lote} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2 font-mono font-medium">{l.lote}</td>
+                      <td className="px-4 py-2 max-w-xs truncate">{l.produto}</td>
+                      <td className="px-4 py-2 text-right">{l.quantidade.toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{l.classe || '—'}</td>
+                      <td className="px-4 py-2 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 h-7 text-xs"
+                          onClick={() => onCriarOP?.(l.lote)}
+                        >
+                          <PlusCircle className="h-3.5 w-3.5" />
+                          Criar OP
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Aviso pendências */}
       {isPassado && emAberto > 0 && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-3 text-sm text-destructive font-medium">
@@ -387,6 +349,55 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           dia e ainda pode estar na fila das balanças.
         </div>
       )}
+
+      {/* Ordens Programadas */}
+      <div className="bg-card rounded-lg border overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+          <div className="flex items-center gap-2">
+            <ListOrdered className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm">Ordens Programadas</h3>
+          </div>
+          <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5">
+            {todasPendentes.length} OP{todasPendentes.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        {todasPendentes.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">Nenhuma ordem pendente.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground border-b">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Produto</th>
+                  <th className="text-left px-4 py-2 font-medium">Lote</th>
+                  <th className="text-right px-4 py-2 font-medium">Qtd (kg)</th>
+                  <th className="text-left px-4 py-2 font-medium">Linha</th>
+                  <th className="text-left px-4 py-2 font-medium">Balança</th>
+                  <th className="text-left px-4 py-2 font-medium">Status</th>
+                  <th className="text-left px-4 py-2 font-medium">Data Prog.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todasPendentes.map((op) => (
+                  <tr key={op.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2 max-w-xs truncate">{op.produto}</td>
+                    <td className="px-4 py-2 font-mono">{op.lote}</td>
+                    <td className="px-4 py-2 text-right">{op.quantidade?.toLocaleString("pt-BR") ?? "—"}</td>
+                    <td className="px-4 py-2">{op.linha ?? "—"}</td>
+                    <td className="px-4 py-2">{op.balanca ?? "—"}</td>
+                    <td className="px-4 py-2"><StatusBadge status={op.status} /></td>
+                    <td className="px-4 py-2 font-mono text-muted-foreground">
+                      {op.data_programacao
+                        ? format(new Date(op.data_programacao + "T12:00:00"), "dd/MM/yyyy")
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
     </div>
   );

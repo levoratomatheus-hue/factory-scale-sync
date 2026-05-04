@@ -334,6 +334,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   };
 
   const excluirRegistro = async (id: string) => {
+    console.log("[DELETE] tabela: registros_diarios | id:", id);
     const { error } = await (supabase as any).from("registros_diarios").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir registro", description: error.message, variant: "destructive" });
     else await fetchRegistros();
