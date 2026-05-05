@@ -228,215 +228,99 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     <div className="max-w-full space-y-6">
       <h1 className="text-2xl font-bold">Criar Nova Ordem</h1>
 
-      <div className="flex gap-6 items-start">
+      <div className="flex gap-4 items-start">
         {/* ── Coluna esquerda: formulário ── */}
-        <div className="flex-1 min-w-0 bg-card rounded-lg border p-6">
+        <div className="flex-1 min-w-0 bg-card rounded-lg border p-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="lote" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Lote</FormLabel>
-                <div className="flex gap-2">
-                  <FormControl>
-                    <Input
-                      placeholder="Ex: 31706"
-                      {...field}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarLote())}
-                    />
-                  </FormControl>
-                  <Button type="button" variant="outline" size="icon" onClick={() => buscarLote()} disabled={buscando}>
-                    {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                  </Button>
-                </div>
-                {loteEncontrado === true && (
-                  <p className="text-xs text-status-done">✓ Produto e quantidade preenchidos automaticamente</p>
-                )}
-                {loteJaTemOP && (
-                  <p className="text-xs text-destructive font-medium">⚠ Este lote já possui uma OP criada.</p>
-                )}
-                {loteEncontrado === false && !loteJaTemOP && (
-                  <p className="text-xs text-muted-foreground">Lote não encontrado — preencha manualmente</p>
-                )}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+
+            {/* Lote + Produto */}
+            <div className="flex gap-2 items-end">
+              <FormField control={form.control} name="lote" render={({ field }) => (
+                <FormItem className="w-36 shrink-0">
+                  <FormLabel className="text-xs">Lote</FormLabel>
+                  <div className="flex gap-1">
+                    <FormControl>
+                      <Input className="h-8 text-sm" placeholder="31706" {...field}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarLote())} />
+                    </FormControl>
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => buscarLote()} disabled={buscando}>
+                      {buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="produto" render={({ field }) => (
+                <FormItem className="flex-1 min-w-0">
+                  <FormLabel className="text-xs">Produto</FormLabel>
+                  <FormControl><Input className="h-8 text-sm" placeholder="Nome do produto" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+
+            {/* Feedback do lote */}
+            {(loteEncontrado !== null || semFormula) && (
+              <div className="space-y-1">
+                {loteEncontrado === true && <p className="text-xs text-green-600">✓ Preenchido automaticamente</p>}
+                {loteJaTemOP && <p className="text-xs text-destructive font-medium">⚠ Este lote já possui uma OP criada.</p>}
+                {loteEncontrado === false && !loteJaTemOP && <p className="text-xs text-muted-foreground">Lote não encontrado — preencha manualmente</p>}
                 {semFormula && (
-                  <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 mt-1">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-xs font-medium text-amber-800">
-                      Este lote não possui fórmula cadastrada. A ordem será salva sem fórmula e sem lista de matérias-primas.
-                    </p>
-                  </div>
-                )}
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="produto" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Produto</FormLabel>
-                <FormControl><Input placeholder="Ex: MBG-10-3810 VERDE LIMÃO-A" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {loteEncontrado === true && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Tamanho de Batelada</label>
-                  <Input
-                    type="number"
-                    value={tamanhoBatelada ?? ''}
-                    onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) => setTamanhoBatelada(e.target.value ? Number(e.target.value) : null)}
-                    className="mt-1"
-                  />
-                </div>
-
-                {formulaId && (
-                  <p className="text-xs text-muted-foreground">
-                    Fórmula: <span className="font-medium text-foreground">{formulaId}</span>
-                  </p>
-                )}
-
-                {loadingFormula && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Carregando matérias-primas...
-                  </div>
-                )}
-
-                {erroFormula && (
-                  <p className="text-sm text-destructive">{erroFormula}</p>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Orientações para Produção</label>
-                  <textarea
-                    value={orientacoes}
-                    onChange={(e) => setOrientacoes(e.target.value)}
-                    rows={3}
-                    placeholder="Instruções especiais para a linha de produção (opcional)"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  />
-                  {formulaId && (
-                    <p className="text-xs text-muted-foreground">Será salvo na fórmula e pré-preenchido nas próximas OPs deste produto.</p>
-                  )}
-                </div>
-
-                {itens.length > 0 && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Matérias-Primas</label>
-                    <p className="text-xs text-muted-foreground">Edite nome ou quantidade para customizar esta OP — a fórmula original não é alterada.</p>
-                    <div className="rounded-md border overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted text-muted-foreground">
-                          <tr>
-                            <th className="text-left px-3 py-2 w-px whitespace-nowrap">Seq</th>
-                            <th className="text-left px-3 py-2">Matéria-Prima</th>
-                            <th className="text-left px-3 py-2 w-px whitespace-nowrap">Un</th>
-                            <th className="text-right px-3 py-2 w-px whitespace-nowrap">%</th>
-                            <th className="text-right px-3 py-2 w-px whitespace-nowrap">Qtd (kg)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {itens.map((item) => (
-                            <tr key={item.id} className="border-t">
-                              <td className="px-3 py-2 text-muted-foreground w-px whitespace-nowrap">{item.sequencia ?? '-'}</td>
-                              <td className="px-3 py-2">
-                                <textarea
-                                  value={nomes[item.id] ?? item.materia_prima}
-                                  onChange={(e) => {
-                                    setNomes((prev) => ({ ...prev, [item.id]: e.target.value }));
-                                    e.target.style.height = 'auto';
-                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                  }}
-                                  rows={1}
-                                  ref={(el) => {
-                                    if (el) {
-                                      el.style.height = 'auto';
-                                      el.style.height = el.scrollHeight + 'px';
-                                    }
-                                  }}
-                                  className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm resize-none overflow-hidden hover:border-input focus:border-input focus:outline-none focus:ring-1 focus:ring-ring"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground w-px whitespace-nowrap">{item.unidade ?? '-'}</td>
-                              <td className="px-3 py-2 text-right text-muted-foreground w-px whitespace-nowrap">{item.percentual}%</td>
-                              <td className="px-3 py-2 w-px whitespace-nowrap">
-                                <Input
-                                  type="number"
-                                  value={item.quantidade_kg}
-                                  onWheel={(e) => e.currentTarget.blur()}
-                                  onChange={(e) => setQuantidade(item.id, Number(e.target.value))}
-                                  className="h-7 w-24 text-right ml-auto"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t">
-                            <td colSpan={4} className="px-3 py-1.5 text-xs text-muted-foreground/60 text-right">total fórmula</td>
-                            <td className="px-3 py-1.5 text-right text-xs text-muted-foreground/60">
-                              {formatKg(itens.reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
+                  <div className="flex items-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <p className="text-xs text-amber-800">Sem fórmula cadastrada — OP será salva sem matérias-primas.</p>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Data de Emissão</label>
-                <Input
-                  type="date"
-                  value={dataEmissao}
-                  onChange={(e) => setDataEmissao(e.target.value)}
-                />
+            {/* Quantidade + Batelada + Datas */}
+            <div className="grid grid-cols-4 gap-2">
+              <FormField control={form.control} name="quantidade" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Qtd (kg)</FormLabel>
+                  <FormControl><Input className="h-8 text-sm" type="number" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              {loteEncontrado === true && (
+                <div>
+                  <label className="text-xs font-medium">Batelada (kg)</label>
+                  <Input className="h-8 text-sm mt-1" type="number" value={tamanhoBatelada ?? ''}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    onChange={(e) => setTamanhoBatelada(e.target.value ? Number(e.target.value) : null)} />
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium">Dt. Emissão</label>
+                <Input className="h-8 text-sm mt-1" type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Data de Programação</label>
-                <Input
-                  type="date"
-                  value={dataProgramacao}
-                  onChange={(e) => setDataProgramacao(e.target.value)}
-                />
+              <div>
+                <label className="text-xs font-medium">Dt. Programação</label>
+                <Input className="h-8 text-sm mt-1" type="date" value={dataProgramacao} onChange={(e) => setDataProgramacao(e.target.value)} />
               </div>
             </div>
 
-            <FormField control={form.control} name="quantidade" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quantidade (kg)</FormLabel>
-                <FormControl><Input type="number" placeholder="Ex: 500" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="grid grid-cols-2 gap-4">
+            {/* Linha + Balança + Marca + Requer Mistura */}
+            <div className="grid grid-cols-4 gap-2 items-end">
               <FormField control={form.control} name="linha" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Linha</FormLabel>
+                  <FormLabel className="text-xs">Linha</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      <SelectItem value="1">Linha 1</SelectItem>
-                      <SelectItem value="2">Linha 2</SelectItem>
-                      <SelectItem value="3">Linha 3</SelectItem>
-                      <SelectItem value="4">Linha 4</SelectItem>
-                      <SelectItem value="5">Linha 5</SelectItem>
+                      {[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>Linha {n}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )} />
-
               <FormField control={form.control} name="balanca" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Balança</FormLabel>
+                  <FormLabel className="text-xs">Balança</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value="1">Balança 1</SelectItem>
                       <SelectItem value="2">Balança 2</SelectItem>
@@ -445,66 +329,103 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                   <FormMessage />
                 </FormItem>
               )} />
-            </div>
-
-            <FormField control={form.control} name="marca" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Marca</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione a marca" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="Pigma">Pigma</SelectItem>
-                    <SelectItem value="Zan Collor">Zan Collor</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">Requer Mistura</p>
-                <p className="text-xs text-muted-foreground">
-                  {requerMistura ? 'Pesagem → Mistura → Linha' : 'Pesagem → Linha (sem mistura)'}
-                </p>
+              <FormField control={form.control} name="marca" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Marca</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="Pigma">Pigma</SelectItem>
+                      <SelectItem value="Zan Collor">Zan Collor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex items-center justify-between rounded-md border px-2 py-1.5 h-8">
+                <span className="text-xs font-medium">Mistura</span>
+                <button type="button" role="switch" aria-checked={requerMistura}
+                  onClick={() => setRequerMistura((v) => !v)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}>
+                  <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${requerMistura ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={requerMistura}
-                onClick={() => setRequerMistura((v) => !v)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg transition-transform ${requerMistura ? 'translate-x-5' : 'translate-x-0'}`}
-                />
-              </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Adições para Mistura</label>
-              <div className="space-y-1.5">
+            {/* Fórmula */}
+            {loteEncontrado === true && (
+              <div className="space-y-2">
+                {formulaId && <p className="text-xs text-muted-foreground">Fórmula: <span className="font-medium text-foreground">{formulaId}</span></p>}
+                {loadingFormula && <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Carregando...</div>}
+                {erroFormula && <p className="text-xs text-destructive">{erroFormula}</p>}
+
+                {itens.length > 0 && (
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted text-muted-foreground">
+                        <tr>
+                          <th className="text-left px-2 py-1 w-px">#</th>
+                          <th className="text-left px-2 py-1">Matéria-Prima</th>
+                          <th className="text-left px-2 py-1 w-px">Un</th>
+                          <th className="text-right px-2 py-1 w-px">%</th>
+                          <th className="text-right px-2 py-1 w-px">kg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itens.map((item) => (
+                          <tr key={item.id} className="border-t">
+                            <td className="px-2 py-1 text-muted-foreground w-px">{item.sequencia ?? '-'}</td>
+                            <td className="px-2 py-1">
+                              <textarea value={nomes[item.id] ?? item.materia_prima}
+                                onChange={(e) => { setNomes((prev) => ({ ...prev, [item.id]: e.target.value })); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                rows={1}
+                                ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+                                className="w-full rounded border border-transparent bg-transparent px-1 py-0 text-xs resize-none overflow-hidden hover:border-input focus:border-input focus:outline-none focus:ring-1 focus:ring-ring" />
+                            </td>
+                            <td className="px-2 py-1 text-muted-foreground w-px">{item.unidade ?? '-'}</td>
+                            <td className="px-2 py-1 text-right text-muted-foreground w-px">{item.percentual}%</td>
+                            <td className="px-2 py-1 w-px">
+                              <Input type="number" value={item.quantidade_kg} onWheel={(e) => e.currentTarget.blur()}
+                                onChange={(e) => setQuantidade(item.id, Number(e.target.value))}
+                                className="h-6 w-20 text-right ml-auto text-xs" />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t">
+                          <td colSpan={4} className="px-2 py-1 text-xs text-muted-foreground/60 text-right">total</td>
+                          <td className="px-2 py-1 text-right text-xs text-muted-foreground/60">{formatKg(itens.reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-medium">Orientações para Produção</label>
+                  <textarea value={orientacoes} onChange={(e) => setOrientacoes(e.target.value)} rows={2}
+                    placeholder="Instruções especiais (opcional)"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
+                </div>
+              </div>
+            )}
+
+            {/* Adições para mistura */}
+            <div>
+              <label className="text-xs font-medium">Adições para Mistura</label>
+              <div className="mt-1 space-y-1">
                 {obsItems.map((row, i) => (
-                  <div key={i} className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={row.qty}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, '');
-                        setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
-                      }}
+                  <div key={i} className="flex gap-1.5 items-center">
+                    <input type="text" inputMode="numeric" value={row.qty}
+                      onChange={(e) => { const val = e.target.value.replace(/[^0-9]/g, ''); setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r)); }}
                       placeholder="0"
-                      className="w-14 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    <span className="text-sm font-semibold text-muted-foreground shrink-0">x</span>
-                    <input
-                      type="text"
-                      value={row.mp}
+                      className="w-12 rounded-md border border-input bg-background px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-ring" />
+                    <span className="text-xs font-semibold text-muted-foreground">x</span>
+                    <input type="text" value={row.mp}
                       onChange={(e) => setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, mp: e.target.value.toUpperCase() } : r))}
                       placeholder="Matéria-Prima"
-                      className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
+                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 ))}
               </div>
