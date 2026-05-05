@@ -8,11 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, Search, AlertTriangle } from 'lucide-react';
+import { Save, Loader2, Search, AlertTriangle, PackageSearch } from 'lucide-react';
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
 import { recalcularPosicoes } from '@/lib/recalcularPosicoes';
+
+interface LoteDisponivel {
+  lote: number;
+  produto: string;
+  quantidade: number;
+}
 
 const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
@@ -49,6 +55,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
   const [dataProgramacao, setDataProgramacao] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
+  const [loadingLotes, setLoadingLotes] = useState(false);
+  const [buscaLote, setBuscaLote] = useState('');
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -56,6 +65,19 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     resolver: zodResolver(ordemSchema),
     defaultValues: { lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' },
   });
+
+  const fetchLotesDisponiveis = useCallback(async () => {
+    setLoadingLotes(true);
+    const [{ data: lotes }, { data: ordensExistentes }] = await Promise.all([
+      (supabase as any).from('cadastro_lotes').select('lote, produto, quantidade').eq('status', 'Em Aberto').order('lote', { ascending: true }),
+      supabase.from('ordens').select('lote'),
+    ]);
+    const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
+    setLotesDisponiveis((lotes ?? []).filter((l: any) => !lotesComOP.has(String(l.lote))));
+    setLoadingLotes(false);
+  }, []);
+
+  useEffect(() => { fetchLotesDisponiveis(); }, [fetchLotesDisponiveis]);
 
   const buscarLote = useCallback(async (loteOverride?: number) => {
     const loteStr = loteOverride !== undefined ? String(loteOverride) : form.getValues('lote').trim();
@@ -183,6 +205,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
     setSaving(false);
     toast({ title: 'Ordem criada com sucesso!' });
+    fetchLotesDisponiveis();
     form.reset({ lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' });
     setLoteEncontrado(null);
     setFormulaId(null);
@@ -195,11 +218,19 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setDataEmissao(new Date().toISOString().split("T")[0]);
   };
 
+  const lotesFiltrados = lotesDisponiveis.filter((l) =>
+    !buscaLote.trim() ||
+    l.produto.toLowerCase().includes(buscaLote.toLowerCase()) ||
+    String(l.lote).includes(buscaLote.trim())
+  );
+
   return (
-    <div className="max-w-lg mx-auto space-y-6">
+    <div className="max-w-full space-y-6">
       <h1 className="text-2xl font-bold">Criar Nova Ordem</h1>
 
-      <div className="bg-card rounded-lg border p-6">
+      <div className="flex gap-6 items-start">
+        {/* ── Coluna esquerda: formulário ── */}
+        <div className="flex-1 min-w-0 bg-card rounded-lg border p-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="lote" render={({ field }) => (
@@ -485,6 +516,73 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
             </Button>
           </form>
         </Form>
+        </div>
+
+        {/* ── Coluna direita: lotes disponíveis ── */}
+        <div className="w-80 shrink-0 bg-card rounded-lg border overflow-hidden sticky top-4">
+          <div className="px-4 py-3 border-b bg-muted/40 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <PackageSearch className="h-4 w-4 text-primary shrink-0" />
+              <h3 className="font-semibold text-sm">Lotes sem OP</h3>
+            </div>
+            {!loadingLotes && (
+              <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5 shrink-0">
+                {lotesFiltrados.length}
+              </span>
+            )}
+          </div>
+
+          <div className="px-3 py-2 border-b">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Filtrar lote ou produto..."
+                value={buscaLote}
+                onChange={(e) => setBuscaLote(e.target.value)}
+                className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
+            {loadingLotes ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : lotesFiltrados.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                {buscaLote ? 'Nenhum lote encontrado.' : 'Nenhum lote pendente.'}
+              </p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="text-muted-foreground border-b sticky top-0 bg-card">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium">Lote</th>
+                    <th className="text-left px-3 py-2 font-medium">Produto</th>
+                    <th className="text-right px-3 py-2 font-medium">Qtd</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotesFiltrados.map((l) => (
+                    <tr
+                      key={l.lote}
+                      onClick={() => {
+                        form.setValue('lote', String(l.lote));
+                        buscarLote(l.lote);
+                      }}
+                      className="border-b last:border-0 hover:bg-primary/5 cursor-pointer transition-colors"
+                    >
+                      <td className="px-3 py-2 font-mono font-semibold">{l.lote}</td>
+                      <td className="px-3 py-2 max-w-[140px] truncate text-muted-foreground">{l.produto}</td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">{l.quantidade.toLocaleString('pt-BR')} kg</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
