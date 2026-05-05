@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
@@ -44,12 +44,13 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [carga, setCarga] = useState(1);
 
-  const balancaOrdens = sortOrdens(
-    ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))
+  const balancaOrdens = useMemo(
+    () => sortOrdens(ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))),
+    [ordens, balanca]
   );
 
-  const emPesagem = balancaOrdens.find((o) => o.status === "em_pesagem");
-  const emAberto = balancaOrdens.filter((o) => o.status === "pendente");
+  const emPesagem = useMemo(() => balancaOrdens.find((o) => o.status === "em_pesagem"), [balancaOrdens]);
+  const emAberto = useMemo(() => balancaOrdens.filter((o) => o.status === "pendente"), [balancaOrdens]);
 
   useEffect(() => {
     if (!emPesagem?.id) {
@@ -100,7 +101,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const isLoadingFormula = loadingOrdem || (!hasCustom && loadingFormula);
   const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
 
-  const totalHoje = ordens.filter((o) => o.balanca === balanca).length;
+  const totalHoje = useMemo(() => ordens.filter((o) => o.balanca === balanca).length, [ordens, balanca]);
 
   const iniciarPesagem = async (ordem: { id: string }) => {
     const { error } = await supabase.from("ordens").update({ status: "em_pesagem" }).eq("id", ordem.id);

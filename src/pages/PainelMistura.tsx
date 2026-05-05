@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, sortOrdens } from "@/lib/utils";
@@ -25,9 +25,9 @@ export default function PainelMistura() {
   const [hasCustom, setHasCustom] = useState(false);
   const [loadingOrdemFormula, setLoadingOrdemFormula] = useState(false);
 
-  const sorted = sortOrdens(ordens);
-  const emMistura = sorted.find((o) => o.status === "em_mistura") ?? null;
-  const aguardando = sorted.filter((o) => o.status === "aguardando_mistura");
+  const sorted = useMemo(() => sortOrdens(ordens), [ordens]);
+  const emMistura = useMemo(() => sorted.find((o) => o.status === "em_mistura") ?? null, [sorted]);
+  const aguardando = useMemo(() => sorted.filter((o) => o.status === "aguardando_mistura"), [sorted]);
 
   const { itens: formulaItens, loading: loadingFormula, error: formulaError } = useFormula(
     hasCustom ? null : (emMistura?.formula_id ?? null),

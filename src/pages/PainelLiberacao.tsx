@@ -80,7 +80,7 @@ export default function PainelLiberacao() {
   const fetchOrdens = async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("*")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao")
       .eq("status", "aguardando_liberacao")
       .order("posicao", { ascending: true, nullsFirst: false });
 
@@ -92,7 +92,7 @@ export default function PainelLiberacao() {
     if (ids.length > 0) {
       const { data: regData } = await (supabase as any)
         .from("registros_diarios")
-        .select("*")
+        .select("id, ordem_id, data, hora_inicio, hora_fim, registro_producao")
         .in("ordem_id", ids)
         .order("data", { ascending: true });
       (regData ?? []).forEach((r: any) => {
