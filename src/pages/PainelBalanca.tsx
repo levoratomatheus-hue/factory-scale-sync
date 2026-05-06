@@ -180,23 +180,23 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   batelada{totalBateladas !== 1 ? 's' : ''} de{' '}
                   <span className="text-foreground font-bold">{formatKg(tamanhoBatelada)} kg</span> cada
                 </div>
-                <div className="flex items-center gap-1.5 bg-muted/60 border rounded-lg px-2 py-1">
+                <div className="flex items-center gap-2 bg-muted/60 border rounded-lg px-3 py-1.5">
                   <button
-                    className="flex items-center justify-center h-5 w-5 rounded hover:bg-background transition-colors disabled:opacity-30"
+                    className="flex items-center justify-center h-6 w-6 rounded hover:bg-background transition-colors disabled:opacity-30"
                     onClick={() => setBateladaAtual((b) => Math.max(1, b - 1))}
                     disabled={bateladaAtual <= 1}
                   >
-                    <Minus className="h-3 w-3 text-primary" />
+                    <Minus className="h-3.5 w-3.5 text-primary" />
                   </button>
-                  <span className="text-sm font-bold text-primary tabular-nums w-14 text-center">
-                    {bateladaAtual} / {totalBateladas}
+                  <span className="text-base font-extrabold text-primary tabular-nums w-6 text-center">
+                    {bateladaAtual}
                   </span>
                   <button
-                    className="flex items-center justify-center h-5 w-5 rounded hover:bg-background transition-colors disabled:opacity-30"
+                    className="flex items-center justify-center h-6 w-6 rounded hover:bg-background transition-colors disabled:opacity-30"
                     onClick={() => setBateladaAtual((b) => Math.min(totalBateladas + 1, b + 1))}
                     disabled={bateladaAtual > totalBateladas}
                   >
-                    <Plus className="h-3 w-3 text-primary" />
+                    <Plus className="h-3.5 w-3.5 text-primary" />
                   </button>
                 </div>
               </div>
