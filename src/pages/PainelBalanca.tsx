@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
@@ -44,6 +44,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [carga, setCarga] = useState(1);
   const [bateladaAtual, setBateladaAtual] = useState(1);
+  const lastBateladaPress = useRef<{ type: '+' | '-'; time: number } | null>(null);
+  const [bateladaConfirm, setBateladaConfirm] = useState<{ type: '+' | '-' } | null>(null);
 
   const balancaOrdens = useMemo(
     () => sortOrdens(ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))),
@@ -183,8 +185,17 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 <div className="flex items-center gap-3 bg-muted/60 border rounded-lg px-4 py-2">
                   <button
                     className="flex items-center justify-center h-7 w-7 rounded-full border border-primary/40 hover:bg-background transition-colors disabled:opacity-30"
-                    onClick={() => setBateladaAtual((b) => Math.max(1, b - 1))}
                     disabled={bateladaAtual <= 1}
+                    onClick={() => {
+                      const now = Date.now();
+                      const last = lastBateladaPress.current;
+                      if (last?.type === '-' && now - last.time < 30000) {
+                        setBateladaConfirm({ type: '-' });
+                      } else {
+                        lastBateladaPress.current = { type: '-', time: now };
+                        setBateladaAtual((b) => Math.max(1, b - 1));
+                      }
+                    }}
                   >
                     <Minus className="h-4 w-4 text-primary" />
                   </button>
@@ -193,7 +204,16 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   </span>
                   <button
                     className="flex items-center justify-center h-7 w-7 rounded-full border border-primary/40 hover:bg-background transition-colors"
-                    onClick={() => setBateladaAtual((b) => b + 1)}
+                    onClick={() => {
+                      const now = Date.now();
+                      const last = lastBateladaPress.current;
+                      if (last?.type === '+' && now - last.time < 30000) {
+                        setBateladaConfirm({ type: '+' });
+                      } else {
+                        lastBateladaPress.current = { type: '+', time: now };
+                        setBateladaAtual((b) => b + 1);
+                      }
+                    }}
                   >
                     <Plus className="h-4 w-4 text-primary" />
                   </button>
@@ -290,6 +310,32 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </Button>
             </div>
           )}
+
+          <AlertDialog open={!!bateladaConfirm} onOpenChange={(open) => { if (!open) setBateladaConfirm(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {bateladaConfirm?.type === '+' ? 'Confirmar incremento' : 'Confirmar decremento'}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {bateladaConfirm?.type === '+'
+                    ? 'Você está adicionando uma 2ª batelada em menos de 30 segundos. Tem certeza?'
+                    : 'Você está diminuindo uma 2ª vez em menos de 30 segundos. Tem certeza?'}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setBateladaConfirm(null)}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                  const type = bateladaConfirm!.type;
+                  lastBateladaPress.current = { type, time: Date.now() };
+                  setBateladaAtual((b) => type === '+' ? b + 1 : Math.max(1, b - 1));
+                  setBateladaConfirm(null);
+                }}>
+                  Sim, confirmar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
