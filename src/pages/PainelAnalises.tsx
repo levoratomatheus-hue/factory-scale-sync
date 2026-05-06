@@ -406,22 +406,38 @@ export default function PainelAnalises() {
   }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {
-    const producaoTotal = ordens.reduce((s, o) => s + (o.quantidade_real || 0), 0);
+    // kg por registro diário — mesmo filtro do gráfico
+    const kgPorOrdem: Record<string, number> = {};
+    registrosDiariosRaw.forEach((r: any) => {
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
+      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return;
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
+    });
+
+    const producaoTotal = Object.values(kgPorOrdem).reduce((s, v) => s + v, 0);
 
     let totalKgComHora = 0, totalHoras = 0;
     ordens.forEach((o) => {
       const h = horasMap[o.id] ?? null;
-      if (h !== null) { totalKgComHora += o.quantidade_real || 0; totalHoras += h; }
+      if (h !== null) { totalKgComHora += kgPorOrdem[o.id] || 0; totalHoras += h; }
     });
     const mediaKgHora = totalHoras > 0 ? totalKgComHora / totalHoras : 0;
 
     const porLinha = [1, 2, 3, 4, 5].map((linha) => {
+      const totalKg = registrosDiariosRaw
+        .filter((r: any) => Number(r.ordens?.linha) === linha &&
+          (!materialFiltro || ordensAnuaisIds.has(r.ordem_id)))
+        .reduce((s: number, r: any) => {
+          const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+          return s + items.reduce((ss: number, it: any) => ss + (it.qty || 0) * (it.peso || 0), 0);
+        }, 0);
       const ol = ordens.filter((o) => Number(o.linha) === linha);
-      const totalKg = ol.reduce((s, o) => s + (o.quantidade_real || 0), 0);
       let kgH = 0, hH = 0;
       ol.forEach((o) => {
         const h = horasMap[o.id] ?? null;
-        if (h !== null) { kgH += o.quantidade_real || 0; hH += h; }
+        if (h !== null) { kgH += kgPorOrdem[o.id] || 0; hH += h; }
       });
       return { linha, totalKg, media: hH > 0 ? kgH / hH : 0, ops: ol.length };
     });
@@ -477,7 +493,7 @@ export default function PainelAnalises() {
     });
 
     return { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha };
-  }, [ordens, paradas, horasMap, diasLinhaMap]);
+  }, [ordens, paradas, horasMap, diasLinhaMap, registrosDiariosRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
