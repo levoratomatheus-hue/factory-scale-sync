@@ -171,56 +171,33 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             {formatKg(emPesagem.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
 
-          {tamanhoBatelada && tamanhoBatelada > 0 && (
-            <div className="text-sm font-medium text-muted-foreground">
-              <span className="text-foreground font-bold">
-                {Math.round(emPesagem.quantidade / tamanhoBatelada)}
-              </span>{' '}
-              batelada{Math.round(emPesagem.quantidade / tamanhoBatelada) !== 1 ? 's' : ''} de{' '}
-              <span className="text-foreground font-bold">{formatKg(tamanhoBatelada)} kg</span> cada
-            </div>
-          )}
-
           {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
             const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
-            const progresso = Math.min(bateladaAtual, totalBateladas);
-            const pct = Math.round((progresso / totalBateladas) * 100);
             return (
-              <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Bateladas</span>
-                  <span className="text-sm font-semibold text-muted-foreground">
-                    {progresso} de {totalBateladas}
-                  </span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-muted-foreground">
+                  <span className="text-foreground font-bold">{totalBateladas}</span>{' '}
+                  batelada{totalBateladas !== 1 ? 's' : ''} de{' '}
+                  <span className="text-foreground font-bold">{formatKg(tamanhoBatelada)} kg</span> cada
                 </div>
-                <div className="flex items-center justify-center gap-4">
+                <div className="flex items-center gap-1.5 bg-muted/60 border rounded-lg px-2 py-1">
                   <button
-                    className="flex items-center justify-center h-10 w-10 rounded-full border-2 border-primary/40 bg-background hover:bg-primary/10 transition-colors disabled:opacity-30"
+                    className="flex items-center justify-center h-5 w-5 rounded hover:bg-background transition-colors disabled:opacity-30"
                     onClick={() => setBateladaAtual((b) => Math.max(1, b - 1))}
                     disabled={bateladaAtual <= 1}
                   >
-                    <Minus className="h-5 w-5 text-primary" />
+                    <Minus className="h-3 w-3 text-primary" />
                   </button>
-                  <div className="text-center">
-                    <div className="text-5xl font-extrabold text-primary leading-none">{bateladaAtual}</div>
-                    <div className="text-xs text-muted-foreground mt-1">batelada atual</div>
-                  </div>
+                  <span className="text-sm font-bold text-primary tabular-nums w-14 text-center">
+                    {bateladaAtual} / {totalBateladas}
+                  </span>
                   <button
-                    className="flex items-center justify-center h-10 w-10 rounded-full border-2 border-primary/40 bg-background hover:bg-primary/10 transition-colors disabled:opacity-30"
+                    className="flex items-center justify-center h-5 w-5 rounded hover:bg-background transition-colors disabled:opacity-30"
                     onClick={() => setBateladaAtual((b) => Math.min(totalBateladas + 1, b + 1))}
                     disabled={bateladaAtual > totalBateladas}
                   >
-                    <Plus className="h-5 w-5 text-primary" />
+                    <Plus className="h-3 w-3 text-primary" />
                   </button>
-                </div>
-                <div className="space-y-1">
-                  <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <div className="text-right text-xs text-muted-foreground">{pct}%</div>
                 </div>
               </div>
             );
