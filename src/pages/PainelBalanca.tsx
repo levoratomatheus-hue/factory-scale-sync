@@ -4,7 +4,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Play, Printer, Scale } from "lucide-react";
+import { CheckCircle2, Loader2, Minus, Play, Plus, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
@@ -43,6 +43,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [checkedItens, setCheckedItens] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [carga, setCarga] = useState(1);
+  const [bateladaAtual, setBateladaAtual] = useState(1);
 
   const balancaOrdens = useMemo(
     () => sortOrdens(ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))),
@@ -64,6 +65,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
     setCheckedItens(new Set());
     setCarga(1);
+    setBateladaAtual(1);
     // Limpa imediatamente para não exibir dados de outra OP
     setFormulaId(null);
     setTamanhoBatelada(null);
@@ -178,6 +180,51 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <span className="text-foreground font-bold">{formatKg(tamanhoBatelada)} kg</span> cada
             </div>
           )}
+
+          {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
+            const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
+            const progresso = Math.min(bateladaAtual, totalBateladas);
+            const pct = Math.round((progresso / totalBateladas) * 100);
+            return (
+              <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Bateladas</span>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {progresso} de {totalBateladas}
+                  </span>
+                </div>
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    className="flex items-center justify-center h-10 w-10 rounded-full border-2 border-primary/40 bg-background hover:bg-primary/10 transition-colors disabled:opacity-30"
+                    onClick={() => setBateladaAtual((b) => Math.max(1, b - 1))}
+                    disabled={bateladaAtual <= 1}
+                  >
+                    <Minus className="h-5 w-5 text-primary" />
+                  </button>
+                  <div className="text-center">
+                    <div className="text-5xl font-extrabold text-primary leading-none">{bateladaAtual}</div>
+                    <div className="text-xs text-muted-foreground mt-1">batelada atual</div>
+                  </div>
+                  <button
+                    className="flex items-center justify-center h-10 w-10 rounded-full border-2 border-primary/40 bg-background hover:bg-primary/10 transition-colors disabled:opacity-30"
+                    onClick={() => setBateladaAtual((b) => Math.min(totalBateladas + 1, b + 1))}
+                    disabled={bateladaAtual > totalBateladas}
+                  >
+                    <Plus className="h-5 w-5 text-primary" />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">{pct}%</div>
+                </div>
+              </div>
+            );
+          })()}
 
           {isLoadingFormula && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
