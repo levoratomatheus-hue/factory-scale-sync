@@ -7,6 +7,7 @@ export function useOrdens(date?: string) {
   const [loading, setLoading] = useState(true);
   const today = date || format(new Date(), 'yyyy-MM-dd');
   const lastFetchRef = useRef(0);
+  const instanceId = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const fetchOrdens = useCallback(async () => {
     lastFetchRef.current = Date.now();
@@ -26,7 +27,7 @@ export function useOrdens(date?: string) {
   useEffect(() => {
     fetchOrdens();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const channelName = `ordens-realtime-${date ?? "all"}`;
+    const channelName = `ordens-realtime-${date ?? "all"}-${instanceId.current}`;
     const channel = supabase
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
