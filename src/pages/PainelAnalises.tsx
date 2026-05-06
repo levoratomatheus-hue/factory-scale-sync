@@ -406,11 +406,11 @@ export default function PainelAnalises() {
   }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {
-    // kg por ordem vindo dos registros diários (distribui corretamente entre períodos)
-    const ordensIds = new Set(ordens.map((o: any) => o.id));
+    // kg por registro diário — mesmo filtro do gráfico para garantir consistência
     const kgPorOrdem: Record<string, number> = {};
     registrosDiariosRaw.forEach((r: any) => {
-      if (!ordensIds.has(r.ordem_id)) return;
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
+      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return;
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
       kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
@@ -487,7 +487,7 @@ export default function PainelAnalises() {
     });
 
     return { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha };
-  }, [ordens, paradas, horasMap, diasLinhaMap, registrosDiariosRaw]);
+  }, [ordens, paradas, horasMap, diasLinhaMap, registrosDiariosRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
