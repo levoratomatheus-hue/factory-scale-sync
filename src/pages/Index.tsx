@@ -113,7 +113,13 @@ function resolveLinhaNumber(balanca: string | null): number | null {
 export default function Index() {
   const { perfil, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabGestorId>('gestor');
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabGestorId>>(() => new Set(['gestor']));
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
+
+  const goToTab = useCallback((tab: TabGestorId) => {
+    setVisitedTabs((prev) => { const n = new Set(prev); n.add(tab); return n; });
+    setActiveTab(tab);
+  }, []);
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(gruposGestor.map((g) => g.id))
   );
@@ -128,7 +134,7 @@ export default function Index() {
 
   const handleCriarOP = (lote: number) => {
     setPrefillLote(lote);
-    setActiveTab('criar');
+    goToTab('criar');
   };
 
   const activeLabel =
@@ -242,7 +248,7 @@ export default function Index() {
   }
 
   const goHome = () => {
-    setActiveTab('gestor');
+    goToTab('gestor');
     setOpenGroups(new Set());
   };
 
@@ -294,7 +300,7 @@ export default function Index() {
                             <SidebarMenuButton
                               isActive={activeTab === item.id}
                               tooltip={item.label}
-                              onClick={() => setActiveTab(item.id)}
+                              onClick={() => goToTab(item.id)}
                               size="sm"
                             >
                               <item.icon className="h-3.5 w-3.5 shrink-0" />
@@ -321,7 +327,7 @@ export default function Index() {
                   <SidebarMenuButton
                     isActive={activeTab === 'comercial'}
                     tooltip="Painel Comercial"
-                    onClick={() => setActiveTab('comercial')}
+                    onClick={() => goToTab('comercial')}
                     size="sm"
                   >
                     <Briefcase className="h-3.5 w-3.5 shrink-0" />
@@ -351,24 +357,24 @@ export default function Index() {
           <span className="font-semibold text-sm">{activeLabel}</span>
         </header>
         <main className="p-6 overflow-x-hidden">
-          {activeTab === 'gestor'       && <PainelGestor onCriarOP={handleCriarOP} />}
-          {activeTab === 'programacao'         && <PainelProgramacao />}
-          {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
-          {activeTab === 'criar'        && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
-          {activeTab === 'balanca1'  && <PainelBalanca balanca={1} />}
-          {activeTab === 'balanca2'  && <PainelBalanca balanca={2} />}
-          {activeTab === 'mistura'   && <PainelMistura />}
-          {activeTab === 'linha1'    && <PainelLinha linha={1} />}
-          {activeTab === 'linha2'    && <PainelLinha linha={2} />}
-          {activeTab === 'linha3'    && <PainelLinha linha={3} />}
-          {activeTab === 'linha4'    && <PainelLinha linha={4} />}
-          {activeTab === 'linha5'     && <PainelLinha linha={5} />}
-          {activeTab === 'liberacao'  && <PainelLiberacao />}
-          {activeTab === 'historico'  && <PainelHistorico />}
-          {activeTab === 'consulta_formula' && <PainelConsultaFormula />}
-          {activeTab === 'analises'   && <PainelAnalises />}
-          {activeTab === 'importar'   && <ImportarProgramacao />}
-          {activeTab === 'comercial'  && <PainelComercial />}
+          {visitedTabs.has('gestor')               && <div className={activeTab !== 'gestor'               ? 'hidden' : ''}><PainelGestor onCriarOP={handleCriarOP} /></div>}
+          {visitedTabs.has('programacao')          && <div className={activeTab !== 'programacao'          ? 'hidden' : ''}><PainelProgramacao /></div>}
+          {visitedTabs.has('programacao_balanca')  && <div className={activeTab !== 'programacao_balanca'  ? 'hidden' : ''}><PainelProgramacaoBalanca /></div>}
+          {visitedTabs.has('criar')                && <div className={activeTab !== 'criar'                ? 'hidden' : ''}><CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} /></div>}
+          {visitedTabs.has('balanca1')             && <div className={activeTab !== 'balanca1'             ? 'hidden' : ''}><PainelBalanca balanca={1} /></div>}
+          {visitedTabs.has('balanca2')             && <div className={activeTab !== 'balanca2'             ? 'hidden' : ''}><PainelBalanca balanca={2} /></div>}
+          {visitedTabs.has('mistura')              && <div className={activeTab !== 'mistura'              ? 'hidden' : ''}><PainelMistura /></div>}
+          {visitedTabs.has('linha1')               && <div className={activeTab !== 'linha1'               ? 'hidden' : ''}><PainelLinha linha={1} /></div>}
+          {visitedTabs.has('linha2')               && <div className={activeTab !== 'linha2'               ? 'hidden' : ''}><PainelLinha linha={2} /></div>}
+          {visitedTabs.has('linha3')               && <div className={activeTab !== 'linha3'               ? 'hidden' : ''}><PainelLinha linha={3} /></div>}
+          {visitedTabs.has('linha4')               && <div className={activeTab !== 'linha4'               ? 'hidden' : ''}><PainelLinha linha={4} /></div>}
+          {visitedTabs.has('linha5')               && <div className={activeTab !== 'linha5'               ? 'hidden' : ''}><PainelLinha linha={5} /></div>}
+          {visitedTabs.has('liberacao')            && <div className={activeTab !== 'liberacao'            ? 'hidden' : ''}><PainelLiberacao /></div>}
+          {visitedTabs.has('historico')            && <div className={activeTab !== 'historico'            ? 'hidden' : ''}><PainelHistorico /></div>}
+          {visitedTabs.has('consulta_formula')     && <div className={activeTab !== 'consulta_formula'     ? 'hidden' : ''}><PainelConsultaFormula /></div>}
+          {visitedTabs.has('analises')             && <div className={activeTab !== 'analises'             ? 'hidden' : ''}><PainelAnalises /></div>}
+          {visitedTabs.has('importar')             && <div className={activeTab !== 'importar'             ? 'hidden' : ''}><ImportarProgramacao /></div>}
+          {visitedTabs.has('comercial')            && <div className={activeTab !== 'comercial'            ? 'hidden' : ''}><PainelComercial /></div>}
         </main>
       </SidebarInset>
     </SidebarProvider>
