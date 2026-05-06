@@ -180,23 +180,22 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   batelada{totalBateladas !== 1 ? 's' : ''} de{' '}
                   <span className="text-foreground font-bold">{formatKg(tamanhoBatelada)} kg</span> cada
                 </div>
-                <div className="flex items-center gap-2 bg-muted/60 border rounded-lg px-3 py-1.5">
+                <div className="flex items-center gap-3 bg-muted/60 border rounded-lg px-4 py-2">
                   <button
-                    className="flex items-center justify-center h-6 w-6 rounded hover:bg-background transition-colors disabled:opacity-30"
+                    className="flex items-center justify-center h-7 w-7 rounded-full border border-primary/40 hover:bg-background transition-colors disabled:opacity-30"
                     onClick={() => setBateladaAtual((b) => Math.max(1, b - 1))}
                     disabled={bateladaAtual <= 1}
                   >
-                    <Minus className="h-3.5 w-3.5 text-primary" />
+                    <Minus className="h-4 w-4 text-primary" />
                   </button>
-                  <span className="text-base font-extrabold text-primary tabular-nums w-6 text-center">
+                  <span className="text-lg font-extrabold text-primary tabular-nums w-7 text-center">
                     {bateladaAtual}
                   </span>
                   <button
-                    className="flex items-center justify-center h-6 w-6 rounded hover:bg-background transition-colors disabled:opacity-30"
-                    onClick={() => setBateladaAtual((b) => Math.min(totalBateladas + 1, b + 1))}
-                    disabled={bateladaAtual > totalBateladas}
+                    className="flex items-center justify-center h-7 w-7 rounded-full border border-primary/40 hover:bg-background transition-colors"
+                    onClick={() => setBateladaAtual((b) => b + 1)}
                   >
-                    <Plus className="h-3.5 w-3.5 text-primary" />
+                    <Plus className="h-4 w-4 text-primary" />
                   </button>
                 </div>
               </div>
