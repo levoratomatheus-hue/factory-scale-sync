@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
@@ -6,8 +6,10 @@ export function useOrdens(date?: string) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const today = date || format(new Date(), 'yyyy-MM-dd');
+  const lastFetchRef = useRef(0);
 
   const fetchOrdens = useCallback(async () => {
+    lastFetchRef.current = Date.now();
     let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, quantidade_real").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
@@ -29,7 +31,9 @@ export function useOrdens(date?: string) {
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(), 300);
+        debounceTimer = setTimeout(() => {
+          if (Date.now() - lastFetchRef.current > 600) fetchOrdens();
+        }, 300);
       })
       .subscribe();
     return () => {

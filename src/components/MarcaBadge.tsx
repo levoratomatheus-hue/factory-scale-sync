@@ -1,9 +1,11 @@
+import { memo } from 'react';
+
 interface MarcaBadgeProps {
   marca?: string | null;
   size?: "default" | "sm";
 }
 
-export function MarcaBadge({ marca, size = "default" }: MarcaBadgeProps) {
+export const MarcaBadge = memo(function MarcaBadge({ marca, size = "default" }: MarcaBadgeProps) {
   if (!marca) return null;
 
   if (marca === "Zan Collor") {
@@ -46,4 +48,4 @@ export function MarcaBadge({ marca, size = "default" }: MarcaBadgeProps) {
   }
 
   return null;
-}
+});

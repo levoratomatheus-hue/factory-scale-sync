@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
@@ -16,7 +17,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   concluido:             { label: 'Concluído',           className: 'bg-status-done-bg text-status-done' },
 };
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
+export const StatusBadge = memo(function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = STATUS_CONFIG[status];
 
   return (
@@ -30,4 +31,4 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
       {config ? config.label : status}
     </span>
   );
-}
+});
