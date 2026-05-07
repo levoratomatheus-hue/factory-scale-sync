@@ -244,7 +244,6 @@ function LabObsDialog({
 function SortableCard({
   ordem,
   registro,
-  currentDate,
   onReprogramarClick,
   onDblClick,
   onEditar,
@@ -259,7 +258,6 @@ function SortableCard({
 }: {
   ordem: Ordem;
   registro?: any;
-  currentDate: string;
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
@@ -286,7 +284,7 @@ function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ordem.motivo_reprovacao && ordem.data_programacao === currentDate ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ordem.motivo_reprovacao ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         onDblClick(ordem);
@@ -428,7 +426,6 @@ function LinhaColumn({
   linha,
   ordens,
   registrosDoDia,
-  currentDate,
   onReprogramarClick,
   onDblClick,
   onEditar,
@@ -444,7 +441,6 @@ function LinhaColumn({
   linha: number;
   ordens: Ordem[];
   registrosDoDia: Record<string, any>;
-  currentDate: string;
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
@@ -482,7 +478,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} currentDate={currentDate} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} />
+              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} />
             ))
           )}
         </div>
@@ -659,7 +655,7 @@ export default function PainelProgramacao() {
 
     const { error } = await supabase
       .from("ordens")
-      .update({ data_programacao: novaData } as any)
+      .update({ data_programacao: novaData, motivo_reprovacao: null } as any)
       .eq("id", id);
 
     if (error) {
@@ -994,7 +990,6 @@ export default function PainelProgramacao() {
                 linha={l}
                 ordens={ordensParaLinha(l)}
                 registrosDoDia={registrosDoDia}
-                currentDate={data}
                 onReprogramarClick={(o) => { setOrdemParaReprogramar(o); setNovaDataReprogramar(""); }}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
