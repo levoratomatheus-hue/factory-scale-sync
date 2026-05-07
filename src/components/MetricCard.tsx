@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
 interface MetricCardProps {
@@ -21,7 +22,7 @@ const valueStyles = {
   done: 'text-status-done',
 };
 
-export function MetricCard({ title, value, variant, icon }: MetricCardProps) {
+export const MetricCard = memo(function MetricCard({ title, value, variant, icon }: MetricCardProps) {
   return (
     <div className={cn('rounded-lg border p-4 bg-card', variantStyles[variant])}>
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
@@ -33,4 +34,4 @@ export function MetricCard({ title, value, variant, icon }: MetricCardProps) {
       </div>
     </div>
   );
-}
+});

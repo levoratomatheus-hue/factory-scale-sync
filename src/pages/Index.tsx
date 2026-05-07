@@ -1,19 +1,20 @@
-import { useState, useCallback, ReactNode } from 'react';
+import { useState, useCallback, ReactNode, lazy, Suspense } from 'react';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList } from 'lucide-react';
-import PainelGestor from './PainelGestor';
-import PainelBalanca from './PainelBalanca';
-import PainelMistura from './PainelMistura';
-import PainelLinha from './PainelLinha';
-import CriarOrdem from './CriarOrdem';
-import PainelHistorico from './PainelHistorico';
-import PainelAnalises from './PainelAnalises';
-import PainelLiberacao from './PainelLiberacao';
-import ImportarProgramacao from './ImportarProgramacao';
-import PainelProgramacao from './PainelProgramacao';
-import PainelProgramacaoBalanca from './PainelProgramacaoBalanca';
-import PainelConsultaFormula from './PainelConsultaFormula';
-import PainelComercial from './PainelComercial';
 import Login from './Login';
+
+const PainelGestor            = lazy(() => import('./PainelGestor'));
+const PainelBalanca           = lazy(() => import('./PainelBalanca'));
+const PainelMistura           = lazy(() => import('./PainelMistura'));
+const PainelLinha             = lazy(() => import('./PainelLinha'));
+const CriarOrdem              = lazy(() => import('./CriarOrdem'));
+const PainelHistorico         = lazy(() => import('./PainelHistorico'));
+const PainelAnalises          = lazy(() => import('./PainelAnalises'));
+const PainelLiberacao         = lazy(() => import('./PainelLiberacao'));
+const ImportarProgramacao     = lazy(() => import('./ImportarProgramacao'));
+const PainelProgramacao       = lazy(() => import('./PainelProgramacao'));
+const PainelProgramacaoBalanca = lazy(() => import('./PainelProgramacaoBalanca'));
+const PainelConsultaFormula   = lazy(() => import('./PainelConsultaFormula'));
+const PainelComercial         = lazy(() => import('./PainelComercial'));
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
@@ -156,7 +157,9 @@ export default function Index() {
         icon={<Scale className="h-4 w-4 shrink-0" />}
         onLogout={logout}
       >
-        <PainelBalanca balanca={parseInt(perfil.balanca)} />
+        <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+          <PainelBalanca balanca={parseInt(perfil.balanca)} />
+        </Suspense>
       </OperadorLayout>
     );
   }
@@ -169,7 +172,9 @@ export default function Index() {
         icon={<FlaskConical className="h-4 w-4 shrink-0" />}
         onLogout={logout}
       >
-        <PainelMistura />
+        <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+          <PainelMistura />
+        </Suspense>
       </OperadorLayout>
     );
   }
@@ -183,7 +188,9 @@ export default function Index() {
         icon={<Factory className="h-4 w-4 shrink-0" />}
         onLogout={logout}
       >
-        <PainelLinha linha={linhaNum} />
+        <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+          <PainelLinha linha={linhaNum} />
+        </Suspense>
       </OperadorLayout>
     );
   }
@@ -238,7 +245,9 @@ export default function Index() {
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
           <main className="p-6 overflow-x-hidden">
-            <PainelComercial />
+            <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+              <PainelComercial />
+            </Suspense>
           </main>
         </SidebarInset>
       </SidebarProvider>
@@ -355,24 +364,26 @@ export default function Index() {
           <span className="font-semibold text-sm">{activeLabel}</span>
         </header>
         <main className="p-6 overflow-x-hidden">
-          {activeTab === 'gestor'              && <PainelGestor onCriarOP={handleCriarOP} />}
-          {activeTab === 'programacao'         && <PainelProgramacao />}
-          {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
-          {activeTab === 'criar'               && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
-          {activeTab === 'balanca1'            && <PainelBalanca balanca={1} />}
-          {activeTab === 'balanca2'            && <PainelBalanca balanca={2} />}
-          {activeTab === 'mistura'             && <PainelMistura />}
-          {activeTab === 'linha1'              && <PainelLinha linha={1} />}
-          {activeTab === 'linha2'              && <PainelLinha linha={2} />}
-          {activeTab === 'linha3'              && <PainelLinha linha={3} />}
-          {activeTab === 'linha4'              && <PainelLinha linha={4} />}
-          {activeTab === 'linha5'              && <PainelLinha linha={5} />}
-          {activeTab === 'liberacao'           && <PainelLiberacao />}
-          {activeTab === 'historico'           && <PainelHistorico />}
-          {activeTab === 'consulta_formula'    && <PainelConsultaFormula />}
-          {activeTab === 'analises'            && <PainelAnalises />}
-          {activeTab === 'importar'            && <ImportarProgramacao />}
-          {activeTab === 'comercial'           && <PainelComercial />}
+          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+            {activeTab === 'gestor'              && <PainelGestor onCriarOP={handleCriarOP} />}
+            {activeTab === 'programacao'         && <PainelProgramacao />}
+            {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
+            {activeTab === 'criar'               && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
+            {activeTab === 'balanca1'            && <PainelBalanca balanca={1} />}
+            {activeTab === 'balanca2'            && <PainelBalanca balanca={2} />}
+            {activeTab === 'mistura'             && <PainelMistura />}
+            {activeTab === 'linha1'              && <PainelLinha linha={1} />}
+            {activeTab === 'linha2'              && <PainelLinha linha={2} />}
+            {activeTab === 'linha3'              && <PainelLinha linha={3} />}
+            {activeTab === 'linha4'              && <PainelLinha linha={4} />}
+            {activeTab === 'linha5'              && <PainelLinha linha={5} />}
+            {activeTab === 'liberacao'           && <PainelLiberacao />}
+            {activeTab === 'historico'           && <PainelHistorico />}
+            {activeTab === 'consulta_formula'    && <PainelConsultaFormula />}
+            {activeTab === 'analises'            && <PainelAnalises />}
+            {activeTab === 'importar'            && <ImportarProgramacao />}
+            {activeTab === 'comercial'           && <PainelComercial />}
+          </Suspense>
         </main>
       </SidebarInset>
     </SidebarProvider>

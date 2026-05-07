@@ -104,7 +104,9 @@ export default function PainelLiberacao() {
 
     // Busca todas as paradas de uma vez e distribui por OP
     const paradaMap: Record<string, any[]> = {};
-    const allDatas = [...new Set(Object.values(regMap).flatMap((regs) => regs.map((r: any) => r.data)))];
+    const allDatasSet = new Set<string>();
+    Object.values(regMap).forEach((regs) => regs.forEach((r: any) => allDatasSet.add(r.data)));
+    const allDatas = [...allDatasSet];
     const allLinhas = [...new Set(data.map((o: any) => o.linha).filter(Boolean))];
     if (allDatas.length > 0 && allLinhas.length > 0) {
       const { data: todasParadas } = await (supabase as any)
