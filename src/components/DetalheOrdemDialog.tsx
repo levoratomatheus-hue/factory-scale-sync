@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowRight, FlaskConical } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -172,7 +172,20 @@ export function DetalheOrdemDialog({
               </section>
             )}
 
-            {/* 5. Reprovações */}
+            {/* 5. Observações do Laboratório */}
+            {ordem.obs_laboratorio && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <FlaskConical className="h-3.5 w-3.5 text-violet-500" />
+                  Observações do Laboratório
+                </h3>
+                <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 whitespace-pre-wrap">
+                  {ordem.obs_laboratorio}
+                </div>
+              </section>
+            )}
+
+            {/* 6. Reprovações */}
             {(reprovaCount > 0 || ordem.motivo_reprovacao) && (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -187,7 +200,7 @@ export function DetalheOrdemDialog({
               </section>
             )}
 
-            {/* 6. Timeline de status */}
+            {/* 7. Timeline de status */}
             <div className="hidden">
             {hist.length > 0 && (
               <section className="space-y-2">
@@ -218,7 +231,7 @@ export function DetalheOrdemDialog({
             )}
             </div>
 
-            {/* 7. Registros diários */}
+            {/* 8. Registros diários */}
             {registros.length > 0 ? (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -269,7 +282,7 @@ export function DetalheOrdemDialog({
               </section>
             )}
 
-            {/* 8. Paradas */}
+            {/* 9. Paradas */}
             {paradas.length > 0 && (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Paradas ({paradas.length})</h3>

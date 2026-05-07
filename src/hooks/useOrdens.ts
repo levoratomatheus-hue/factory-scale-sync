@@ -111,7 +111,7 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
     setLoading(true);
     let query = supabase
       .from("ordens")
-      .select("id, lote, produto, quantidade, hora_inicio, hora_fim, quantidade_real, linha, balanca, data_programacao, status, marca, data_conclusao, formula_id, obs")
+      .select("id, lote, produto, quantidade, hora_inicio, hora_fim, quantidade_real, linha, balanca, data_programacao, status, marca, data_conclusao, formula_id, obs, obs_laboratorio, obs_linha, motivo_reprovacao")
       .eq("status", "concluido")
       .order("data_conclusao", { ascending: false })
       .limit(500);
