@@ -471,13 +471,19 @@ export default function PainelAnalises() {
     const TURNO_H = 9;
     const MOTIVOS_PARADA = ["manutencao", "sem_material", "problema_processo", "falta_energia"] as const;
     const horasPorLinha = [1, 2, 3, 4, 5].map((linha) => {
-      const ol = ordens.filter((o) => Number(o.linha) === linha);
-      const diasReg = diasLinhaMap[linha];
-      const diasSet = diasReg && diasReg.size > 0
-        ? diasReg
-        : new Set(ol.map((o) => o.data_programacao));
-      const diasComOP = diasSet.size;
-      const horasTrabalhadas = ol.reduce((s, o) => s + (horasMap[o.id] ?? 0), 0);
+      const diasComOP = diasLinhaMap[linha]?.size ?? 0;
+      const toH = (t: string | null) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
+      const horasTrabalhadas = registrosDiariosRaw
+        .filter((r: any) => Number(r.ordens?.linha) === linha &&
+          (!materialFiltro || ordensAnuaisIds.has(r.ordem_id)))
+        .reduce((s: number, r: any) => {
+          const h = parseHoras(r.hora_inicio, r.hora_fim);
+          if (h === null) return s;
+          const hp = (paradasIdx.get(`${linha}-${r.data}`) ?? [])
+            .filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+            .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
+          return s + Math.max(0, h - hp);
+        }, 0);
       const paradasLinha = paradas.filter((p) => Number(p.linha) === linha);
       const porMotivo = Object.fromEntries(
         MOTIVOS_PARADA.map((m) => [
