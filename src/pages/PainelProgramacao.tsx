@@ -492,13 +492,13 @@ function LinhaColumn({
           Total:{" "}
           <span className="font-semibold text-foreground">
             {formatKg(ordens.reduce((acc, o) => {
-              if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
               const reg = registrosDoDia[o.id];
               if (reg?.registro_producao) {
                 const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
                 const produzido = items.reduce((s, it) => s + (it.qty || 0) * (it.peso || 0), 0);
                 if (produzido > 0) return acc + produzido;
               }
+              if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
               return acc + (Number(o.quantidade) || 0);
             }, 0))} kg
           </span>
