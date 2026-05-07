@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -51,6 +51,7 @@ interface Ordem {
   data_programacao: string;
   data_emissao: string | null;
   quantidade_real: number | null;
+  obs_linha: string | null;
   motivo_reprovacao: string | null;
 }
 
@@ -287,7 +288,7 @@ function SortableCard({
       className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ordem.motivo_reprovacao ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
-        onDblClick(ordem);
+        onVerDetalhes(ordem);
       }}
     >
       {/* Grip */}
@@ -401,6 +402,15 @@ function SortableCard({
             title="Voltar para Fila"
           >
             <Undo2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {ordem.formula_id && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }}
+            className="text-muted-foreground/50 hover:text-primary"
+            title="Ver fórmula"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
           </button>
         )}
         <button
@@ -547,7 +557,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
-    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao";
+    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao";
 
     // Busca em paralelo: OPs programadas para a data + registros do dia
     const [{ data: programadas }, { data: regs }] = await Promise.all([
