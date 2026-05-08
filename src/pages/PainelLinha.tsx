@@ -28,6 +28,60 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+function FormulaViewDialog({ ordem, onClose }: { ordem: any | null; onClose: () => void }) {
+  const { itens, loading } = useFormula(ordem?.formula_id ?? null, ordem?.tamanho_batelada ?? null);
+  if (!ordem) return null;
+  const nbat = ordem.tamanho_batelada > 0 ? Math.round(ordem.quantidade / ordem.tamanho_batelada) : null;
+  return (
+    <Dialog open={!!ordem} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{ordem.produto}</DialogTitle>
+        </DialogHeader>
+        <div className="text-sm text-muted-foreground space-y-0.5 mb-2">
+          <p>Lote <span className="font-medium text-foreground">{ordem.lote}</span></p>
+          <p>
+            Quantidade: <span className="font-semibold text-foreground">{formatKg(ordem.quantidade)} kg</span>
+            {nbat && <> · <span className="font-semibold text-foreground">{nbat}</span> batelada{nbat !== 1 ? "s" : ""} de <span className="font-semibold text-foreground">{ordem.tamanho_batelada} kg</span></>}
+          </p>
+          {ordem.formula_id && <p>Fórmula: <span className="font-medium text-foreground">{ordem.formula_id}</span></p>}
+        </div>
+        {!ordem.formula_id ? (
+          <p className="text-sm text-muted-foreground text-center py-6">Sem fórmula vinculada</p>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        ) : itens.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">Fórmula sem itens cadastrados</p>
+        ) : (
+          <div className="overflow-y-auto flex-1 rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-muted-foreground sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2">Seq</th>
+                  <th className="text-left px-3 py-2">Matéria-Prima</th>
+                  <th className="text-left px-3 py-2">Un</th>
+                  <th className="text-right px-3 py-2">%</th>
+                  <th className="text-right px-3 py-2">Qtd (kg)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itens.map((item) => (
+                  <tr key={item.id} className="border-t">
+                    <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? "-"}</td>
+                    <td className="px-3 py-2 font-medium">{item.materia_prima}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? "-"}</td>
+                    <td className="px-3 py-2 text-right">{item.percentual.toFixed(2).replace(".", ",")}%</td>
+                    <td className="px-3 py-2 text-right font-bold">{formatKg(item.quantidade_kg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const MOTIVOS: Record<string, string> = {
   manutencao: "Manutenção",
@@ -58,6 +112,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [prodItems, setProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [obsLinha, setObsLinha] = useState("");
   const [savingDia, setSavingDia] = useState(false);
+
+  const [ordemFormula, setOrdemFormula] = useState<any | null>(null);
 
   // Paradas
   const { paradas, fetchParadas } = useParadasLinha(linha, today);
@@ -680,7 +736,11 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Próximas ordens</h2>
           <div className="space-y-2">
             {emAberto.map((ordem, i) => (
-              <div key={ordem.id} className="bg-card rounded-lg border p-3 flex items-center gap-3">
+              <div
+                key={ordem.id}
+                className="bg-card rounded-lg border p-3 flex items-center gap-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                onClick={() => setOrdemFormula(ordem)}
+              >
                 <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-muted-foreground font-bold text-sm shrink-0">
                   {i + 1}
                 </div>
@@ -700,7 +760,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   )}
                 </div>
                 {!emLinha && (
-                  <Button size="sm" variant="outline" onClick={() => iniciarOrdem(ordem)} className="shrink-0">
+                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); iniciarOrdem(ordem); }} className="shrink-0">
                     <Play className="mr-1 h-3 w-3" />
                     Iniciar
                   </Button>
@@ -710,6 +770,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           </div>
         </div>
       )}
+
+      <FormulaViewDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} />
 
       {/* Dialog: Paradas do Dia */}
       <Dialog open={paradasListOpen} onOpenChange={setParadasListOpen}>
