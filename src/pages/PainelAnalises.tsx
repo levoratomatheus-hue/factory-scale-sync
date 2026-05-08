@@ -418,28 +418,31 @@ export default function PainelAnalises() {
 
     const producaoTotal = Object.values(kgPorOrdem).reduce((s, v) => s + v, 0);
 
+    // kg/hora e contagem de OPs baseados nos registros diários (inclui OPs em aberto)
+    const uniqueIdsGeral = new Set<string>(Object.keys(kgPorOrdem));
     let totalKgComHora = 0, totalHoras = 0;
-    ordens.forEach((o) => {
-      const h = horasMap[o.id] ?? null;
-      if (h !== null) { totalKgComHora += kgPorOrdem[o.id] || 0; totalHoras += h; }
+    uniqueIdsGeral.forEach((id) => {
+      const h = horasMap[id] ?? null;
+      if (h !== null) { totalKgComHora += kgPorOrdem[id] || 0; totalHoras += h; }
     });
     const mediaKgHora = totalHoras > 0 ? totalKgComHora / totalHoras : 0;
 
     const porLinha = [1, 2, 3, 4, 5].map((linha) => {
-      const totalKg = registrosDiariosRaw
-        .filter((r: any) => Number(r.ordens?.linha) === linha &&
-          (!materialFiltro || ordensAnuaisIds.has(r.ordem_id)))
-        .reduce((s: number, r: any) => {
-          const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-          return s + items.reduce((ss: number, it: any) => ss + (it.qty || 0) * (it.peso || 0), 0);
-        }, 0);
-      const ol = ordens.filter((o) => Number(o.linha) === linha);
+      const regsLinha = registrosDiariosRaw.filter((r: any) =>
+        Number(r.ordens?.linha) === linha &&
+        (!materialFiltro || ordensAnuaisIds.has(r.ordem_id))
+      );
+      const totalKg = regsLinha.reduce((s: number, r: any) => {
+        const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+        return s + items.reduce((ss: number, it: any) => ss + (it.qty || 0) * (it.peso || 0), 0);
+      }, 0);
+      const uniqueIds = new Set<string>(regsLinha.map((r: any) => r.ordem_id));
       let kgH = 0, hH = 0;
-      ol.forEach((o) => {
-        const h = horasMap[o.id] ?? null;
-        if (h !== null) { kgH += kgPorOrdem[o.id] || 0; hH += h; }
+      uniqueIds.forEach((id) => {
+        const h = horasMap[id] ?? null;
+        if (h !== null) { kgH += kgPorOrdem[id] || 0; hH += h; }
       });
-      return { linha, totalKg, media: hH > 0 ? kgH / hH : 0, ops: ol.length };
+      return { linha, totalKg, media: hH > 0 ? kgH / hH : 0, ops: uniqueIds.size };
     });
 
     const dadosFaixas = FAIXAS.map(({ label, min, max }) => {
