@@ -244,7 +244,7 @@ function LabObsDialog({
 
 function SortableCard({
   ordem,
-  registro,
+  registros,
   onReprogramarClick,
   onDblClick,
   onEditar,
@@ -258,7 +258,7 @@ function SortableCard({
   onEditarRegistro,
 }: {
   ordem: Ordem;
-  registro?: any;
+  registros?: any[];
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
@@ -313,37 +313,51 @@ function SortableCard({
           </p>
         )}
         <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
-        {!registro && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+        {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
           <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded px-1 py-0 leading-4">
             <Clock className="h-2.5 w-2.5 shrink-0" />
             aguardando registro
           </span>
         )}
-        {(() => {
-          const items: any[] = registro && Array.isArray(registro.registro_producao) ? registro.registro_producao : [];
-          const registroTotal = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-          const exibirKg = ordem.status === "concluido" && ordem.quantidade_real != null
+        {registros && registros.length > 0 && (() => {
+          const totalKg = registros.reduce((acc: number, reg: any) => {
+            const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
+            return acc + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+          }, 0);
+          const exibirTotal = ordem.status === "concluido" && ordem.quantidade_real != null
             ? ordem.quantidade_real
-            : registroTotal > 0 ? registroTotal : null;
-          const hi = registro?.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : null;
-          const hf = registro?.hora_fim ? String(registro.hora_fim).slice(0, 5) : null;
-          if (exibirKg == null && !(hi && hf)) return null;
+            : totalKg > 0 ? totalKg : null;
           return (
-            <span className="inline-flex items-center gap-0.5">
-              <span className="inline-flex flex-col gap-0 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
-                {exibirKg != null && <span>{exibirKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
-                {hi && hf && <span>{hi}–{hf}</span>}
-              </span>
-              {registro && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, registro); }}
-                  className="text-blue-400 hover:text-blue-600"
-                  title="Editar registro do dia"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
+            <div className="flex flex-col gap-0.5">
+              {registros.map((reg: any) => {
+                const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
+                const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+                const hi = reg.hora_inicio ? String(reg.hora_inicio).slice(0, 5) : null;
+                const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
+                const dataFmt = reg.data ? format(new Date(reg.data + "T12:00:00"), "dd/MM") : "";
+                return (
+                  <span key={reg.id} className="inline-flex items-center gap-0.5">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
+                      <span>{dataFmt}</span>
+                      {kg > 0 && <span>· {kg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
+                      {hi && hf && <span>· {hi}–{hf}</span>}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
+                      className="text-blue-400 hover:text-blue-600"
+                      title="Editar registro"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+              {registros.length > 1 && exibirTotal != null && (
+                <span className="text-[10px] font-mono text-blue-800 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight font-semibold">
+                  Total: {exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg
+                </span>
               )}
-            </span>
+            </div>
           );
         })()}
         {atrasado && (
@@ -450,7 +464,7 @@ function LinhaColumn({
 }: {
   linha: number;
   ordens: Ordem[];
-  registrosDoDia: Record<string, any>;
+  registrosDoDia: Record<string, any[]>;
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
@@ -488,7 +502,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registro={registrosDoDia[ordem.id]} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? []} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} />
             ))
           )}
         </div>
@@ -498,12 +512,12 @@ function LinhaColumn({
           Total:{" "}
           <span className="font-semibold text-foreground">
             {formatKg(ordens.reduce((acc, o) => {
-              const reg = registrosDoDia[o.id];
-              if (reg?.registro_producao) {
+              const regs = registrosDoDia[o.id] ?? [];
+              const produzido = regs.reduce((sum: number, reg: any) => {
                 const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
-                const produzido = items.reduce((s, it) => s + (it.qty || 0) * (it.peso || 0), 0);
-                if (produzido > 0) return acc + produzido;
-              }
+                return sum + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+              }, 0);
+              if (produzido > 0) return acc + produzido;
               if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
               return acc + (Number(o.quantidade) || 0);
             }, 0))} kg
@@ -522,7 +536,7 @@ export default function PainelProgramacao() {
   const [ordemFormula, setOrdemFormula] = useState<Ordem | null>(null);
   const [ordemEditando, setOrdemEditando] = useState<Ordem | null>(null);
   const [ordemParaExcluir, setOrdemParaExcluir] = useState<Ordem | null>(null);
-  const [registrosDoDia, setRegistrosDoDia] = useState<Record<string, any>>({});
+  const [registrosDoDia, setRegistrosDoDia] = useState<Record<string, any[]>>({});
   const [excluindo, setExcluindo] = useState(false);
   const [ordemParaVoltar, setOrdemParaVoltar] = useState<Ordem | null>(null);
   const [voltando, setVoltando] = useState(false);
@@ -559,8 +573,8 @@ export default function PainelProgramacao() {
     if (showLoading) setLoading(true);
     const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao";
 
-    // Busca em paralelo: OPs programadas para a data + registros do dia
-    const [{ data: programadas }, { data: regs }] = await Promise.all([
+    // Busca em paralelo: OPs programadas + IDs de registros desta data (para detectar extra OPs)
+    const [{ data: programadas }, { data: regsHoje }] = await Promise.all([
       supabase
         .from("ordens")
         .select(fields)
@@ -569,18 +583,14 @@ export default function PainelProgramacao() {
         .order("posicao", { ascending: true, nullsFirst: false }),
       (supabase as any)
         .from("registros_diarios")
-        .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
+        .select("ordem_id")
         .eq("data", dataSel),
     ]);
 
-    // Mapa de registros do dia
-    const regMap: Record<string, any> = {};
-    (regs ?? []).forEach((r: any) => { regMap[r.ordem_id] = r; });
-    setRegistrosDoDia(regMap);
-
     // OPs com registro nesta data mas data_programacao diferente
     const programadasIds = new Set((programadas ?? []).map((o: any) => o.id));
-    const extraIds = Object.keys(regMap).filter((id) => !programadasIds.has(id));
+    const extraIds = [...new Set((regsHoje ?? []).map((r: any) => r.ordem_id))]
+      .filter((id: string) => !programadasIds.has(id));
 
     let extraOrdens: Ordem[] = [];
     if (extraIds.length > 0) {
@@ -594,6 +604,22 @@ export default function PainelProgramacao() {
 
     const all = [...(programadas ?? []) as Ordem[], ...extraOrdens];
     const deduped = [...new Map(all.map((o) => [o.id, o])).values()];
+
+    // Busca TODOS os registros das OPs exibidas (sem filtro de data)
+    const allIds = deduped.map((o) => o.id);
+    const regsPorOrdem: Record<string, any[]> = {};
+    if (allIds.length > 0) {
+      const { data: allRegs } = await (supabase as any)
+        .from("registros_diarios")
+        .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
+        .in("ordem_id", allIds)
+        .order("data", { ascending: true });
+      (allRegs ?? []).forEach((r: any) => {
+        if (!regsPorOrdem[r.ordem_id]) regsPorOrdem[r.ordem_id] = [];
+        regsPorOrdem[r.ordem_id].push(r);
+      });
+    }
+    setRegistrosDoDia(regsPorOrdem);
     setOrdens(deduped);
     setLoading(false);
   };
