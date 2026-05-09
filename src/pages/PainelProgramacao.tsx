@@ -324,9 +324,7 @@ function SortableCard({
             const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
             return acc + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
           }, 0);
-          const exibirTotal = ordem.status === "concluido" && ordem.quantidade_real != null
-            ? ordem.quantidade_real
-            : totalKg > 0 ? totalKg : null;
+          const exibirTotal = totalKg > 0 ? totalKg : null;
           return (
             <div className="rounded border border-blue-200 bg-blue-50 text-[10px] font-mono text-blue-700 overflow-hidden">
               {registros.map((reg: any, i: number) => {
