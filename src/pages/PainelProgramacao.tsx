@@ -328,34 +328,33 @@ function SortableCard({
             ? ordem.quantidade_real
             : totalKg > 0 ? totalKg : null;
           return (
-            <div className="flex flex-col gap-0.5">
-              {registros.map((reg: any) => {
+            <div className="rounded border border-blue-200 bg-blue-50 text-[10px] font-mono text-blue-700 overflow-hidden">
+              {registros.map((reg: any, i: number) => {
                 const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
                 const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
                 const hi = reg.hora_inicio ? String(reg.hora_inicio).slice(0, 5) : null;
                 const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
                 const dataFmt = reg.data ? format(new Date(reg.data + "T12:00:00"), "dd/MM") : "";
                 return (
-                  <span key={reg.id} className="inline-flex items-center gap-0.5">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
-                      <span>{dataFmt}</span>
-                      {kg > 0 && <span>· {kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>}
-                      {hi && hf && <span>· {hi}–{hf}</span>}
-                    </span>
+                  <div key={reg.id} className={`flex items-center gap-1 px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200" : ""}`}>
+                    <span className="w-[30px] shrink-0">{dataFmt}</span>
+                    <span className="flex-1 text-right">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
+                    <span className="shrink-0 text-blue-500">{hi && hf ? `${hi}–${hf}` : ""}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
-                      className="text-blue-400 hover:text-blue-600"
+                      className="text-blue-400 hover:text-blue-600 shrink-0"
                       title="Editar registro"
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
-                  </span>
+                  </div>
                 );
               })}
               {registros.length > 1 && exibirTotal != null && (
-                <span className="text-[10px] font-mono text-blue-800 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight font-semibold">
-                  Total: {exibirTotal != null ? exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) : "0"} kg
-                </span>
+                <div className="flex items-center gap-1 px-1.5 py-0.5 border-t border-blue-300 bg-blue-100 font-semibold text-blue-800">
+                  <span className="w-[30px] shrink-0">Total</span>
+                  <span className="flex-1 text-right">{exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>
+                </div>
               )}
             </div>
           );
