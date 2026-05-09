@@ -338,8 +338,8 @@ function SortableCard({
                 return (
                   <div key={reg.id} className={`flex items-center gap-1 px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200" : ""}`}>
                     <span className="w-[30px] shrink-0">{dataFmt}</span>
-                    <span className="flex-1 text-right">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
-                    <span className="shrink-0 text-blue-500">{hi && hf ? `${hi}–${hf}` : ""}</span>
+                    <span className="flex-1 text-right whitespace-nowrap">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
+                    <span className="shrink-0 text-blue-500 whitespace-nowrap">{hi && hf ? `${hi}–${hf}` : ""}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
                       className="text-blue-400 hover:text-blue-600 shrink-0"
@@ -353,7 +353,7 @@ function SortableCard({
               {registros.length > 1 && exibirTotal != null && (
                 <div className="flex items-center gap-1 px-1.5 py-0.5 border-t border-blue-300 bg-blue-100 font-semibold text-blue-800">
                   <span className="w-[30px] shrink-0">Total</span>
-                  <span className="flex-1 text-right">{exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>
+                  <span className="flex-1 text-right whitespace-nowrap">{exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>
                 </div>
               )}
             </div>
