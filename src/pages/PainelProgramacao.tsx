@@ -339,7 +339,7 @@ function SortableCard({
                   <span key={reg.id} className="inline-flex items-center gap-0.5">
                     <span className="inline-flex items-center gap-1 text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight">
                       <span>{dataFmt}</span>
-                      {kg > 0 && <span>· {kg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>}
+                      {kg > 0 && <span>· {formatKg(kg)} kg</span>}
                       {hi && hf && <span>· {hi}–{hf}</span>}
                     </span>
                     <button
@@ -354,7 +354,7 @@ function SortableCard({
               })}
               {registros.length > 1 && exibirTotal != null && (
                 <span className="text-[10px] font-mono text-blue-800 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-tight font-semibold">
-                  Total: {exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg
+                  Total: {formatKg(exibirTotal)} kg
                 </span>
               )}
             </div>
