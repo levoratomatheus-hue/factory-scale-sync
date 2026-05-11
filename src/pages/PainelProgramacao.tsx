@@ -719,14 +719,14 @@ export default function PainelProgramacao() {
     setSalvandoEmissao(true);
     const { error } = await supabase
       .from("ordens")
-      .update({ data_emissao: novaDataEmissao || null } as any)
+      .update({ data_emissao: novaDataEmissao || null, criado_em: novaDataEmissao || null } as any)
       .eq("id", ordemEditandoEmissao.id);
     setSalvandoEmissao(false);
     if (error) {
       toast({ title: "Erro ao salvar data de emissão", description: error.message, variant: "destructive" });
       return;
     }
-    setOrdens((prev) => prev.map((o) => o.id === ordemEditandoEmissao.id ? { ...o, data_emissao: novaDataEmissao || null } : o));
+    setOrdens((prev) => prev.map((o) => o.id === ordemEditandoEmissao.id ? { ...o, data_emissao: novaDataEmissao || null, criado_em: novaDataEmissao || null } : o));
     toast({ title: "Data de emissão atualizada" });
     setOrdemEditandoEmissao(null);
     setNovaDataEmissao("");
