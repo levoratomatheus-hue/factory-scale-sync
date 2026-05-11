@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -256,6 +256,7 @@ function SortableCard({
   onLab,
   onToggleConfirmado,
   onEditarRegistro,
+  onEditarEmissao,
 }: {
   ordem: Ordem;
   registros?: any[];
@@ -270,6 +271,7 @@ function SortableCard({
   onVerDetalhes: (ordem: Ordem) => void;
   onLab: (ordem: Ordem) => void;
   onToggleConfirmado: (ordem: Ordem) => void;
+  onEditarEmissao: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -382,6 +384,13 @@ function SortableCard({
           <Pencil className="h-3.5 w-3.5" />
         </button>
         <button
+          onClick={(e) => { e.stopPropagation(); onEditarEmissao(ordem); }}
+          className={`${ordem.data_emissao ? "text-muted-foreground/70 hover:text-amber-500" : "text-muted-foreground/50 hover:text-amber-500"}`}
+          title="Editar data de emissão"
+        >
+          <CalendarRange className="h-3.5 w-3.5" />
+        </button>
+        <button
           onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
           className="text-muted-foreground/50 hover:text-primary"
           title="Reprogramar"
@@ -458,6 +467,7 @@ function LinhaColumn({
   onLab,
   onToggleConfirmado,
   onEditarRegistro,
+  onEditarEmissao,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -473,6 +483,7 @@ function LinhaColumn({
   onLab: (ordem: Ordem) => void;
   onToggleConfirmado: (ordem: Ordem) => void;
   onEditarRegistro: (ordem: Ordem, registro: any) => void;
+  onEditarEmissao: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -499,7 +510,7 @@ function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? []} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? []} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onEditarEmissao={onEditarEmissao} />
             ))
           )}
         </div>
@@ -547,6 +558,9 @@ export default function PainelProgramacao() {
   const [ordemParaReprogramar, setOrdemParaReprogramar] = useState<Ordem | null>(null);
   const [novaDataReprogramar, setNovaDataReprogramar] = useState("");
   const [salvandoReprogramar, setSalvandoReprogramar] = useState(false);
+  const [ordemEditandoEmissao, setOrdemEditandoEmissao] = useState<Ordem | null>(null);
+  const [novaDataEmissao, setNovaDataEmissao] = useState("");
+  const [salvandoEmissao, setSalvandoEmissao] = useState(false);
   const [ordemDetalhe, setOrdemDetalhe] = useState<Ordem | null>(null);
   const [regDia, setRegDia] = useState(todayStr);
   const [regHoraInicio, setRegHoraInicio] = useState("");
@@ -698,6 +712,24 @@ export default function PainelProgramacao() {
       setOrdens((prev) => prev.filter((o) => o.id !== id));
       toast({ title: "Ordem reprogramada com sucesso" });
     }
+  };
+
+  const handleSalvarEmissao = async () => {
+    if (!ordemEditandoEmissao) return;
+    setSalvandoEmissao(true);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ data_emissao: novaDataEmissao || null } as any)
+      .eq("id", ordemEditandoEmissao.id);
+    setSalvandoEmissao(false);
+    if (error) {
+      toast({ title: "Erro ao salvar data de emissão", description: error.message, variant: "destructive" });
+      return;
+    }
+    setOrdens((prev) => prev.map((o) => o.id === ordemEditandoEmissao.id ? { ...o, data_emissao: novaDataEmissao || null } : o));
+    toast({ title: "Data de emissão atualizada" });
+    setOrdemEditandoEmissao(null);
+    setNovaDataEmissao("");
   };
 
   const handleMoverLinha = async (id: string, novaLinha: number) => {
@@ -1037,6 +1069,7 @@ export default function PainelProgramacao() {
                 onLab={setOrdemLab}
                 onToggleConfirmado={handleToggleConfirmado}
                 onEditarRegistro={handleEditarRegistro}
+                onEditarEmissao={(o) => { setOrdemEditandoEmissao(o); setNovaDataEmissao(o.data_emissao ?? ""); }}
               />
             ))}
           </div>
@@ -1081,6 +1114,40 @@ export default function PainelProgramacao() {
               }}
             >
               {salvandoReprogramar && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!ordemEditandoEmissao}
+        onOpenChange={(open) => { if (!open) { setOrdemEditandoEmissao(null); setNovaDataEmissao(""); } }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar Data de Emissão</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemEditandoEmissao?.produto}</span>
+              <br />
+              Altere a data em que a OP foi emitida.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-1.5">
+            <label className="text-sm font-medium">Data de emissão</label>
+            <input
+              type="date"
+              value={novaDataEmissao}
+              onChange={(e) => setNovaDataEmissao(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemEditandoEmissao(null)} disabled={salvandoEmissao}>
+              Cancelar
+            </Button>
+            <Button disabled={salvandoEmissao} onClick={handleSalvarEmissao}>
+              {salvandoEmissao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar
             </Button>
           </DialogFooter>
