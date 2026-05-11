@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -242,7 +242,7 @@ const LabObsDialog = memo(function LabObsDialog({
   );
 });
 
-function SortableCard({
+const SortableCard = memo(function SortableCard({
   ordem,
   registros,
   onReprogramarClick,
@@ -450,9 +450,9 @@ function SortableCard({
       </div>
     </div>
   );
-}
+});
 
-function LinhaColumn({
+const LinhaColumn = memo(function LinhaColumn({
   linha,
   ordens,
   registrosDoDia,
@@ -534,7 +534,7 @@ function LinhaColumn({
       </div>
     </div>
   );
-}
+});
 
 export default function PainelProgramacao() {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -580,7 +580,10 @@ export default function PainelProgramacao() {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
-  const fetchOrdens = async (dataSel: string, showLoading = true) => {
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  const fetchOrdens = useCallback(async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
     const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao";
 
@@ -633,23 +636,28 @@ export default function PainelProgramacao() {
     setRegistrosDoDia(regsPorOrdem);
     setOrdens(deduped);
     setLoading(false);
-  };
+  }, []);
 
+  // Re-busca ao mudar o dia
   useEffect(() => {
     fetchOrdens(data);
+  }, [data, fetchOrdens]);
+
+  // Subscription criada apenas uma vez — usa dataRef para sempre pegar o dia atual
+  useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel('programacao-ordens')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(data, false), 500);
+        debounceTimer = setTimeout(() => fetchOrdens(dataRef.current, false), 500);
       })
       .subscribe();
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
-  }, [data]);
+  }, [fetchOrdens]);
 
   const handleReorder = async (linha: number, reordered: Ordem[]) => {
     const anterior = ordens;
@@ -675,7 +683,22 @@ export default function PainelProgramacao() {
     }
   };
 
-  const handleToggleConfirmado = async (ordem: Ordem) => {
+  const handleReprogramarClick = useCallback((o: Ordem) => {
+    setOrdemParaReprogramar(o);
+    setNovaDataReprogramar("");
+  }, []);
+
+  const handleRegistrarDiaClick = useCallback((o: Ordem) => {
+    setOrdemParaRegistrar(o);
+    setRegDia(o.data_programacao);
+  }, []);
+
+  const handleEditarEmissaoClick = useCallback((o: Ordem) => {
+    setOrdemEditandoEmissao(o);
+    setNovaDataEmissao(o.data_emissao ?? "");
+  }, []);
+
+  const handleToggleConfirmado = useCallback(async (ordem: Ordem) => {
     const novoValor = !ordem.programacao_confirmada;
     setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: novoValor } : o));
     const { error } = await supabase
@@ -686,7 +709,7 @@ export default function PainelProgramacao() {
       setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: ordem.programacao_confirmada } : o));
       toast({ title: "Erro ao atualizar confirmação", description: error.message, variant: "destructive" });
     }
-  };
+  }, []);
 
   const handleReprogramar = async (id: string, novaData: string) => {
     const ordem = ordens.find((o) => o.id === id);
@@ -950,7 +973,7 @@ export default function PainelProgramacao() {
     }
   };
 
-  const handleEditarRegistro = (ordem: Ordem, registro: any) => {
+  const handleEditarRegistro = useCallback((ordem: Ordem, registro: any) => {
     setEditRegOrdem(ordem);
     setEditRegRegistro(registro);
     setEditRegHoraInicio(registro.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : "");
@@ -961,7 +984,7 @@ export default function PainelProgramacao() {
         ? existingItems.map((it: any) => ({ qty: String(it.qty ?? ""), peso: String(it.peso ?? "").replace(".", ",") }))
         : [{ qty: "", peso: "" }, { qty: "", peso: "" }]
     );
-  };
+  }, []);
 
   const handleSalvarEditarRegistro = async () => {
     if (!editRegOrdem || !editRegRegistro) return;
@@ -987,6 +1010,12 @@ export default function PainelProgramacao() {
   };
 
   const ordensParaLinha = useCallback((l: number) => sortOrdens(ordens.filter((o) => o.linha === l)), [ordens]);
+
+  const ordensPerLinha = useMemo(() => {
+    const map: Record<number, Ordem[]> = {};
+    for (let l = 1; l <= 5; l++) map[l] = sortOrdens(ordens.filter((o) => o.linha === l));
+    return map;
+  }, [ordens]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -1053,23 +1082,20 @@ export default function PainelProgramacao() {
               <LinhaColumn
                 key={l}
                 linha={l}
-                ordens={ordensParaLinha(l)}
+                ordens={ordensPerLinha[l]}
                 registrosDoDia={registrosDoDia}
-                onReprogramarClick={(o) => { setOrdemParaReprogramar(o); setNovaDataReprogramar(""); }}
+                onReprogramarClick={handleReprogramarClick}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
                 onVoltarFila={setOrdemParaVoltar}
                 onForcarConclusao={setOrdemParaForcar}
-                onRegistrarDia={(o) => {
-                  setOrdemParaRegistrar(o);
-                  setRegDia(o.data_programacao || data);
-                }}
+                onRegistrarDia={handleRegistrarDiaClick}
                 onVerDetalhes={setOrdemDetalhe}
                 onLab={setOrdemLab}
                 onToggleConfirmado={handleToggleConfirmado}
                 onEditarRegistro={handleEditarRegistro}
-                onEditarEmissao={(o) => { setOrdemEditandoEmissao(o); setNovaDataEmissao(o.data_emissao ?? ""); }}
+                onEditarEmissao={handleEditarEmissaoClick}
               />
             ))}
           </div>
