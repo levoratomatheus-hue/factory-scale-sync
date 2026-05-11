@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ function parseObsItems(obs: string | null): { qty: string; mp: string }[] {
   return vazio;
 }
 
-export function EditarOrdemDialog({
+export const EditarOrdemDialog = memo(function EditarOrdemDialog({
   ordem,
   onClose,
   onSalvar,
@@ -426,4 +426,4 @@ export function EditarOrdemDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});

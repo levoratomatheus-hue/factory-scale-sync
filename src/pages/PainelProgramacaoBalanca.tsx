@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowRightLeft, Undo2 } from "lucide-react";
@@ -45,7 +45,7 @@ interface Ordem {
   data_emissao: string | null;
 }
 
-function FormulaDialog({
+const FormulaDialog = memo(function FormulaDialog({
   ordem,
   onClose,
 }: {
@@ -141,7 +141,7 @@ function FormulaDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 function SortableCard({
   ordem,

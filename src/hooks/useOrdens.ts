@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
 export function useOrdens(date?: string) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const today = date || format(new Date(), 'yyyy-MM-dd');
+  const today = useMemo(() => date || format(new Date(), 'yyyy-MM-dd'), [date]);
   const lastFetchRef = useRef(0);
   const instanceId = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
@@ -24,8 +24,11 @@ export function useOrdens(date?: string) {
     setLoading(false);
   }, [today, date]);
 
+  const fetchOrdensRef = useRef(fetchOrdens);
+  fetchOrdensRef.current = fetchOrdens;
+
   useEffect(() => {
-    fetchOrdens();
+    fetchOrdensRef.current();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channelName = `ordens-realtime-${date ?? "all"}-${instanceId.current}`;
     const channel = supabase
@@ -33,7 +36,7 @@ export function useOrdens(date?: string) {
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (Date.now() - lastFetchRef.current > 600) fetchOrdens();
+          if (Date.now() - lastFetchRef.current > 600) fetchOrdensRef.current();
         }, 300);
       })
       .subscribe();
@@ -41,7 +44,7 @@ export function useOrdens(date?: string) {
       if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
-  }, [fetchOrdens]);
+  }, [date]);
 
   // Called when weighing is done — next status depends on requer_mistura flag
   const concluirOrdem = async (ordemId: string): Promise<string | null> => {
@@ -124,21 +127,24 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
     setLoading(false);
   }, [dataInicio, dataFim]);
 
+  const fetchHistoricoRef = useRef(fetchHistorico);
+  fetchHistoricoRef.current = fetchHistorico;
+
   useEffect(() => {
-    fetchHistorico();
+    fetchHistoricoRef.current();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`historico-realtime-${dataInicio ?? "all"}-${dataFim ?? ""}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchHistorico(), 300);
+        debounceTimer = setTimeout(() => fetchHistoricoRef.current(), 300);
       })
       .subscribe();
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
-  }, [fetchHistorico]);
+  }, [dataInicio, dataFim]);
 
   return { ordens, loading };
 }
@@ -185,14 +191,17 @@ export function useParadasLinha(linha: number, data: string) {
     setLoading(false);
   }, [linha, data]);
 
+  const fetchParadasRef = useRef(fetchParadas);
+  fetchParadasRef.current = fetchParadas;
+
   useEffect(() => {
-    fetchParadas();
+    fetchParadasRef.current();
     const channel = supabase
       .channel(`paradas-linha-${linha}-${data}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "paradas" }, fetchParadas)
+      .on("postgres_changes", { event: "*", schema: "public", table: "paradas" }, () => fetchParadasRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchParadas]);
+  }, [linha, data]);
 
   return { paradas, loading, fetchParadas };
 }
@@ -232,15 +241,18 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
     setRegistros(data ?? []);
   }, [ordemId]);
 
+  const fetchRegistrosRef = useRef(fetchRegistros);
+  fetchRegistrosRef.current = fetchRegistros;
+
   useEffect(() => {
-    fetchRegistros();
+    fetchRegistrosRef.current();
     if (!ordemId) return;
     const channel = supabase
       .channel(`reg-diarios-${ordemId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, fetchRegistros)
+      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, () => fetchRegistrosRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchRegistros, ordemId]);
+  }, [ordemId]);
 
   return { registros, fetchRegistros };
 }

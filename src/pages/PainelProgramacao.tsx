@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,7 +55,7 @@ interface Ordem {
   motivo_reprovacao: string | null;
 }
 
-function FormulaDialog({
+const FormulaDialog = memo(function FormulaDialog({
   ordem,
   onClose,
   onMoverLinha,
@@ -187,9 +187,9 @@ function FormulaDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
 
-function LabObsDialog({
+const LabObsDialog = memo(function LabObsDialog({
   ordem,
   onClose,
   onSalvo,
@@ -240,7 +240,7 @@ function LabObsDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 function SortableCard({
   ordem,

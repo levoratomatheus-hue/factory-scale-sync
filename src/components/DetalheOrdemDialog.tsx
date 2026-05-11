@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,7 +36,7 @@ function fmtHora(h: string | null | undefined) {
   return h ? String(h).slice(0, 5) : "—";
 }
 
-export function DetalheOrdemDialog({
+export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   ordem,
   onClose,
 }: {
@@ -309,4 +309,4 @@ export function DetalheOrdemDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});

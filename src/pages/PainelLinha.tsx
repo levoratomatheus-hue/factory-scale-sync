@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormula } from "@/hooks/useFormula";
 import { useParadasLinha, useRegistrosDiariosOrdem } from "@/hooks/useOrdens";
@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-function FormulaViewDialog({ ordem, onClose }: { ordem: any | null; onClose: () => void }) {
+const FormulaViewDialog = memo(function FormulaViewDialog({ ordem, onClose }: { ordem: any | null; onClose: () => void }) {
   const { itens, loading } = useFormula(ordem?.formula_id ?? null, ordem?.tamanho_batelada ?? null);
   if (!ordem) return null;
   const nbat = ordem.tamanho_batelada > 0 ? Math.round(ordem.quantidade / ordem.tamanho_batelada) : null;
@@ -81,7 +81,7 @@ function FormulaViewDialog({ ordem, onClose }: { ordem: any | null; onClose: () 
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 const MOTIVOS: Record<string, string> = {
   manutencao: "Manutenção",
