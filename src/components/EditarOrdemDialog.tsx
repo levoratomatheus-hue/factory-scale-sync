@@ -33,6 +33,7 @@ export interface OrdemEditavel {
   marca: string | null;
   requer_mistura: boolean | null;
   data_programacao: string;
+  data_emissao: string | null;
 }
 
 interface FormulaItem {
@@ -70,6 +71,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
   const [linha, setLinha] = useState("");
   const [balanca, setBalanca] = useState("");
   const [dataProg, setDataProg] = useState("");
+  const [dataEmissao, setDataEmissao] = useState("");
   const [requerMistura, setRequerMistura] = useState(true);
   const [marca, setMarca] = useState("");
   const [formulaId, setFormulaId] = useState("");
@@ -88,6 +90,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
     setLinha(String(ordem.linha ?? ""));
     setBalanca(ordem.balanca ? String(ordem.balanca) : "");
     setDataProg(ordem.data_programacao ?? "");
+    setDataEmissao(ordem.data_emissao ?? "");
     setRequerMistura(ordem.requer_mistura !== false);
     setMarca(ordem.marca ?? "");
     setFormulaId(ordem.formula_id ?? "");
@@ -183,6 +186,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
       linha: parseInt(linha),
       balanca: balanca ? parseInt(balanca) : null,
       data_programacao: dataProg,
+      data_emissao: dataEmissao || null,
       requer_mistura: requerMistura,
       marca: marca || null,
       formula_id: formulaId.trim() || null,
@@ -273,14 +277,25 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Data de Programação</label>
-            <input
-              type="date"
-              value={dataProg}
-              onChange={(e) => setDataProg(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data de Programação</label>
+              <input
+                type="date"
+                value={dataProg}
+                onChange={(e) => setDataProg(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data de Emissão</label>
+              <input
+                type="date"
+                value={dataEmissao}
+                onChange={(e) => setDataEmissao(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">
