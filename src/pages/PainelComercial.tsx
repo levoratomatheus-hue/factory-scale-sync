@@ -324,25 +324,37 @@ export default function PainelComercial() {
                 ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
               const du = op.data_emissao ? diasUteisEntre(op.data_emissao, hj) : null;
+              const dispStr = confirmada
+                ? proximoDiaUtil(op.data_programacao)
+                : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
+              const dispFmt = dispStr
+                ? format(new Date(dispStr + 'T12:00:00'), 'dd/MM/yyyy')
+                : '—';
+              const dispLabel = dispStr
+                ? dispStr < hj ? 'Disponível desde' : dispStr === hj ? 'Disponível hoje' : 'Disponível em'
+                : null;
               return (
                 <div key={op.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${borderClass}`}>
                   <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${confirmada ? 'bg-green-500' : 'bg-orange-400'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm leading-tight">{op.produto}</p>
                     <p className="text-xs text-muted-foreground">Lote {op.lote}</p>
-                  </div>
-                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
-                    <p className="text-xs text-muted-foreground">Emitido {emissaoFmt}</p>
-                    {du !== null && (
-                      <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${
-                        du <= 5
-                          ? 'bg-blue-100 text-blue-700 border-blue-200'
-                          : du <= 10
-                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                    <p className="text-xs text-muted-foreground">Emitido {emissaoFmt}
+                      {du !== null && (
+                        <span className={`ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${
+                          du <= 5 ? 'bg-blue-100 text-blue-700 border-blue-200'
+                            : du <= 10 ? 'bg-orange-100 text-orange-700 border-orange-200'
                             : 'bg-red-100 text-red-700 border-red-200'
-                      }`}>{du}du</span>
-                    )}
+                        }`}>{du}du</span>
+                      )}
+                    </p>
                   </div>
+                  {dispLabel && (
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{dispLabel}</p>
+                      <p className="text-sm font-semibold">{dispStr === hj ? '' : dispFmt}</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
