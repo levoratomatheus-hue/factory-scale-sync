@@ -331,10 +331,16 @@ export default function PainelComercial() {
                     <p className="font-semibold text-sm leading-tight">{op.produto}</p>
                     <p className="text-xs text-muted-foreground">Lote {op.lote}</p>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
                     <p className="text-xs text-muted-foreground">Emitido {emissaoFmt}</p>
                     {du !== null && (
-                      <p className="text-xs font-medium">{du} du</p>
+                      <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${
+                        du <= 5
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : du <= 10
+                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                            : 'bg-red-100 text-red-700 border-red-200'
+                      }`}>{du}du</span>
                     )}
                   </div>
                 </div>
@@ -389,6 +395,14 @@ export default function PainelComercial() {
                         : '—';
                       const du = op.data_emissao ? diasUteisEntre(op.data_emissao, hj) : null;
 
+                      const duBadge = du !== null
+                        ? du <= 5
+                          ? { cls: 'bg-blue-100 text-blue-700 border-blue-200', label: `${du}du` }
+                          : du <= 10
+                            ? { cls: 'bg-orange-100 text-orange-700 border-orange-200', label: `${du}du` }
+                            : { cls: 'bg-red-100 text-red-700 border-red-200', label: `${du}du` }
+                        : null;
+
                       return (
                         <div key={op.id} className="flex items-start gap-2">
                           <span
@@ -399,12 +413,14 @@ export default function PainelComercial() {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium leading-snug break-words">{op.produto}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">Lote {op.lote}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Emitido {emissaoFmt}
-                              {du !== null && (
-                                <span className="ml-1 font-semibold text-foreground">{du}du</span>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-xs text-muted-foreground">Emitido {emissaoFmt}</span>
+                              {duBadge && (
+                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${duBadge.cls}`}>
+                                  {duBadge.label}
+                                </span>
                               )}
-                            </p>
+                            </div>
                           </div>
                         </div>
                       );
