@@ -347,7 +347,7 @@ export default function PainelComercial() {
         )
       ) : (
         /* ── Modo semanal: cards por dia ── */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
           {diasSemana.map((dia) => {
             const ops = ordPorDia.get(dia) ?? [];
             const isHoje = dia === hj;
@@ -359,7 +359,7 @@ export default function PainelComercial() {
             return (
               <div
                 key={dia}
-                className={`rounded-xl border shadow-sm flex flex-col ${
+                className={`min-w-[220px] w-[220px] shrink-0 rounded-xl border shadow-sm flex flex-col ${
                   isHoje
                     ? 'border-primary/60 bg-primary/5'
                     : 'border-border bg-card'
@@ -367,18 +367,18 @@ export default function PainelComercial() {
               >
                 {/* Cabeçalho */}
                 <div
-                  className={`px-4 py-3 border-b flex items-center justify-between ${
+                  className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${
                     isHoje ? 'border-primary/30' : 'border-border'
                   }`}
                 >
                   <span className={`font-semibold text-sm ${isHoje ? 'text-primary' : ''}`}>
                     {nomeDia}
                   </span>
-                  <span className="text-xs text-muted-foreground">{dataDia}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{dataDia}</span>
                 </div>
 
                 {/* Lista de OPs */}
-                <div className="px-4 py-3 space-y-3 flex-1">
+                <div className="px-3 py-3 space-y-3 flex-1">
                   {ops.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic">Nenhum produto previsto</p>
                   ) : (
@@ -392,17 +392,17 @@ export default function PainelComercial() {
                       return (
                         <div key={op.id} className="flex items-start gap-2">
                           <span
-                            className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
+                            className={`mt-[3px] h-2 w-2 rounded-full shrink-0 ${
                               confirmada ? 'bg-green-500' : 'bg-orange-400'
                             }`}
                           />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium leading-tight truncate">{op.produto}</p>
-                            <p className="text-xs text-muted-foreground">Lote {op.lote}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium leading-snug break-words">{op.produto}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Lote {op.lote}</p>
                             <p className="text-xs text-muted-foreground">
                               Emitido {emissaoFmt}
                               {du !== null && (
-                                <span className="ml-1 font-medium text-foreground">{du}du</span>
+                                <span className="ml-1 font-semibold text-foreground">{du}du</span>
                               )}
                             </p>
                           </div>
