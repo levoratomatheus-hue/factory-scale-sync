@@ -426,7 +426,7 @@ export default function PainelComercial() {
                         : null;
 
                       return (
-                        <div key={op.id} className="flex items-start gap-2">
+                        <div key={op.id} className="flex items-start gap-2 border rounded-lg p-2 bg-background">
                           <span
                             className={`mt-[3px] h-2 w-2 rounded-full shrink-0 ${
                               confirmada ? 'bg-green-500' : 'bg-orange-400'
