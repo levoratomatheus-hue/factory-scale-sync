@@ -324,7 +324,7 @@ export default function PainelComercial() {
               const emissaoFmt = op.data_emissao
                 ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
-              const du = op.data_emissao ? diasUteisEntre(op.data_emissao, op.data_conclusao ?? hj) : null;
+              const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
               const dispStr = confirmada
                 ? proximoDiaUtil(op.data_programacao)
                 : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
@@ -406,7 +406,7 @@ export default function PainelComercial() {
                       const emissaoFmt = op.data_emissao
                         ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM', { locale: ptBR })
                         : '—';
-                      const du = op.data_emissao ? diasUteisEntre(op.data_emissao, op.data_conclusao ?? hj) : null;
+                      const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
 
                       const duBadge = du !== null
                         ? du <= 5
