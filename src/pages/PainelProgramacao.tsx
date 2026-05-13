@@ -501,7 +501,9 @@ const LinhaColumn = memo(function LinhaColumn({
         const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
         return sum + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
       }, 0);
-      return acc + produzido;
+      if (produzido > 0) return acc + produzido;
+      if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
+      return acc + (Number(o.quantidade) || 0);
     }, 0),
     [ordens, registrosDoDia, dataSelecionada]
   );
