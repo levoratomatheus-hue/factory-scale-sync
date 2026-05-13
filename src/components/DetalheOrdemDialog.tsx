@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -59,17 +59,17 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     Promise.all([
       supabase
         .from("historico")
-        .select("*")
+        .select("id, status_anterior, status_novo, alterado_em")
         .eq("ordem_id", ordem.id)
         .order("alterado_em", { ascending: true }),
       (supabase as any)
         .from("registros_diarios")
-        .select("*")
+        .select("id, data, hora_inicio, hora_fim, registro_producao")
         .eq("ordem_id", ordem.id)
         .order("data", { ascending: true }),
       supabase
         .from("paradas")
-        .select("*")
+        .select("id, data, motivo, hora_inicio, hora_fim")
         .eq("linha", ordem.linha)
         .gte("data", ordem.data_programacao)
         .lte("data", dateFim)
@@ -84,16 +84,20 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
 
   if (!ordem) return null;
 
-  const reprovaCount = hist.filter(
-    (h) => h.status_anterior === "aguardando_liberacao" && h.status_novo === "em_linha"
-  ).length;
+  const reprovaCount = useMemo(
+    () => hist.filter((h) => h.status_anterior === "aguardando_liberacao" && h.status_novo === "em_linha").length,
+    [hist]
+  );
 
   const obsItems = parseObsItems(ordem.obs);
 
-  const totalProduzido = registros.reduce((sum: number, r: any) => {
-    const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-    return sum + items.reduce((s: number, i: any) => s + (i.qty || 0) * (i.peso || 0), 0);
-  }, 0);
+  const totalProduzido = useMemo(
+    () => registros.reduce((sum: number, r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      return sum + items.reduce((s: number, i: any) => s + (i.qty || 0) * (i.peso || 0), 0);
+    }, 0),
+    [registros]
+  );
 
   return (
     <Dialog open={!!ordem} onOpenChange={(open) => !open && onClose()}>

@@ -193,14 +193,21 @@ export function useParadasLinha(linha: number, data: string) {
 
   const fetchParadasRef = useRef(fetchParadas);
   fetchParadasRef.current = fetchParadas;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetchParadasRef.current();
     const channel = supabase
       .channel(`paradas-linha-${linha}-${data}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "paradas" }, () => fetchParadasRef.current())
+      .on("postgres_changes", { event: "*", schema: "public", table: "paradas" }, () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchParadasRef.current(), 300);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [linha, data]);
 
   return { paradas, loading, fetchParadas };
