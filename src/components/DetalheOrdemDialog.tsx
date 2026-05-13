@@ -82,14 +82,10 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     });
   }, [ordem?.id]);
 
-  if (!ordem) return null;
-
   const reprovaCount = useMemo(
     () => hist.filter((h) => h.status_anterior === "aguardando_liberacao" && h.status_novo === "em_linha").length,
     [hist]
   );
-
-  const obsItems = parseObsItems(ordem.obs);
 
   const totalProduzido = useMemo(
     () => registros.reduce((sum: number, r: any) => {
@@ -98,6 +94,10 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     }, 0),
     [registros]
   );
+
+  if (!ordem) return null;
+
+  const obsItems = parseObsItems(ordem.obs);
 
   return (
     <Dialog open={!!ordem} onOpenChange={(open) => !open && onClose()}>
