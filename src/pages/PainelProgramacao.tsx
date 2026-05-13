@@ -461,6 +461,7 @@ const LinhaColumn = memo(function LinhaColumn({
   linha,
   ordens,
   registrosDoDia,
+  dataSelecionada,
   onReprogramarClick,
   onDblClick,
   onEditar,
@@ -477,6 +478,7 @@ const LinhaColumn = memo(function LinhaColumn({
   linha: number;
   ordens: Ordem[];
   registrosDoDia: Record<string, any[]>;
+  dataSelecionada: string;
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
@@ -494,16 +496,14 @@ const LinhaColumn = memo(function LinhaColumn({
 
   const totalKg = useMemo(
     () => ordens.reduce((acc, o) => {
-      const regs = registrosDoDia[o.id] ?? EMPTY_REGS;
+      const regs = (registrosDoDia[o.id] ?? EMPTY_REGS).filter((r: any) => r.data === dataSelecionada);
       const produzido = regs.reduce((sum: number, reg: any) => {
         const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
         return sum + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
       }, 0);
-      if (produzido > 0) return acc + produzido;
-      if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
-      return acc + (Number(o.quantidade) || 0);
+      return acc + produzido;
     }, 0),
-    [ordens, registrosDoDia]
+    [ordens, registrosDoDia, dataSelecionada]
   );
 
   return (
@@ -1107,6 +1107,7 @@ export default function PainelProgramacao() {
                 linha={l}
                 ordens={ordensPerLinha[l]}
                 registrosDoDia={registrosPorLinha[l]}
+                dataSelecionada={data}
                 onReprogramarClick={handleReprogramarClick}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
