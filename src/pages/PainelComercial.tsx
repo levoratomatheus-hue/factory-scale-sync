@@ -123,6 +123,7 @@ interface OrdemComercial {
   status: string;
   data_programacao: string;
   data_emissao: string | null;
+  data_conclusao: string | null;
   formula_id: string | null;
   programacao_confirmada: boolean | null;
 }
@@ -139,7 +140,7 @@ function deduplicar(rows: OrdemComercial[]): OrdemComercial[] {
     .sort((a, b) => a.produto.localeCompare(b.produto, 'pt-BR'));
 }
 
-const SELECT_FIELDS = 'id, produto, lote, quantidade, status, data_programacao, data_emissao, formula_id, programacao_confirmada';
+const SELECT_FIELDS = 'id, produto, lote, quantidade, status, data_programacao, data_emissao, data_conclusao, formula_id, programacao_confirmada';
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
@@ -323,7 +324,7 @@ export default function PainelComercial() {
               const emissaoFmt = op.data_emissao
                 ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
-              const du = op.data_emissao ? diasUteisEntre(op.data_emissao, hj) : null;
+              const du = op.data_emissao ? diasUteisEntre(op.data_emissao, op.data_conclusao ?? hj) : null;
               const dispStr = confirmada
                 ? proximoDiaUtil(op.data_programacao)
                 : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
@@ -405,7 +406,7 @@ export default function PainelComercial() {
                       const emissaoFmt = op.data_emissao
                         ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM', { locale: ptBR })
                         : '—';
-                      const du = op.data_emissao ? diasUteisEntre(op.data_emissao, hj) : null;
+                      const du = op.data_emissao ? diasUteisEntre(op.data_emissao, op.data_conclusao ?? hj) : null;
 
                       const duBadge = du !== null
                         ? du <= 5
