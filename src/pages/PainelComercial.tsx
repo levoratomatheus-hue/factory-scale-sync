@@ -324,6 +324,9 @@ export default function PainelComercial() {
               const emissaoFmt = op.data_emissao
                 ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
+              const conclusaoFmt = op.data_conclusao
+                ? format(new Date(op.data_conclusao.substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy')
+                : null;
               const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
               const dispStr = confirmada
                 ? proximoDiaUtil(op.data_programacao)
@@ -349,6 +352,9 @@ export default function PainelComercial() {
                         }`}>{du}du</span>
                       )}
                     </p>
+                    {conclusaoFmt && (
+                      <p className="text-xs text-green-600 font-medium">Concluído em {conclusaoFmt}</p>
+                    )}
                   </div>
                   {dispLabel && (
                     <div className="text-right shrink-0">
@@ -406,6 +412,9 @@ export default function PainelComercial() {
                       const emissaoFmt = op.data_emissao
                         ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM', { locale: ptBR })
                         : '—';
+                      const conclusaoFmt = op.data_conclusao
+                        ? format(new Date(op.data_conclusao.substring(0, 10) + 'T12:00:00'), 'dd/MM', { locale: ptBR })
+                        : null;
                       const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
 
                       const duBadge = du !== null
@@ -434,6 +443,9 @@ export default function PainelComercial() {
                                 </span>
                               )}
                             </div>
+                            {conclusaoFmt && (
+                              <p className="text-xs text-green-600 font-medium mt-0.5">Concluído {conclusaoFmt}</p>
+                            )}
                           </div>
                         </div>
                       );
