@@ -599,7 +599,7 @@ export default function PainelProgramacao() {
     if (showLoading) setLoading(true);
     const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao";
 
-    // Busca em paralelo: OPs programadas + IDs de registros desta data (para detectar extra OPs)
+    // Round-trip 1: OPs programadas + IDs de registros desta data (paralelo)
     const [{ data: programadas }, { data: regsHoje }] = await Promise.all([
       supabase
         .from("ordens")
@@ -613,38 +613,47 @@ export default function PainelProgramacao() {
         .eq("data", dataSel),
     ]);
 
-    // OPs com registro nesta data mas data_programacao diferente
     const programadasIds = new Set((programadas ?? []).map((o: any) => o.id));
     const extraIds = [...new Set((regsHoje ?? []).map((r: any) => r.ordem_id))]
       .filter((id: string) => !programadasIds.has(id));
 
-    let extraOrdens: Ordem[] = [];
-    if (extraIds.length > 0) {
-      const { data: extraRows } = await supabase
-        .from("ordens")
-        .select(fields)
-        .in("id", extraIds)
-        .not("linha", "is", null);
-      extraOrdens = (extraRows as Ordem[]) ?? [];
-    }
+    // Round-trip 2: extra OPs + registros das OPs programadas (paralelo)
+    const progIds = [...programadasIds];
+    const [extraResult, mainRegsResult] = await Promise.all([
+      extraIds.length > 0
+        ? supabase.from("ordens").select(fields).in("id", extraIds).not("linha", "is", null)
+        : Promise.resolve({ data: [] as any[] }),
+      progIds.length > 0
+        ? (supabase as any)
+            .from("registros_diarios")
+            .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
+            .in("ordem_id", progIds)
+            .order("data", { ascending: true })
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
 
+    const extraOrdens = (extraResult.data ?? []) as Ordem[];
     const all = [...(programadas ?? []) as Ordem[], ...extraOrdens];
     const deduped = [...new Map(all.map((o) => [o.id, o])).values()];
 
-    // Busca TODOS os registros das OPs exibidas (sem filtro de data)
-    const allIds = deduped.map((o) => o.id);
-    const regsPorOrdem: Record<string, any[]> = {};
-    if (allIds.length > 0) {
-      const { data: allRegs } = await (supabase as any)
+    let allRegs: any[] = mainRegsResult.data ?? [];
+
+    // Round-trip 3 (só se houver extra OPs): registros das extras
+    if (extraOrdens.length > 0) {
+      const { data: extraRegs } = await (supabase as any)
         .from("registros_diarios")
         .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
-        .in("ordem_id", allIds)
+        .in("ordem_id", extraOrdens.map((o) => o.id))
         .order("data", { ascending: true });
-      (allRegs ?? []).forEach((r: any) => {
-        if (!regsPorOrdem[r.ordem_id]) regsPorOrdem[r.ordem_id] = [];
-        regsPorOrdem[r.ordem_id].push(r);
-      });
+      allRegs = [...allRegs, ...(extraRegs ?? [])];
     }
+
+    const regsPorOrdem: Record<string, any[]> = {};
+    allRegs.forEach((r: any) => {
+      if (!regsPorOrdem[r.ordem_id]) regsPorOrdem[r.ordem_id] = [];
+      regsPorOrdem[r.ordem_id].push(r);
+    });
+
     setRegistrosDoDia(regsPorOrdem);
     setOrdens(deduped);
     setLoading(false);
@@ -662,7 +671,7 @@ export default function PainelProgramacao() {
       .channel('programacao-ordens')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(dataRef.current, false), 500);
+        debounceTimer = setTimeout(() => fetchOrdens(dataRef.current, false), 1500);
       })
       .subscribe();
     return () => {
@@ -1023,9 +1032,19 @@ export default function PainelProgramacao() {
 
   const ordensParaLinha = useCallback((l: number) => sortOrdens(ordens.filter((o) => o.linha === l)), [ordens]);
 
+  const prevOrdensPerLinhaRef = useRef<Record<number, Ordem[]>>({});
   const ordensPerLinha = useMemo(() => {
     const map: Record<number, Ordem[]> = {};
-    for (let l = 1; l <= 5; l++) map[l] = sortOrdens(ordens.filter((o) => o.linha === l));
+    for (let l = 1; l <= 5; l++) {
+      const next = sortOrdens(ordens.filter((o) => o.linha === l));
+      const prev = prevOrdensPerLinhaRef.current[l];
+      // Preserva referência se IDs e statuses iguais — evita re-render das colunas não afetadas
+      map[l] = (prev &&
+        prev.length === next.length &&
+        next.every((o, i) => o.id === prev[i].id && o.status === prev[i].status && o.posicao === prev[i].posicao && o.programacao_confirmada === prev[i].programacao_confirmada)
+      ) ? prev : next;
+    }
+    prevOrdensPerLinhaRef.current = map;
     return map;
   }, [ordens]);
 
