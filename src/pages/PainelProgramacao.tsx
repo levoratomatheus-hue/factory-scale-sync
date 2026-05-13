@@ -242,6 +242,8 @@ const LabObsDialog = memo(function LabObsDialog({
   );
 });
 
+const EMPTY_REGS: any[] = [];
+
 const SortableCard = memo(function SortableCard({
   ordem,
   registros,
@@ -276,7 +278,10 @@ const SortableCard = memo(function SortableCard({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
 
-  const du = ordem.data_emissao ? diasUteis(ordem.data_emissao, ordem.data_programacao) : 0;
+  const du = useMemo(
+    () => ordem.data_emissao ? diasUteis(ordem.data_emissao, ordem.data_programacao) : 0,
+    [ordem.data_emissao, ordem.data_programacao]
+  );
   const atrasado = du > 7;
 
   return (
@@ -487,6 +492,20 @@ const LinhaColumn = memo(function LinhaColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
+  const totalKg = useMemo(
+    () => ordens.reduce((acc, o) => {
+      const regs = registrosDoDia[o.id] ?? EMPTY_REGS;
+      const produzido = regs.reduce((sum: number, reg: any) => {
+        const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
+        return sum + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      }, 0);
+      if (produzido > 0) return acc + produzido;
+      if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
+      return acc + (Number(o.quantidade) || 0);
+    }, 0),
+    [ordens, registrosDoDia]
+  );
+
   return (
     <div className="flex flex-col min-w-[260px] w-[260px]">
       <div className="mb-2">
@@ -510,7 +529,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? []} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onEditarEmissao={onEditarEmissao} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onEditarEmissao={onEditarEmissao} />
             ))
           )}
         </div>
@@ -519,16 +538,7 @@ const LinhaColumn = memo(function LinhaColumn({
         <p className="text-xs text-muted-foreground text-right">
           Total:{" "}
           <span className="font-semibold text-foreground">
-            {formatKg(ordens.reduce((acc, o) => {
-              const regs = registrosDoDia[o.id] ?? [];
-              const produzido = regs.reduce((sum: number, reg: any) => {
-                const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
-                return sum + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-              }, 0);
-              if (produzido > 0) return acc + produzido;
-              if (o.status === "concluido") return acc + (Number(o.quantidade_real) || Number(o.quantidade) || 0);
-              return acc + (Number(o.quantidade) || 0);
-            }, 0))} kg
+            {formatKg(totalKg)} kg
           </span>
         </p>
       </div>
@@ -1017,6 +1027,19 @@ export default function PainelProgramacao() {
     return map;
   }, [ordens]);
 
+  const registrosPorLinha = useMemo(() => {
+    const result: Record<number, Record<string, any[]>> = {};
+    for (let l = 1; l <= 5; l++) {
+      const subset: Record<string, any[]> = {};
+      for (const op of ordensPerLinha[l] ?? []) {
+        const regs = registrosDoDia[op.id];
+        if (regs) subset[op.id] = regs;
+      }
+      result[l] = subset;
+    }
+    return result;
+  }, [registrosDoDia, ordensPerLinha]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -1083,7 +1106,7 @@ export default function PainelProgramacao() {
                 key={l}
                 linha={l}
                 ordens={ordensPerLinha[l]}
-                registrosDoDia={registrosDoDia}
+                registrosDoDia={registrosPorLinha[l]}
                 onReprogramarClick={handleReprogramarClick}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
