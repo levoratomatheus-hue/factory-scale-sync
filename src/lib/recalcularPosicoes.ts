@@ -5,7 +5,7 @@ export async function recalcularPosicoes(linha: number): Promise<void> {
     .from("ordens")
     .select("id, posicao, data_programacao")
     .eq("linha", linha)
-    .neq("status", "concluido")
+    .eq("status", "aguardando_linha")
     .order("data_programacao", { ascending: true })
     .order("posicao", { ascending: true, nullsFirst: false });
 
