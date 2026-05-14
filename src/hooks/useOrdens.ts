@@ -254,11 +254,18 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
   useEffect(() => {
     fetchRegistrosRef.current();
     if (!ordemId) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`reg-diarios-${ordemId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, () => fetchRegistrosRef.current())
+      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchRegistrosRef.current(), 400);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
   }, [ordemId]);
 
   return { registros, fetchRegistros };

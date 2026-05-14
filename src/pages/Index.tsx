@@ -1,4 +1,4 @@
-import { useState, useCallback, ReactNode, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList } from 'lucide-react';
 import Login from './Login';
 
@@ -115,6 +115,17 @@ export default function Index() {
   const { perfil, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabGestorId>('gestor');
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      import('./PainelLinha');
+      import('./PainelBalanca');
+      import('./PainelProgramacao');
+      import('./PainelLiberacao');
+      import('./PainelHistorico');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, []);
 
   const goToTab = useCallback((tab: TabGestorId) => {
     setActiveTab(tab);

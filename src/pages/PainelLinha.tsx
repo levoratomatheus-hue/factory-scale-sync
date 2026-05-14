@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormula } from "@/hooks/useFormula";
 import { useParadasLinha, useRegistrosDiariosOrdem } from "@/hooks/useOrdens";
@@ -129,13 +129,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [savingParada, setSavingParada] = useState(false);
   const [paradasListOpen, setParadasListOpen] = useState(false);
 
-  // ordens já vem do fetchOrdens ordenado por data_programacao ASC, posicao ASC
-  // com em_linha forçado ao topo — não re-ordenar por posicao isolado
-  const linhaOrdens = ordens.filter((o) =>
-    ["aguardando_linha", "em_linha", "aguardando_liberacao", "concluido"].includes(o.status)
-  );
-  const emLinha = linhaOrdens.find((o) => o.status === "em_linha");
-  const emAberto = linhaOrdens.filter((o) => o.status === "aguardando_linha");
+  const emLinha = useMemo(() => ordens.find((o) => o.status === "em_linha"), [ordens]);
+  const emAberto = useMemo(() => ordens.filter((o) => o.status === "aguardando_linha"), [ordens]);
 
   const { itens, loading: loadingFormula } = useFormula(
     emLinha?.formula_id ?? null,
