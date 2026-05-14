@@ -10,15 +10,8 @@ export function formatKg(value: number | null | undefined): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
-const STATUS_TOPO = new Set(["concluido", "aguardando_liberacao"]);
-
 export function sortOrdens<T extends { status: string; posicao?: number | null }>(ordens: T[]): T[] {
-  return [...ordens].sort((a, b) => {
-    const aTop = STATUS_TOPO.has(a.status) ? 0 : 1;
-    const bTop = STATUS_TOPO.has(b.status) ? 0 : 1;
-    if (aTop !== bTop) return aTop - bTop;
-    return (a.posicao ?? 9999) - (b.posicao ?? 9999);
-  });
+  return [...ordens].sort((a, b) => (a.posicao ?? 9999) - (b.posicao ?? 9999));
 }
 
 export function parseHoras(
