@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CalendarCheck2, CheckCircle2, ClipboardList, Loader2, Factory, Layers, OctagonX, PauseCircle, Play, Trash2 } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, OctagonX, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -113,6 +113,11 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [obsLinha, setObsLinha] = useState("");
   const [savingDia, setSavingDia] = useState(false);
 
+  // Temperaturas de Processo
+  const [tempOpen, setTempOpen] = useState(false);
+  const [tempValues, setTempValues] = useState({ zona1: "", zona2: "", zona3: "", zona9: "", zona10: "", zona12: "" });
+  const [savingTemp, setSavingTemp] = useState(false);
+
   const [ordemFormula, setOrdemFormula] = useState<any | null>(null);
 
   // Paradas
@@ -145,12 +150,21 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     setHoraFim("");
     setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
     setObsLinha("");
+    const t = emLinha?.temperaturas as Record<string, number | null> | null | undefined;
+    setTempValues({
+      zona1: t?.zona1 != null ? String(t.zona1) : "",
+      zona2: t?.zona2 != null ? String(t.zona2) : "",
+      zona3: t?.zona3 != null ? String(t.zona3) : "",
+      zona9: t?.zona9 != null ? String(t.zona9) : "",
+      zona10: t?.zona10 != null ? String(t.zona10) : "",
+      zona12: t?.zona12 != null ? String(t.zona12) : "",
+    });
   }, [emLinha?.id]);
 
   const fetchOrdens = useCallback(async () => {
     const { data: allData } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim")
+      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim, temperaturas")
       .eq("linha", linha)
       .in("status", ["em_linha", "aguardando_linha"])
       .order("data_programacao", { ascending: true })
@@ -246,6 +260,27 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     }
     await fetchOrdens();
     toast({ title: "Hora de início registrada" });
+  };
+
+  const salvarTemperaturas = async () => {
+    if (!emLinha) return;
+    setSavingTemp(true);
+    const parse = (v: string) => { const n = parseFloat(v.replace(",", ".")); return isNaN(n) ? null : n; };
+    const payload = {
+      zona1: parse(tempValues.zona1),
+      zona2: parse(tempValues.zona2),
+      zona3: parse(tempValues.zona3),
+      zona9: parse(tempValues.zona9),
+      zona10: parse(tempValues.zona10),
+      zona12: parse(tempValues.zona12),
+    };
+    const { error } = await (supabase as any).from("ordens").update({ temperaturas: payload }).eq("id", emLinha.id);
+    setSavingTemp(false);
+    if (error) {
+      toast({ title: "Erro ao salvar temperaturas", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Temperaturas salvas" });
+    }
   };
 
   const salvarDia = async () => {
@@ -527,6 +562,46 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               </div>
             </div>
           )}
+
+          {/* ── Temperaturas de Processo ── */}
+          <div className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setTempOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-blue-800 hover:bg-blue-100/60 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Thermometer className="h-4 w-4" />
+                Temperaturas de Processo
+              </span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${tempOpen ? "rotate-180" : ""}`} />
+            </button>
+            {tempOpen && (
+              <div className="px-4 pb-4 pt-1 space-y-3 border-t border-blue-200">
+                <div className="grid grid-cols-3 gap-3">
+                  {(["zona1", "zona2", "zona3", "zona9", "zona10", "zona12"] as const).map((z) => (
+                    <div key={z} className="space-y-1">
+                      <label className="text-xs font-medium text-blue-700 capitalize">
+                        Zona {z.replace("zona", "")}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={tempValues[z]}
+                        onChange={(e) => setTempValues((prev) => ({ ...prev, [z]: e.target.value.replace(/[^0-9,.]/g, "") }))}
+                        placeholder="—"
+                        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button size="sm" disabled={savingTemp} onClick={salvarTemperaturas} className="w-full">
+                  {savingTemp && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Temperaturas
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* ── Etapa 1: registrar hora início ── */}
           {!emLinha.hora_inicio && (

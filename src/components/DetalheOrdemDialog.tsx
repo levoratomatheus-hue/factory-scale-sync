@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, AlertTriangle, ArrowRight, FlaskConical } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -189,7 +189,28 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
               </section>
             )}
 
-            {/* 6. Reprovações */}
+            {/* 6. Temperaturas de Processo */}
+            {ordem.temperaturas && Object.values(ordem.temperaturas as Record<string, number | null>).some((v) => v != null) && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <Thermometer className="h-3.5 w-3.5 text-blue-500" />
+                  Temperaturas de Processo
+                </h3>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                  {(["zona1", "zona2", "zona3", "zona9", "zona10", "zona12"] as const).map((z) => {
+                    const val = (ordem.temperaturas as Record<string, number | null>)[z];
+                    return (
+                      <div key={z}>
+                        <span className="text-muted-foreground">Zona {z.replace("zona", "")}:</span>{" "}
+                        <span className="font-semibold">{val != null ? `${val}°C` : "—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* 7. Reprovações */}
             {(reprovaCount > 0 || ordem.motivo_reprovacao) && (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">

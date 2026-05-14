@@ -11,7 +11,7 @@ export function useOrdens(date?: string) {
 
   const fetchOrdens = useCallback(async () => {
     lastFetchRef.current = Date.now();
-    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, quantidade_real").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
+    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, quantidade_real, temperaturas").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -114,7 +114,7 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
     setLoading(true);
     let query = supabase
       .from("ordens")
-      .select("id, lote, produto, quantidade, hora_inicio, hora_fim, quantidade_real, linha, balanca, data_programacao, status, marca, data_conclusao, formula_id, obs, obs_laboratorio, obs_linha, motivo_reprovacao")
+      .select("id, lote, produto, quantidade, hora_inicio, hora_fim, quantidade_real, linha, balanca, data_programacao, status, marca, data_conclusao, formula_id, obs, obs_laboratorio, obs_linha, motivo_reprovacao, temperaturas")
       .eq("status", "concluido")
       .order("data_conclusao", { ascending: false })
       .limit(500);
