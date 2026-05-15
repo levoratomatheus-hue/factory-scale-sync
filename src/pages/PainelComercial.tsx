@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Search, PackageSearch, Loader2, AlertCircle } from 'lucide-react';
+import { formatKg } from '@/lib/utils';
 
 // ── Helpers de data ───────────────────────────────────────────────────────────
 
@@ -353,7 +354,7 @@ export default function PainelComercial() {
                   <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${concluida || confirmada ? 'bg-green-500' : 'bg-orange-400'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm leading-tight">{op.produto}</p>
-                    <p className="text-xs text-muted-foreground">Lote {op.lote}</p>
+                    <p className="text-xs text-muted-foreground">Lote {op.lote} · <span className="font-medium text-foreground">{formatKg(op.quantidade)} kg</span></p>
                     <p className="text-xs text-muted-foreground">Emitido {emissaoFmt}
                       {du !== null && (
                         <span className={`ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${
@@ -445,7 +446,7 @@ export default function PainelComercial() {
                           />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium leading-snug break-words">{op.produto}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Lote {op.lote}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Lote {op.lote} · <span className="font-medium text-foreground">{formatKg(op.quantidade)} kg</span></p>
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                               <span className="text-xs text-muted-foreground">Emitido {emissaoFmt}</span>
                               {duBadge && (
