@@ -344,7 +344,7 @@ export default function PainelComercial() {
                 ? format(new Date(dispStr + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
               const dispLabel = concluida
-                ? 'Disponível desde'
+                ? 'Disponível'
                 : dispStr
                   ? dispStr < hj ? 'Disponível desde' : dispStr === hj ? 'Disponível hoje' : 'Disponível em'
                   : null;
