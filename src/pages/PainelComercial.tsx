@@ -125,6 +125,7 @@ interface OrdemComercial {
   data_programacao: string;
   data_emissao: string | null;
   data_conclusao: string | null;
+  quantidade_real: number | null;
   formula_id: string | null;
   programacao_confirmada: boolean | null;
 }
@@ -141,7 +142,7 @@ function deduplicar(rows: OrdemComercial[]): OrdemComercial[] {
     .sort((a, b) => a.produto.localeCompare(b.produto, 'pt-BR'));
 }
 
-const SELECT_FIELDS = 'id, produto, lote, quantidade, status, data_programacao, data_emissao, data_conclusao, formula_id, programacao_confirmada';
+const SELECT_FIELDS = 'id, produto, lote, quantidade, quantidade_real, status, data_programacao, data_emissao, data_conclusao, formula_id, programacao_confirmada';
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
@@ -355,6 +356,9 @@ export default function PainelComercial() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm leading-tight">{op.produto}</p>
                     <p className="text-xs text-muted-foreground">Lote {op.lote} · <span className="font-medium text-foreground">{formatKg(op.quantidade)} kg</span></p>
+                    {op.quantidade_real != null && (
+                      <p className="text-xs text-green-700 font-medium">Produzido: {formatKg(op.quantidade_real)} kg</p>
+                    )}
                     <p className="text-xs text-muted-foreground">Emitido {emissaoFmt}
                       {du !== null && (
                         <span className={`ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${
@@ -447,6 +451,9 @@ export default function PainelComercial() {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium leading-snug break-words">{op.produto}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">Lote {op.lote} · <span className="font-medium text-foreground">{formatKg(op.quantidade)} kg</span></p>
+                            {op.quantidade_real != null && (
+                              <p className="text-xs text-green-700 font-medium mt-0.5">Produzido: {formatKg(op.quantidade_real)} kg</p>
+                            )}
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                               <span className="text-xs text-muted-foreground">Emitido {emissaoFmt}</span>
                               {duBadge && (
