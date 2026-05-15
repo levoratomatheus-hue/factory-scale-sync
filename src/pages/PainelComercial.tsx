@@ -207,7 +207,11 @@ export default function PainelComercial() {
           if (errEmissao) throw new Error(errEmissao.message);
 
           const confirmadas = ((dataProg as OrdemComercial[]) ?? [])
-            .filter(op => diasSet.has(proximoDiaUtil(op.data_programacao) ?? ''));
+            .filter(op => {
+              if (op.status === 'concluido' && op.data_conclusao)
+                return diasSet.has(op.data_conclusao.substring(0, 10));
+              return diasSet.has(proximoDiaUtil(op.data_programacao) ?? '');
+            });
           const naoConfirmadas = ((dataEmissao as OrdemComercial[]) ?? [])
             .filter(op => op.data_emissao && diasSet.has(somarDiasUteis(op.data_emissao, 7)));
 
@@ -235,9 +239,11 @@ export default function PainelComercial() {
     if (!ordens || modoTexto) return map;
     for (const op of ordens) {
       const confirmada = op.programacao_confirmada === true;
-      const dia = confirmada
-        ? proximoDiaUtil(op.data_programacao)
-        : (op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null);
+      const dia = op.status === 'concluido' && op.data_conclusao
+        ? op.data_conclusao.substring(0, 10)
+        : confirmada
+          ? proximoDiaUtil(op.data_programacao)
+          : (op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null);
       if (!dia) continue;
       if (!map.has(dia)) map.set(dia, []);
       map.get(dia)!.push(op);
@@ -318,7 +324,8 @@ export default function PainelComercial() {
           <div className="space-y-2">
             {resultadosBusca.map((op) => {
               const confirmada = op.programacao_confirmada === true;
-              const borderClass = confirmada
+              const concluida = op.status === 'concluido' && !!op.data_conclusao;
+              const borderClass = concluida || confirmada
                 ? 'border-green-300 bg-green-50/50'
                 : 'border-orange-300 bg-orange-50/50';
               const emissaoFmt = op.data_emissao
@@ -328,18 +335,22 @@ export default function PainelComercial() {
                 ? format(new Date(op.data_conclusao.substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy')
                 : null;
               const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
-              const dispStr = confirmada
-                ? proximoDiaUtil(op.data_programacao)
-                : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
+              const dispStr = concluida
+                ? op.data_conclusao!.substring(0, 10)
+                : confirmada
+                  ? proximoDiaUtil(op.data_programacao)
+                  : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
               const dispFmt = dispStr
                 ? format(new Date(dispStr + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
-              const dispLabel = dispStr
-                ? dispStr < hj ? 'Disponível desde' : dispStr === hj ? 'Disponível hoje' : 'Disponível em'
-                : null;
+              const dispLabel = concluida
+                ? 'Disponível desde'
+                : dispStr
+                  ? dispStr < hj ? 'Disponível desde' : dispStr === hj ? 'Disponível hoje' : 'Disponível em'
+                  : null;
               return (
                 <div key={op.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${borderClass}`}>
-                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${confirmada ? 'bg-green-500' : 'bg-orange-400'}`} />
+                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${concluida || confirmada ? 'bg-green-500' : 'bg-orange-400'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm leading-tight">{op.produto}</p>
                     <p className="text-xs text-muted-foreground">Lote {op.lote}</p>
@@ -357,9 +368,9 @@ export default function PainelComercial() {
                     )}
                   </div>
                   {dispLabel && (
-                    <div className="text-right shrink-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{dispLabel}</p>
-                      <p className="text-sm font-semibold">{dispStr === hj ? '' : dispFmt}</p>
+                    <div className={`text-right shrink-0 rounded-lg px-2 py-1 ${concluida ? 'bg-green-100 border border-green-300' : ''}`}>
+                      <p className={`text-[10px] uppercase tracking-wide ${concluida ? 'text-green-700 font-semibold' : 'text-muted-foreground'}`}>{dispLabel}</p>
+                      <p className={`text-sm font-semibold ${concluida ? 'text-green-800' : ''}`}>{dispStr === hj && !concluida ? '' : dispFmt}</p>
                     </div>
                   )}
                 </div>
