@@ -3,10 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 export async function recalcularPosicoes(linha: number): Promise<void> {
   const { data } = await supabase
     .from("ordens")
-    .select("id, posicao, data_programacao")
+    .select("id, posicao")
     .eq("linha", linha)
-    .eq("status", "aguardando_linha")
-    .order("data_programacao", { ascending: true })
     .order("posicao", { ascending: true, nullsFirst: false });
 
   if (!data || data.length === 0) return;
