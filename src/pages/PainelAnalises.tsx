@@ -106,6 +106,20 @@ function TooltipFaixa({ active, payload }: any) {
   );
 }
 
+function TooltipFaixaKg({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const { faixa, totalKg, ops } = payload[0].payload;
+  return (
+    <div style={tooltipStyle}>
+      <p style={{ fontWeight: 700, margin: 0 }}>{faixa}</p>
+      <p style={{ margin: "4px 0 0", color: D.emerald }}>
+        {totalKg > 0 ? totalKg.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "—"} kg
+      </p>
+      <p style={{ margin: "2px 0 0", color: D.muted }}>{ops} OP{ops !== 1 ? "s" : ""}</p>
+    </div>
+  );
+}
+
 function TooltipMensal({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
@@ -455,7 +469,8 @@ export default function PainelAnalises() {
         const h = horasMap[o.id] ?? null;
         if (h !== null) { kgH += o.quantidade_real || 0; hH += h; }
       });
-      return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ol.length };
+      const totalKg = ol.reduce((s, o) => s + (o.quantidade_real || 0), 0);
+      return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ol.length, totalKg };
     });
 
     const mapaP: Record<string, { produto: string; ops: number; kg: number }> = {};
@@ -852,6 +867,29 @@ export default function PainelAnalises() {
                       />
                       <Tooltip content={<TooltipFaixa />} cursor={{ fill: "#ffffff08" }} />
                       <Bar dataKey="media" fill={D.cyan} radius={[4, 4, 0, 0]} maxBarSize={60} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Volume por Faixa de OP */}
+              <div>
+                <SectionTitle icon={BarChart2}>Volume por Faixa de OP</SectionTitle>
+                <div style={{ ...cardStyle }}>
+                  <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Total kg produzidos por faixa · período selecionado</p>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <BarChart data={dadosFaixas} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
+                      <XAxis dataKey="faixa" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: D.muted }}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                        label={{ value: "kg", angle: -90, position: "insideLeft", fontSize: 10, fill: D.muted, dy: 10 }}
+                      />
+                      <Tooltip content={<TooltipFaixaKg />} cursor={{ fill: "#ffffff08" }} />
+                      <Bar dataKey="totalKg" fill={D.emerald} radius={[4, 4, 0, 0]} maxBarSize={60} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
