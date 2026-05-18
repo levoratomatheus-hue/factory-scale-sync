@@ -193,7 +193,7 @@ export default function PainelComercial() {
               .gte('data_programacao', dataMinProg)
               .lte('data_programacao', weekEnd)
               .order('produto', { ascending: true })
-              .limit(1000),
+              .limit(500),
             supabase
               .from('ordens')
               .select(SELECT_FIELDS)
@@ -202,7 +202,7 @@ export default function PainelComercial() {
               .gte('data_emissao', dataMinEmissao)
               .lte('data_emissao', weekEnd)
               .order('produto', { ascending: true })
-              .limit(1000),
+              .limit(500),
           ]);
 
           if (errProg) throw new Error(errProg.message);

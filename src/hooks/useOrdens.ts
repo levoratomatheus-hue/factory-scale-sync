@@ -36,8 +36,8 @@ export function useOrdens(date?: string) {
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (Date.now() - lastFetchRef.current > 600) fetchOrdensRef.current();
-        }, 300);
+          if (Date.now() - lastFetchRef.current > 1500) fetchOrdensRef.current();
+        }, 800);
       })
       .subscribe();
     return () => {
@@ -137,7 +137,7 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
       .channel(`historico-realtime-${dataInicio ?? "all"}-${dataFim ?? ""}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchHistoricoRef.current(), 300);
+        debounceTimer = setTimeout(() => fetchHistoricoRef.current(), 800);
       })
       .subscribe();
     return () => {
@@ -259,7 +259,7 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
       .channel(`reg-diarios-${ordemId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchRegistrosRef.current(), 400);
+        debounceTimer = setTimeout(() => fetchRegistrosRef.current(), 800);
       })
       .subscribe();
     return () => {

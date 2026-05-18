@@ -65,7 +65,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       .channel("gestor-pendentes-global")
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchTodasPendentes(), 300);
+        debounceTimer = setTimeout(() => fetchTodasPendentes(), 800);
       })
       .subscribe();
     return () => {

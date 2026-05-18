@@ -441,9 +441,17 @@ export default function PainelAnalises() {
     });
     const mediaKgHora = totalHoras > 0 ? totalKgComHora / totalHoras : 0;
 
+    // Pre-agrupar por linha — evita 10 varreduras completas (5 porLinha + 5 horasPorLinha)
+    const regsPorLinha = new Map<number, any[]>();
+    registrosDiariosRaw.forEach((r: any) => {
+      const l = Number(r.ordens?.linha);
+      if (!l) return;
+      if (!regsPorLinha.has(l)) regsPorLinha.set(l, []);
+      regsPorLinha.get(l)!.push(r);
+    });
+
     const porLinha = [1, 2, 3, 4, 5].map((linha) => {
-      const regsLinha = registrosDiariosRaw.filter((r: any) =>
-        Number(r.ordens?.linha) === linha &&
+      const regsLinha = (regsPorLinha.get(linha) ?? []).filter((r: any) =>
         (!materialFiltro || ordensAnuaisIds.has(r.ordem_id))
       );
       const totalKg = regsLinha.reduce((s: number, r: any) => {
@@ -491,9 +499,8 @@ export default function PainelAnalises() {
     const horasPorLinha = [1, 2, 3, 4, 5].map((linha) => {
       const diasComOP = diasLinhaMap[linha]?.size ?? 0;
       const toH = (t: string | null) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
-      const horasTrabalhadas = registrosDiariosRaw
-        .filter((r: any) => Number(r.ordens?.linha) === linha &&
-          (!materialFiltro || ordensAnuaisIds.has(r.ordem_id)))
+      const horasTrabalhadas = (regsPorLinha.get(linha) ?? [])
+        .filter((r: any) => (!materialFiltro || ordensAnuaisIds.has(r.ordem_id)))
         .reduce((s: number, r: any) => {
           const h = parseHoras(r.hora_inicio, r.hora_fim);
           if (h === null) return s;
