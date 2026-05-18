@@ -659,9 +659,9 @@ export default function PainelProgramacao() {
     setLoading(false);
   }, []);
 
-  // Re-busca ao mudar o dia
+  // Re-busca ao mudar o dia — sem spinner: dados anteriores ficam visíveis enquanto carrega
   useEffect(() => {
-    fetchOrdens(data);
+    fetchOrdens(data, false);
   }, [data, fetchOrdens]);
 
   // Subscription criada apenas uma vez — usa dataRef para sempre pegar o dia atual
