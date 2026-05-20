@@ -30,11 +30,71 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
   const [editHoraFim, setEditHoraFim] = useState("");
   const [editItems, setEditItems] = useState<ItemProducao[]>([]);
   const [saving, setSaving] = useState(false);
+  const [adicionando, setAdicionando] = useState(false);
+  const [novoData, setNovoData] = useState("");
+  const [novoHoraInicio, setNovoHoraInicio] = useState("");
+  const [novoHoraFim, setNovoHoraFim] = useState("");
+  const [novoItems, setNovoItems] = useState<ItemProducao[]>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [salvandoNovo, setSalvandoNovo] = useState(false);
+
+  const abrirNovoRegistro = () => {
+    setAdicionando(true);
+    setNovoData(ordem?.data_programacao ?? "");
+    setNovoHoraInicio("");
+    setNovoHoraFim("");
+    setNovoItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  };
+
+  const inserirRegistro = async () => {
+    if (!ordem) return;
+    setSalvandoNovo(true);
+
+    const registroProducao = novoItems
+      .map((it) => ({ qty: parseInt(it.qty) || 0, peso: parseFloat(it.peso.replace(",", ".")) || 0 }))
+      .filter((it) => it.qty > 0 || it.peso > 0);
+
+    const { error } = await (supabase as any).from("registros_diarios").insert({
+      ordem_id: ordem.id,
+      data: novoData || ordem.data_programacao,
+      hora_inicio: novoHoraInicio || null,
+      hora_fim: novoHoraFim || null,
+      registro_producao: registroProducao,
+    });
+
+    if (error) {
+      toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
+      setSalvandoNovo(false);
+      return;
+    }
+
+    const { data: todosRegistros } = await (supabase as any)
+      .from("registros_diarios")
+      .select("id, data, hora_inicio, hora_fim, registro_producao")
+      .eq("ordem_id", ordem.id)
+      .order("data", { ascending: true });
+
+    const regsAtualizados = todosRegistros ?? [];
+    setRegistros(regsAtualizados);
+
+    let qtdReal = 0;
+    regsAtualizados.forEach((r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
+    });
+
+    await (supabase as any).from("ordens").update({ quantidade_real: qtdReal } as any).eq("id", ordem.id);
+
+    toast({ title: "Registro adicionado!" });
+    setSalvandoNovo(false);
+    setAdicionando(false);
+    onSaved(ordem.id, qtdReal);
+  };
 
   useEffect(() => {
     if (!ordem) {
       setRegistros([]);
       setEditandoId(null);
+      setAdicionando(false);
       return;
     }
     setLoading(true);
@@ -165,10 +225,13 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : registros.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Nenhum registro diário encontrado.
-          </p>
+        ) : registros.length === 0 && !adicionando ? (
+          <div className="py-6 flex flex-col items-center gap-3">
+            <p className="text-sm text-muted-foreground">Nenhum registro diário encontrado.</p>
+            <Button size="sm" variant="outline" className="gap-1" onClick={abrirNovoRegistro}>
+              <Plus className="h-3.5 w-3.5" /> Adicionar Registro
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3 py-2">
             {registros.map((registro) => {
@@ -346,6 +409,85 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
                 </div>
               );
             })}
+            {adicionando ? (
+              <div className="rounded-md border border-dashed border-primary/40 bg-muted/20 p-3 space-y-3">
+                <p className="text-sm font-semibold">Novo Registro</p>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Data</label>
+                  <Input
+                    type="date"
+                    value={novoData}
+                    onChange={(e) => setNovoData(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Hora Início</label>
+                    <Input type="time" value={novoHoraInicio} onChange={(e) => setNovoHoraInicio(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Hora Fim</label>
+                    <Input type="time" value={novoHoraFim} onChange={(e) => setNovoHoraFim(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-muted-foreground">Itens de Produção</label>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-xs gap-1" onClick={() => setNovoItems((p) => [...p, { qty: "", peso: "" }])}>
+                      <Plus className="h-3 w-3" /> Adicionar
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-[1fr_1fr_2rem] gap-2">
+                    <span className="text-xs text-muted-foreground font-medium">Bateladas</span>
+                    <span className="text-xs text-muted-foreground font-medium">Peso (kg)</span>
+                    <span />
+                  </div>
+                  {novoItems.map((item, idx) => (
+                    <div key={idx} className="grid grid-cols-[1fr_1fr_2rem] gap-2 items-center">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={item.qty}
+                        onChange={(e) => setNovoItems((p) => p.map((it, i) => i === idx ? { ...it, qty: e.target.value } : it))}
+                        className="h-8 text-sm"
+                      />
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,000"
+                        value={item.peso}
+                        onChange={(e) => setNovoItems((p) => p.map((it, i) => i === idx ? { ...it, peso: e.target.value.replace(/[^0-9,]/g, "") } : it))}
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        onClick={() => setNovoItems((p) => p.filter((_, i) => i !== idx))}
+                        disabled={novoItems.length <= 1}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1 border-t">
+                  <Button size="sm" variant="outline" onClick={() => setAdicionando(false)} disabled={salvandoNovo}>
+                    <X className="h-3.5 w-3.5 mr-1" /> Cancelar
+                  </Button>
+                  <Button size="sm" onClick={inserirRegistro} disabled={salvandoNovo}>
+                    {salvandoNovo ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" className="w-full gap-1 border-dashed" onClick={abrirNovoRegistro}>
+                <Plus className="h-3.5 w-3.5" /> Adicionar Registro
+              </Button>
+            )}
           </div>
         )}
       </DialogContent>
