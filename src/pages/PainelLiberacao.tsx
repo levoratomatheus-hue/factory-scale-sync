@@ -5,10 +5,11 @@ import { parseObsLinhaItems, formatObsLinha, parseObsItems, formatObsLine } from
 import { formatKg } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { recalcularPosicoes } from "@/lib/recalcularPosicoes";
+import { imprimirEtiquetaLiberacao } from "@/lib/printEtiqueta";
 import { ptBR } from "date-fns/locale";
 import {
   AlertDialog,
@@ -80,7 +81,7 @@ export default function PainelLiberacao() {
   const fetchOrdens = async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id")
       .eq("status", "aguardando_liberacao")
       .order("posicao", { ascending: true, nullsFirst: false });
 
@@ -758,7 +759,24 @@ export default function PainelLiberacao() {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-2 pt-1">
+                <div className="flex justify-end gap-2 pt-1 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    onClick={() =>
+                      imprimirEtiquetaLiberacao({
+                        produto: ordem.produto,
+                        lote: ordem.lote,
+                        formula_id: ordem.formula_id,
+                        data_conclusao: null,
+                        registros: registrosPorOrdem[ordem.id] ?? [],
+                      })
+                    }
+                  >
+                    <Printer className="mr-1 h-4 w-4" />
+                    Imprimir Etiqueta
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
