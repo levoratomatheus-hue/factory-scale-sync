@@ -229,13 +229,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       return;
     }
 
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_linha",
       status_novo: "em_linha",
     });
 
-    await fetchOrdens();
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "em_linha" } : o));
   };
 
   const salvarInicio = async () => {
@@ -253,7 +253,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       toast({ title: "Erro ao salvar início", description: error.message, variant: "destructive" });
       return;
     }
-    await fetchOrdens();
+    setOrdens((prev) => prev.map((o) => o.id === emLinha.id ? { ...o, hora_inicio: horaInicioInput } : o));
     toast({ title: "Hora de início registrada" });
   };
 
@@ -315,8 +315,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     setHoraFim("");
     setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
     setObsLinha("");
-    await fetchRegistros();
-    await fetchOrdens();
+    await Promise.all([fetchRegistros(), fetchOrdens()]);
     toast({ title: "Dia salvo! OP continua em andamento amanhã." });
   };
 
@@ -376,13 +375,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       return;
     }
 
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordemId,
       status_anterior: "em_linha",
       status_novo: "aguardando_liberacao",
     });
 
-    await fetchOrdens();
+    setOrdens((prev) => prev.filter((o) => o.id !== ordemId));
     toast({ title: "Ordem concluída com sucesso" });
   };
 
@@ -427,10 +426,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     console.log("[DELETE] tabela: registros_diarios | id:", id);
     const { error } = await (supabase as any).from("registros_diarios").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir registro", description: error.message, variant: "destructive" });
-    else {
-      await fetchRegistros();
-      await fetchOrdens();
-    }
+    else await Promise.all([fetchRegistros(), fetchOrdens()]);
   };
 
   if (loading) {

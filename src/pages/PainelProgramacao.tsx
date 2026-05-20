@@ -941,7 +941,7 @@ export default function PainelProgramacao() {
       toast({ title: "Erro ao editar ordem", description: error.message, variant: "destructive" });
       return;
     }
-    await fetchOrdens(data, false);
+    setOrdens((prev) => prev.map((o) => o.id === id ? { ...o, ...payload } : o));
     toast({ title: "Ordem atualizada com sucesso" });
   };
 
@@ -1011,20 +1011,28 @@ export default function PainelProgramacao() {
     if (!editRegOrdem || !editRegRegistro) return;
     setEditandoRegistro(true);
     const filledItems = editRegItems.filter((r) => r.qty.trim() || r.peso.trim());
+    const registroProducao = filledItems.map((r) => ({
+      qty: parseInt(r.qty) || 0,
+      peso: parseFloat(r.peso.replace(",", ".")) || 0,
+    }));
     const { error } = await (supabase as any).from("registros_diarios").update({
       hora_inicio: editRegHoraInicio || null,
       hora_fim: editRegHoraFim || null,
-      registro_producao: filledItems.map((r) => ({
-        qty: parseInt(r.qty) || 0,
-        peso: parseFloat(r.peso.replace(",", ".")) || 0,
-      })),
+      registro_producao: registroProducao,
     }).eq("id", editRegRegistro.id);
     setEditandoRegistro(false);
     if (error) {
       toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
       return;
     }
-    await fetchOrdens(data, false);
+    setRegistrosDoDia((prev) => {
+      const ordemRegs = (prev[editRegOrdem.id] ?? []).map((r: any) =>
+        r.id === editRegRegistro.id
+          ? { ...r, hora_inicio: editRegHoraInicio || null, hora_fim: editRegHoraFim || null, registro_producao: registroProducao }
+          : r
+      );
+      return { ...prev, [editRegOrdem.id]: ordemRegs };
+    });
     toast({ title: "Registro atualizado" });
     setEditRegOrdem(null);
     setEditRegRegistro(null);
