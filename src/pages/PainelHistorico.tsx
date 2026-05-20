@@ -6,18 +6,8 @@ import { Loader2, History, Pencil, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { formatKg } from "@/lib/utils";
 import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
+import { EditarRegistrosDiariosModal } from "@/components/EditarRegistrosDiariosModal";
 
 type Modo = "dia" | "periodo";
 
@@ -33,54 +23,17 @@ export default function PainelHistorico() {
 
   const { ordens, loading } = useHistorico(filtroInicio, filtroFim);
 
-  // Local overrides applied after edits (avoids re-fetching the whole list)
-  const [overrides, setOverrides] = useState<Record<string, Partial<{ hora_inicio: string | null; hora_fim: string | null; quantidade_real: number | null }>>>({});
+  // Local overrides aplicados após edição (evita re-fetch da lista)
+  const [overrides, setOverrides] = useState<Record<string, Partial<{ quantidade_real: number | null }>>>({});
 
   const [ordemDetalhe, setOrdemDetalhe] = useState<any | null>(null);
-  const [editandoOrdem, setEditandoOrdem] = useState<any | null>(null);
-  const [editHoraInicio, setEditHoraInicio] = useState("");
-  const [editHoraFim, setEditHoraFim] = useState("");
-  const [editQtdReal, setEditQtdReal] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [editandoRegistrosOrdem, setEditandoRegistrosOrdem] = useState<any | null>(null);
 
-  const abrirEdicao = (ordem: any) => {
-    const ov = overrides[ordem.id] ?? {};
-    const hi = "hora_inicio" in ov ? ov.hora_inicio : ordem.hora_inicio;
-    const hf = "hora_fim" in ov ? ov.hora_fim : ordem.hora_fim;
-    const qr = "quantidade_real" in ov ? ov.quantidade_real : ordem.quantidade_real;
-    setEditHoraInicio(hi?.slice(0, 5) ?? "");
-    setEditHoraFim(hf?.slice(0, 5) ?? "");
-    setEditQtdReal(qr != null ? String(qr).replace(".", ",") : "");
-    setEditandoOrdem(ordem);
-  };
-
-  const salvarEdicao = async () => {
-    if (!editandoOrdem) return;
-    setSaving(true);
-    const qtd = parseFloat(editQtdReal.replace(",", "."));
-    const { error } = await supabase
-      .from("ordens")
-      .update({
-        hora_inicio: editHoraInicio || null,
-        hora_fim: editHoraFim || null,
-        ...(isNaN(qtd) ? {} : { quantidade_real: qtd }),
-      } as any)
-      .eq("id", editandoOrdem.id);
-    setSaving(false);
-    if (error) {
-      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
-      return;
-    }
+  const handleRegistroSalvo = (ordemId: string, novaQtdReal: number) => {
     setOverrides((prev) => ({
       ...prev,
-      [editandoOrdem.id]: {
-        hora_inicio: editHoraInicio || null,
-        hora_fim: editHoraFim || null,
-        quantidade_real: isNaN(qtd) ? null : qtd,
-      },
+      [ordemId]: { quantidade_real: novaQtdReal },
     }));
-    toast({ title: "Ordem atualizada com sucesso!" });
-    setEditandoOrdem(null);
   };
 
   const descricaoFiltro =
@@ -193,8 +146,8 @@ export default function PainelHistorico() {
             )}
             {ordens.map((ordem) => {
               const ov = overrides[ordem.id] ?? {};
-              const horaInicio = ("hora_inicio" in ov ? ov.hora_inicio : ordem.hora_inicio)?.slice(0, 5) ?? null;
-              const horaFim = ("hora_fim" in ov ? ov.hora_fim : ordem.hora_fim)?.slice(0, 5) ?? null;
+              const horaInicio = ordem.hora_inicio?.slice(0, 5) ?? null;
+              const horaFim = ordem.hora_fim?.slice(0, 5) ?? null;
               const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : ordem.quantidade_real;
               return (
                 <tr
@@ -225,7 +178,7 @@ export default function PainelHistorico() {
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setOrdemDetalhe(ordem); }}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); abrirEdicao(ordem); }}>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setEditandoRegistrosOrdem(ordem); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -239,61 +192,11 @@ export default function PainelHistorico() {
 
       <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
 
-      {/* Modal de edição */}
-      <Dialog open={!!editandoOrdem} onOpenChange={(open) => !open && setEditandoOrdem(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Editar OP</DialogTitle>
-            {editandoOrdem && (
-              <p className="text-sm text-muted-foreground">
-                Lote {editandoOrdem.lote} · {editandoOrdem.produto}
-              </p>
-            )}
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Hora Início</label>
-                <Input
-                  type="time"
-                  value={editHoraInicio}
-                  onChange={(e) => setEditHoraInicio(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Hora Fim</label>
-                <Input
-                  type="time"
-                  value={editHoraFim}
-                  onChange={(e) => setEditHoraFim(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Quantidade Real (kg)</label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="0,000"
-                value={editQtdReal}
-                onChange={(e) => setEditQtdReal(e.target.value.replace(/[^0-9,]/g, ""))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditandoOrdem(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={salvarEdicao} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditarRegistrosDiariosModal
+        ordem={editandoRegistrosOrdem}
+        onClose={() => setEditandoRegistrosOrdem(null)}
+        onSaved={handleRegistroSalvo}
+      />
     </div>
   );
 }
