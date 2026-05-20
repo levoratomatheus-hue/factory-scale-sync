@@ -80,6 +80,12 @@ export default function PainelLiberacao() {
   const [zplAtivo, setZplAtivo] = useState<string | null>(null);
   const [zplCopiado, setZplCopiado] = useState(false);
   const [bpEnviando, setBpEnviando] = useState(false);
+  const [novoRegOrdem, setNovoRegOrdem] = useState<any | null>(null);
+  const [novoRegData, setNovoRegData] = useState("");
+  const [novoRegHoraInicio, setNovoRegHoraInicio] = useState("");
+  const [novoRegHoraFim, setNovoRegHoraFim] = useState("");
+  const [novoRegItems, setNovoRegItems] = useState<Array<{ qty: string; peso: string }>>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [novoRegSaving, setNovoRegSaving] = useState(false);
 
   const fetchOrdens = async () => {
     const { data } = await supabase
@@ -189,6 +195,57 @@ export default function PainelLiberacao() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const salvarNovoRegistro = async () => {
+    if (!novoRegOrdem) return;
+    setNovoRegSaving(true);
+
+    const validItems = novoRegItems.filter((i) => i.qty.trim() !== "" || i.peso.trim() !== "");
+    const registroProducao = validItems.map((i) => ({
+      qty: parseInt(i.qty) || 0,
+      peso: parseFloat(i.peso.replace(",", ".")) || 0,
+    }));
+
+    const { error } = await (supabase as any).from("registros_diarios").insert({
+      ordem_id: novoRegOrdem.id,
+      data: novoRegData || novoRegOrdem.data_programacao,
+      hora_inicio: novoRegHoraInicio || null,
+      hora_fim: novoRegHoraFim || null,
+      registro_producao: registroProducao,
+    });
+
+    if (error) {
+      toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
+      setNovoRegSaving(false);
+      return;
+    }
+
+    const { data: allRegs } = await (supabase as any)
+      .from("registros_diarios")
+      .select("id, ordem_id, data, hora_inicio, hora_fim, registro_producao")
+      .eq("ordem_id", novoRegOrdem.id)
+      .order("data", { ascending: true });
+
+    const regsAtualizados = allRegs ?? [];
+    setRegistrosPorOrdem((prev) => ({ ...prev, [novoRegOrdem.id]: regsAtualizados }));
+
+    const total = calcQtdFromRegistros(regsAtualizados);
+    if (total !== null) {
+      setQtdReal((prev) => ({
+        ...prev,
+        [novoRegOrdem.id]: total.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 }),
+      }));
+      await (supabase as any).from("ordens").update({ quantidade_real: total }).eq("id", novoRegOrdem.id);
+    }
+
+    toast({ title: "Registro adicionado" });
+    setNovoRegOrdem(null);
+    setNovoRegData("");
+    setNovoRegHoraInicio("");
+    setNovoRegHoraFim("");
+    setNovoRegItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+    setNovoRegSaving(false);
+  };
 
   const handleDeleteParada = async (paradaId: string, ordemId: string) => {
     if (!window.confirm("Excluir esta parada? Esta ação não pode ser desfeita.")) return;
@@ -544,9 +601,25 @@ export default function PainelLiberacao() {
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
                         Registros Diários
                       </p>
-                      <span className="text-xs text-blue-600 font-medium">
-                        {regs.length} dia{regs.length !== 1 ? "s" : ""}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-blue-600 font-medium">
+                          {regs.length} dia{regs.length !== 1 ? "s" : ""}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-xs gap-1 px-2 text-blue-700 hover:bg-blue-200"
+                          onClick={() => {
+                            setNovoRegOrdem(ordem);
+                            setNovoRegData(ordem.data_programacao ?? "");
+                            setNovoRegHoraInicio("");
+                            setNovoRegHoraFim("");
+                            setNovoRegItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+                          }}
+                        >
+                          <Plus className="h-3 w-3" /> Adicionar
+                        </Button>
+                      </div>
                     </div>
                     <div className="divide-y divide-blue-100">
                       {regs.map((r, i) => {
@@ -608,14 +681,32 @@ export default function PainelLiberacao() {
                       );
                     })()}
                   </div>
-                ) : ordem.obs_linha ? (
-                  <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 space-y-1">
-                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Registro de Produção</p>
-                    <p className="text-sm text-blue-900 font-mono">
-                      {(() => { const items = parseObsLinhaItems(ordem.obs_linha); return items ? formatObsLinha(items) : ordem.obs_linha; })()}
-                    </p>
-                  </div>
-                ) : null}
+                ) : (
+                  <>
+                    {ordem.obs_linha && (
+                      <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 space-y-1">
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Registro de Produção</p>
+                        <p className="text-sm text-blue-900 font-mono">
+                          {(() => { const items = parseObsLinhaItems(ordem.obs_linha); return items ? formatObsLinha(items) : ordem.obs_linha; })()}
+                        </p>
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 gap-1"
+                      onClick={() => {
+                        setNovoRegOrdem(ordem);
+                        setNovoRegData(ordem.data_programacao ?? "");
+                        setNovoRegHoraInicio("");
+                        setNovoRegHoraFim("");
+                        setNovoRegItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Adicionar Registro
+                    </Button>
+                  </>
+                )}
 
                 {/* Paradas associadas à OP */}
                 {(paradasPorOrdem[ordem.id] ?? []).length > 0 && (
@@ -1203,6 +1294,107 @@ export default function PainelLiberacao() {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => { setZplAtivo(null); setZplCopiado(false); }}>
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Adicionar Registro Diário */}
+      <Dialog open={!!novoRegOrdem} onOpenChange={(open) => { if (!open) setNovoRegOrdem(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar Registro — {novoRegOrdem?.produto}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Data</label>
+              <input
+                type="date"
+                value={novoRegData}
+                onChange={(e) => setNovoRegData(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={novoRegHoraInicio}
+                  onChange={(e) => setNovoRegHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={novoRegHoraFim}
+                  onChange={(e) => setNovoRegHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Itens de Produção (qtd × peso)</label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-xs gap-1 px-2"
+                  onClick={() => setNovoRegItems((prev) => [...prev, { qty: "", peso: "" }])}
+                >
+                  <Plus className="h-3 w-3" /> Linha
+                </Button>
+              </div>
+              {novoRegItems.map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={item.qty}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setNovoRegItems((prev) => prev.map((it, idx) => idx === i ? { ...it, qty: val } : it));
+                    }}
+                    placeholder="Qtd"
+                    className="w-20 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-muted-foreground text-sm shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={item.peso}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9,]/g, "");
+                      setNovoRegItems((prev) => prev.map((it, idx) => idx === i ? { ...it, peso: val } : it));
+                    }}
+                    placeholder="Peso (kg)"
+                    className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  {novoRegItems.length > 1 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
+                      onClick={() => setNovoRegItems((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNovoRegOrdem(null)} disabled={novoRegSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={salvarNovoRegistro} disabled={novoRegSaving}>
+              {novoRegSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>
