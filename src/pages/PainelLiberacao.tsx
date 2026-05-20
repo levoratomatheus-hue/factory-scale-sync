@@ -9,7 +9,7 @@ import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Printer, Tra
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { recalcularPosicoes } from "@/lib/recalcularPosicoes";
-import { imprimirEtiquetaLiberacao } from "@/lib/printEtiqueta";
+import { gerarZplLiberacao } from "@/lib/printEtiqueta";
 import { ptBR } from "date-fns/locale";
 import {
   AlertDialog,
@@ -77,6 +77,9 @@ export default function PainelLiberacao() {
   const [editSaving, setEditSaving] = useState(false);
   const [deleteRegistro, setDeleteRegistro] = useState<{ id: string; ordemId: string } | null>(null);
   const [deletandoRegistro, setDeletandoRegistro] = useState(false);
+  const [zplAtivo, setZplAtivo] = useState<string | null>(null);
+  const [zplCopiado, setZplCopiado] = useState(false);
+  const [bpEnviando, setBpEnviando] = useState(false);
 
   const fetchOrdens = async () => {
     const { data } = await supabase
@@ -764,15 +767,16 @@ export default function PainelLiberacao() {
                     size="sm"
                     variant="outline"
                     className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                    onClick={() =>
-                      imprimirEtiquetaLiberacao({
+                    onClick={() => {
+                      setZplCopiado(false);
+                      setZplAtivo(gerarZplLiberacao({
                         produto: ordem.produto,
                         lote: ordem.lote,
                         formula_id: ordem.formula_id,
                         data_conclusao: null,
                         registros: registrosPorOrdem[ordem.id] ?? [],
-                      })
-                    }
+                      }));
+                    }}
                   >
                     <Printer className="mr-1 h-4 w-4" />
                     Imprimir Etiqueta
@@ -1128,6 +1132,81 @@ export default function PainelLiberacao() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog — ZPL Etiqueta Zebra */}
+      <Dialog open={!!zplAtivo} onOpenChange={(open) => { if (!open) { setZplAtivo(null); setZplCopiado(false); } }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-4 w-4" />
+              Etiqueta ZPL — Zebra ZD220
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-xs text-muted-foreground">
+              Copie o código abaixo e envie para a impressora via BrowserPrint, Zebra Setup Utilities ou outro método de impressão raw.
+            </p>
+            <textarea
+              readOnly
+              value={zplAtivo ?? ""}
+              rows={14}
+              className="w-full rounded-md border bg-muted/40 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            />
+          </div>
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!zplAtivo) return;
+                await navigator.clipboard.writeText(zplAtivo);
+                setZplCopiado(true);
+                setTimeout(() => setZplCopiado(false), 2500);
+              }}
+            >
+              {zplCopiado ? "Copiado ✓" : "Copiar ZPL"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bpEnviando}
+              onClick={async () => {
+                if (!zplAtivo) return;
+                const bp = (window as any).BrowserPrint;
+                if (!bp) {
+                  toast({ title: "BrowserPrint não encontrado", description: "Instale o Zebra BrowserPrint e recarregue a página.", variant: "destructive" });
+                  return;
+                }
+                setBpEnviando(true);
+                bp.getLocalDevices(
+                  (devices: any) => {
+                    const printer = devices?.printer?.[0];
+                    if (!printer) {
+                      toast({ title: "Nenhuma impressora encontrada via BrowserPrint", variant: "destructive" });
+                      setBpEnviando(false);
+                      return;
+                    }
+                    printer.send(
+                      zplAtivo,
+                      () => { toast({ title: "Etiqueta enviada para a impressora!" }); setBpEnviando(false); },
+                      (err: any) => { toast({ title: "Erro ao enviar", description: String(err), variant: "destructive" }); setBpEnviando(false); }
+                    );
+                  },
+                  () => { toast({ title: "Erro ao conectar ao BrowserPrint", variant: "destructive" }); setBpEnviando(false); },
+                  "printer"
+                );
+              }}
+            >
+              {bpEnviando && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+              Enviar via BrowserPrint
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { setZplAtivo(null); setZplCopiado(false); }}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog — Reprovar */}
       <AlertDialog open={!!reprovarOrdem} onOpenChange={(open) => !open && setReprovarOrdem(null)}>

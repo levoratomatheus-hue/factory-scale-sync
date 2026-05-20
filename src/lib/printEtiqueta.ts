@@ -157,7 +157,7 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
   doc.output("dataurlnewwindow");
 }
 
-// ── Etiqueta de Liberação — layout ZanCollor (HTML para window.print) ───────
+// ── Etiqueta de Liberação — ZPL para Zebra ZD220 (106×65mm / 832×512 dots) ──
 
 export interface EtiquetaLiberacaoData {
   produto: string;
@@ -169,7 +169,15 @@ export interface EtiquetaLiberacaoData {
   }>;
 }
 
-export function imprimirEtiquetaLiberacao(params: EtiquetaLiberacaoData) {
+// Transliterar acentos e remover caracteres ZPL especiais
+function sanitizeZpl(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[~^]/g, "");
+}
+
+export function gerarZplLiberacao(params: EtiquetaLiberacaoData): string {
   const { produto, lote, formula_id, data_conclusao, registros } = params;
 
   const allItems: Array<{ qty: number; peso: number }> = [];
@@ -187,113 +195,62 @@ export function imprimirEtiquetaLiberacao(params: EtiquetaLiberacaoData) {
     ? new Date(data_conclusao).toLocaleDateString("pt-BR")
     : new Date().toLocaleDateString("pt-BR");
 
-  const itensHTML = allItems.length > 0
-    ? allItems.map((it) => `<div class="kg-item">${it.qty}&times;&nbsp;${fmtPeso(it.peso)}&nbsp;kg</div>`).join("")
-    : '<div class="kg-item">&mdash;</div>';
+  const prodSafe    = sanitizeZpl(produto);
+  const formulaSafe = formula_id ? sanitizeZpl(String(formula_id)) : "---";
+  const loteSafe    = sanitizeZpl(String(lote));
 
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: A5 landscape; margin: 6mm; }
-    body { font-family: Arial, Helvetica, sans-serif; }
-    .etiqueta {
-      width: 100%;
-      min-height: calc(148mm - 12mm);
-      border: 1.5px solid #222;
-      border-radius: 3px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-    .header {
-      background: #000;
-      color: #fff;
-      text-align: center;
-      padding: 8px 10px;
-      font-size: 26pt;
-      font-weight: 900;
-      letter-spacing: 4px;
-      line-height: 1;
-    }
-    .body {
-      flex: 1;
-      padding: 9px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-    .row { display: flex; align-items: baseline; gap: 10px; }
-    .lbl { font-size: 7pt; font-weight: bold; color: #666; text-transform: uppercase; min-width: 34px; flex-shrink: 0; }
-    .val { font-size: 13pt; font-weight: bold; color: #111; line-height: 1.1; }
-    .val-big { font-size: 17pt; font-weight: 900; color: #000; line-height: 1.1; }
-    .val-sm { font-size: 11pt; font-weight: bold; color: #111; }
-    .validity {
-      display: inline-block;
-      margin-left: 12px;
-      font-size: 9pt;
-      font-weight: bold;
-      color: #333;
-      border: 1.5px solid #666;
-      border-radius: 3px;
-      padding: 1px 7px;
-    }
-    .divider { border: none; border-top: 1px solid #ccc; margin: 4px 0; }
-    .kg-section { margin-top: 2px; }
-    .kg-lbl { font-size: 7pt; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 3px; }
-    .kg-item { font-size: 12pt; font-weight: bold; color: #000; font-family: 'Courier New', monospace; line-height: 1.4; }
-    .kg-total {
-      font-size: 13pt; font-weight: 900; color: #000;
-      border-top: 1.5px solid #999;
-      margin-top: 5px; padding-top: 4px;
-      font-family: 'Courier New', monospace;
-    }
-  </style>
-</head>
-<body>
-  <div class="etiqueta">
-    <div class="header">ZAN COLLOR</div>
-    <div class="body">
-      <div class="row">
-        <span class="lbl">C&oacute;d.</span>
-        <span class="val-sm">${formula_id ? String(formula_id) : "&mdash;"}</span>
-      </div>
-      <div class="row">
-        <span class="lbl">Prod.</span>
-        <span class="val-big">${produto}</span>
-      </div>
-      <hr class="divider"/>
-      <div class="row">
-        <span class="lbl">Lote</span>
-        <span class="val">${lote}</span>
-        <span class="validity">24 MESES</span>
-      </div>
-      <div class="row">
-        <span class="lbl">Data</span>
-        <span class="val-sm">${dateFmt}</span>
-      </div>
-      <hr class="divider"/>
-      <div class="kg-section">
-        <div class="kg-lbl">KG</div>
-        ${itensHTML}
-        ${totalKg > 0 ? `<div class="kg-total">Total: ${fmtPeso(totalKg)}&nbsp;kg</div>` : ""}
-      </div>
-    </div>
-  </div>
-  <script>
-    window.onload = function() {
-      window.print();
-      window.onafterprint = function() { window.close(); };
-    };
-  </script>
-</body>
-</html>`;
+  // Coluna direita: itens de produção empilhados a partir de Y=280
+  // Espaçamento 52 dots por linha com fonte 45×45 → caem 4-5 itens até Y=495
+  const KG_X = 400;
+  const KG_Y_START = 280;
+  const KG_LINE_H = 52;
+  const KG_MAX_Y = 460;
 
-  const win = window.open("", "_blank", "width=900,height=650");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
+  const kgLines: string[] = [];
+
+  // Cabeçalho "KG" na coluna direita
+  kgLines.push(`^FO${KG_X},${KG_Y_START - 55}^A0N,35,35^FDKG^FS`);
+
+  // Linha separadora vertical entre colunas
+  kgLines.push(`^FO395,130^GB2,375,2^FS`);
+
+  if (allItems.length === 0) {
+    kgLines.push(`^FO${KG_X},${KG_Y_START}^A0N,45,45^FD---^FS`);
+  } else {
+    allItems.forEach((it, i) => {
+      const y = KG_Y_START + i * KG_LINE_H;
+      if (y <= KG_MAX_Y) {
+        kgLines.push(
+          `^FO${KG_X},${y}^A0N,45,45^FD${it.qty}x ${fmtPeso(it.peso)} kg^FS`
+        );
+      }
+    });
+    // Total apenas quando há mais de um item
+    if (allItems.length > 1) {
+      const totalY = Math.min(KG_Y_START + allItems.length * KG_LINE_H + 6, 470);
+      kgLines.push(
+        `^FO${KG_X},${totalY}^A0N,38,38^FDTOTAL: ${fmtPeso(totalKg)} kg^FS`
+      );
+    }
   }
+
+  const lines: string[] = [
+    "^XA",
+    "^PW832",
+    "^LL512",
+    // ── Cabeçalho preto ──────────────────────────────────────
+    "^FO0,0^GB832,120,120^FS",
+    // Texto branco (^FR = field reverse)
+    `^FO20,20^A0N,55,55^FR^FDZan Collor Masterbatches^FS`,
+    // ── Coluna esquerda ──────────────────────────────────────
+    `^FO20,140^A0N,40,40^FDCod.: ${formulaSafe}^FS`,
+    `^FO20,190^A0N,40,40^FDProd: ${prodSafe}^FS`,
+    `^FO20,240^A0N,40,40^FDLote: ${loteSafe}   24 MESES^FS`,
+    `^FO20,300^A0N,35,35^FD${dateFmt}^FS`,
+    // ── Coluna direita (KG) ───────────────────────────────────
+    ...kgLines,
+    "^XZ",
+  ];
+
+  return lines.join("\n");
 }
