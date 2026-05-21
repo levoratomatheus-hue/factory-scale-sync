@@ -113,7 +113,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       toast({ title: "Erro ao iniciar pesagem", description: error.message, variant: "destructive" });
       return;
     }
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "pendente",
       status_novo: "em_pesagem",

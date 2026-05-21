@@ -62,7 +62,7 @@ export function useOrdens(date?: string) {
 
     if (error) return error.message;
 
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordemId,
       status_anterior: ordem.status,
       status_novo: proximoStatus,
@@ -94,7 +94,7 @@ export function useOrdens(date?: string) {
 
     if (error) return error.message;
 
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: firstPendente.id,
       status_anterior: "pendente",
       status_novo: "em_pesagem",

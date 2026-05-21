@@ -123,7 +123,7 @@ export default function Index() {
       import('./PainelProgramacao');
       import('./PainelLiberacao');
       import('./PainelHistorico');
-    }, 1500);
+    }, 200);
     return () => clearTimeout(t);
   }, []);
 

@@ -74,10 +74,11 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     };
   }, [fetchTodasPendentes]);
 
-  const pendentesAnteriores = todasPendentes.filter(
-    (o) =>
-      o.data_programacao < todayStr &&
-      ["pendente", "aguardando_linha"].includes(o.status)
+  const pendentesAnteriores = useMemo(
+    () => todasPendentes.filter(
+      (o) => o.data_programacao < todayStr && ["pendente", "aguardando_linha"].includes(o.status)
+    ),
+    [todasPendentes, todayStr]
   );
 
   const [pendentesOpen, setPendentesOpen] = useState(false);
@@ -88,7 +89,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const isPassado = isPast(selectedDate) && !isHoje;
   const isFuturo = isFuture(selectedDate);
 
-  const emAberto = ordens.filter((o) => o.status === "pendente").length;
+  const emAberto = useMemo(() => ordens.filter((o) => o.status === "pendente").length, [ordens]);
 
   const opsAtrasadas = useMemo(() =>
     todasPendentes.filter(op =>
@@ -113,17 +114,16 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   useEffect(() => {
     const fetchLotesSemOP = async () => {
       setLoadingLotesSemOP(true);
-      const { data: lotes } = await (supabase as any)
-        .from('cadastro_lotes')
-        .select('lote, produto, quantidade, classe')
-        .eq('status', 'Em Aberto')
-        .order('lote', { ascending: true });
+      const [{ data: lotes }, { data: ordensExistentes }] = await Promise.all([
+        (supabase as any)
+          .from('cadastro_lotes')
+          .select('lote, produto, quantidade, classe')
+          .eq('status', 'Em Aberto')
+          .order('lote', { ascending: true }),
+        supabase.from('ordens').select('lote'),
+      ]);
 
       if (!lotes?.length) { setLoadingLotesSemOP(false); return; }
-
-      const { data: ordensExistentes } = await supabase
-        .from('ordens')
-        .select('lote');
 
       const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
       setLotesSeOP(lotes.filter((l: any) => !lotesComOP.has(String(l.lote))));

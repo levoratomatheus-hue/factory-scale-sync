@@ -107,7 +107,7 @@ export default function PainelMistura() {
       toast({ title: "Erro ao iniciar mistura", description: error.message, variant: "destructive" });
       return;
     }
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_mistura",
       status_novo: "em_mistura",
@@ -128,7 +128,7 @@ export default function PainelMistura() {
       toast({ title: "Erro ao concluir mistura", description: error.message, variant: "destructive" });
       return;
     }
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "em_mistura",
       status_novo: "aguardando_linha",

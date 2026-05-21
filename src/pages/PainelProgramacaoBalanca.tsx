@@ -448,7 +448,7 @@ export default function PainelProgramacaoBalanca() {
       .eq("id", ordem.id);
 
     if (!error) {
-      await supabase.from("historico").insert({
+      supabase.from("historico").insert({
         ordem_id: ordem.id,
         status_anterior: ordem.status,
         status_novo: novoStatus,
@@ -466,7 +466,7 @@ export default function PainelProgramacaoBalanca() {
       toast({ title: "Erro ao devolver ordem", description: error.message, variant: "destructive" });
       return;
     }
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "em_pesagem",
       status_novo: "pendente",

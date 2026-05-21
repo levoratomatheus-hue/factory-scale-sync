@@ -476,7 +476,7 @@ export default function PainelLiberacao() {
     setHoraFimEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
     setProdItemsEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
 
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_liberacao",
       status_novo: "concluido",
@@ -519,7 +519,7 @@ export default function PainelLiberacao() {
       return;
     }
 
-    await supabase.from("historico").insert({
+    supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_liberacao",
       status_novo: "aguardando_linha",

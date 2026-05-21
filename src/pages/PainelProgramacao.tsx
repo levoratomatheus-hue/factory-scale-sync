@@ -870,7 +870,7 @@ export default function PainelProgramacao() {
       .update({ status: "aguardando_linha" } as any)
       .eq("id", ordemParaVoltar.id);
     if (!error) {
-      await supabase.from("historico").insert({
+      supabase.from("historico").insert({
         ordem_id: ordemParaVoltar.id,
         status_anterior: "em_linha",
         status_novo: "aguardando_linha",
@@ -914,7 +914,7 @@ export default function PainelProgramacao() {
 
     const { error } = await supabase.from("ordens").update(payload as any).eq("id", ordemParaForcar.id);
     if (!error) {
-      await supabase.from("historico").insert({
+      supabase.from("historico").insert({
         ordem_id: ordemParaForcar.id,
         status_anterior: statusAnterior,
         status_novo: "aguardando_liberacao",
