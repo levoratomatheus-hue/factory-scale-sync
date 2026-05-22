@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useHistorico } from "@/hooks/useOrdens";
+import { useHistorico, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { Loader2, History, Pencil, Eye } from "lucide-react";
@@ -22,6 +22,7 @@ export default function PainelHistorico() {
   const filtroFim = modo === "dia" ? dia : dataFim;
 
   const { ordens, loading } = useHistorico(filtroInicio, filtroFim);
+  const { registros: registrosDiarios } = useRegistrosDiariosAnalises(filtroInicio, filtroFim);
 
   // Local overrides aplicados após edição (evita re-fetch da lista)
   const [overrides, setOverrides] = useState<Record<string, Partial<{ quantidade_real: number | null }>>>({});
@@ -196,12 +197,14 @@ export default function PainelHistorico() {
                 </td>
                 <td className="px-4 py-3">
                   {(() => {
-                    const total = ordens.reduce((s, o) => {
-                      const ov = overrides[o.id] ?? {};
-                      const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : o.quantidade_real;
-                      return s + (qtdReal ?? 0);
-                    }, 0);
-                    return total > 0 ? `${total.toLocaleString("pt-BR")} kg` : "—";
+                    const ordenIds = new Set(ordens.map((o) => o.id));
+                    const total = registrosDiarios
+                      .filter((r: any) => ordenIds.has(r.ordem_id))
+                      .reduce((s: number, r: any) => {
+                        const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+                        return s + items.reduce((ss: number, it: any) => ss + (it.qty || 0) * (it.peso || 0), 0);
+                      }, 0);
+                    return total > 0 ? `${total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kg` : "—";
                   })()}
                 </td>
                 <td colSpan={6} />
