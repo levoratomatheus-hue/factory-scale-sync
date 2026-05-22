@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useHistorico, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
+import { useHistorico } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { Loader2, History, Pencil, Eye } from "lucide-react";
@@ -22,14 +22,6 @@ export default function PainelHistorico() {
   const filtroFim = modo === "dia" ? dia : dataFim;
 
   const { ordens, loading } = useHistorico(filtroInicio, filtroFim);
-  const { registros: registrosDiarios } = useRegistrosDiariosAnalises(filtroInicio, filtroFim);
-
-  const kgPorOrdem = registrosDiarios.reduce((acc: Record<string, number>, r: any) => {
-    const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-    const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-    acc[r.ordem_id] = (acc[r.ordem_id] || 0) + kg;
-    return acc;
-  }, {});
 
   // Local overrides aplicados após edição (evita re-fetch da lista)
   const [overrides, setOverrides] = useState<Record<string, Partial<{ quantidade_real: number | null }>>>({});
@@ -153,9 +145,10 @@ export default function PainelHistorico() {
               </tr>
             )}
             {ordens.map((ordem) => {
+              const ov = overrides[ordem.id] ?? {};
               const horaInicio = ordem.hora_inicio?.slice(0, 5) ?? null;
               const horaFim = ordem.hora_fim?.slice(0, 5) ?? null;
-              const qtdReal = kgPorOrdem[ordem.id] ?? null;
+              const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : ordem.quantidade_real;
               return (
                 <tr
                   key={ordem.id}
@@ -203,7 +196,11 @@ export default function PainelHistorico() {
                 </td>
                 <td className="px-4 py-3">
                   {(() => {
-                    const total = ordens.reduce((s, o) => s + (kgPorOrdem[o.id] || 0), 0);
+                    const total = ordens.reduce((s, o) => {
+                      const ov = overrides[o.id] ?? {};
+                      const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : o.quantidade_real;
+                      return s + (qtdReal ?? 0);
+                    }, 0);
                     return total > 0 ? `${total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kg` : "—";
                   })()}
                 </td>
