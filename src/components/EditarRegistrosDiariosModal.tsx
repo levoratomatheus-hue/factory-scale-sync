@@ -36,6 +36,10 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
   const [novoHoraFim, setNovoHoraFim] = useState("");
   const [novoItems, setNovoItems] = useState<ItemProducao[]>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  const [editandoQtdReal, setEditandoQtdReal] = useState(false);
+  const [qtdRealInput, setQtdRealInput] = useState("");
+  const [salvandoQtdReal, setSalvandoQtdReal] = useState(false);
+  const [qtdRealAtual, setQtdRealAtual] = useState<number | null>(null);
 
   const abrirNovoRegistro = () => {
     setAdicionando(true);
@@ -95,6 +99,9 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
       setRegistros([]);
       setEditandoId(null);
       setAdicionando(false);
+      setEditandoQtdReal(false);
+      setQtdRealInput("");
+      setQtdRealAtual(null);
       return;
     }
     setLoading(true);
@@ -207,6 +214,19 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
     setSaving(false);
     setEditandoId(null);
     onSaved(ordem.id, qtdReal);
+  };
+
+  const salvarQtdReal = async () => {
+    if (!ordem) return;
+    const valor = parseFloat(qtdRealInput.replace(",", "."));
+    if (isNaN(valor) || valor < 0) return;
+    setSalvandoQtdReal(true);
+    await (supabase as any).from("ordens").update({ quantidade_real: valor } as any).eq("id", ordem.id);
+    setSalvandoQtdReal(false);
+    setEditandoQtdReal(false);
+    setQtdRealAtual(valor);
+    onSaved(ordem.id, valor);
+    toast({ title: "Quantidade real atualizada!" });
   };
 
   return (
@@ -487,6 +507,46 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
               <Button size="sm" variant="outline" className="w-full gap-1 border-dashed" onClick={abrirNovoRegistro}>
                 <Plus className="h-3.5 w-3.5" /> Adicionar Registro
               </Button>
+            )}
+          </div>
+        )}
+        {/* Edição direta da quantidade real */}
+        {ordem && (
+          <div className="border-t pt-3 mt-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quantidade Real</p>
+                <p className="text-sm font-bold">
+                  {(() => { const v = qtdRealAtual ?? ordem.quantidade_real; return v != null ? `${formatKg(v)} kg` : <span className="text-muted-foreground/50">—</span>; })()}
+                </p>
+              </div>
+              {!editandoQtdReal && (
+                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => {
+                  setQtdRealInput(ordem.quantidade_real != null ? String(ordem.quantidade_real).replace(".", ",") : "");
+                  setEditandoQtdReal(true);
+                }}>
+                  <Pencil className="h-3 w-3" /> Corrigir
+                </Button>
+              )}
+            </div>
+            {editandoQtdReal && (
+              <div className="flex items-center gap-2 mt-2">
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,000"
+                  value={qtdRealInput}
+                  onChange={(e) => setQtdRealInput(e.target.value.replace(/[^0-9,]/g, ""))}
+                  className="h-8 text-sm"
+                />
+                <span className="text-sm text-muted-foreground shrink-0">kg</span>
+                <Button size="sm" variant="outline" onClick={() => setEditandoQtdReal(false)} disabled={salvandoQtdReal}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" onClick={salvarQtdReal} disabled={salvandoQtdReal}>
+                  {salvandoQtdReal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
             )}
           </div>
         )}
