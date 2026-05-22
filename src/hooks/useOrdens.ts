@@ -158,7 +158,7 @@ export function useAnalises(dataInicio: string, dataFim: string) {
 
     const { data, error } = await supabase
       .from("ordens")
-      .select("id, quantidade_real, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
+      .select("id, quantidade, quantidade_real, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
       .eq("status", "concluido")
       .gte("data_programacao", dataInicio)
       .lte("data_programacao", dataFim)
