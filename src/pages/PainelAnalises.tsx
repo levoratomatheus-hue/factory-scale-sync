@@ -489,13 +489,20 @@ export default function PainelAnalises() {
       return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ids.length, totalKg };
     });
 
-    const mapaP: Record<string, { produto: string; ops: number; kg: number }> = {};
-    ordens.forEach((o) => {
-      const chave = o.formula_id ? String(o.formula_id) : `sem_formula_${o.produto || "?"}`;
-      if (!mapaP[chave]) mapaP[chave] = { produto: o.produto || "Desconhecido", ops: 0, kg: 0 };
-      mapaP[chave].ops += 1;
-      mapaP[chave].kg += (o.quantidade_real ?? o.quantidade) || 0;
+    const ordemInfoMap = new Map<string, { formula_id: any; produto: string }>();
+    registrosDiariosRaw.forEach((r: any) => {
+      if (!ordemInfoMap.has(r.ordem_id))
+        ordemInfoMap.set(r.ordem_id, { formula_id: r.ordens?.formula_id, produto: r.ordens?.produto || "Desconhecido" });
     });
+    const mapaP: Record<string, { produto: string; ops: number; kg: number }> = {};
+    for (const [ordemId, kg] of Object.entries(kgPorOrdem)) {
+      const info = ordemInfoMap.get(ordemId);
+      if (!info) continue;
+      const chave = info.formula_id ? String(info.formula_id) : `sem_formula_${info.produto}`;
+      if (!mapaP[chave]) mapaP[chave] = { produto: info.produto, ops: 0, kg: 0 };
+      mapaP[chave].ops += 1;
+      mapaP[chave].kg += kg;
+    }
     const linhasAgrupadas = Object.entries(mapaP).map(([formulaId, v]) => ({
       formulaId, produto: v.produto, ops: v.ops, kg: v.kg,
     }));
