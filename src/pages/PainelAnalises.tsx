@@ -471,7 +471,7 @@ export default function PainelAnalises() {
     const quantidadeOrdem = new Map<string, number>();
     registrosDiariosRaw.forEach((r: any) => {
       if (!quantidadeOrdem.has(r.ordem_id)) {
-        const q = (r.ordens?.quantidade_real ?? r.ordens?.quantidade) || 0;
+        const q = r.ordens?.quantidade || 0;
         quantidadeOrdem.set(r.ordem_id, q);
       }
     });
