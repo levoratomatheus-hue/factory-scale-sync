@@ -443,10 +443,13 @@ export default function PainelAnalises() {
 
     // kg/hora e contagem de OPs baseados nos registros diários (inclui OPs em aberto)
     const uniqueIdsGeral = new Set<string>(Object.keys(kgPorOrdem));
+    const linhaOrdemMap: Record<string, number> = {};
+    registrosDiariosRaw.forEach((r: any) => { if (r.ordem_id) linhaOrdemMap[r.ordem_id] = Number(r.ordens?.linha); });
+
     let totalKgComHora = 0, totalHoras = 0;
     uniqueIdsGeral.forEach((id) => {
       const h = horasMap[id] ?? null;
-      if (h !== null) { totalKgComHora += kgPorOrdem[id] || 0; totalHoras += h; }
+      if (h !== null && linhaOrdemMap[id] !== 5) { totalKgComHora += kgPorOrdem[id] || 0; totalHoras += h; }
     });
     const mediaKgHora = totalHoras > 0 ? totalKgComHora / totalHoras : 0;
 
