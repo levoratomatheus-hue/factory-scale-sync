@@ -256,23 +256,32 @@ export default function PainelAnalises() {
   const [atalhoAtivo, setAtalhoAtivo] = useState<Atalho>("mes");
   const [linhaFiltro, setLinhaFiltro] = useState<number>(0);
   const [materialFiltro, setMaterialFiltro] = useState("");
-  const [materialLabel, setMaterialLabel] = useState("");
+  const [materialInput, setMaterialInput] = useState("");
+  const [sugestoes, setSugestoes] = useState<{ produto: string; formula_id: string | null }[]>([]);
+  const [dropdownAberto, setDropdownAberto] = useState(false);
 
   useEffect(() => {
-    if (!materialFiltro) { setMaterialLabel(""); return; }
+    if (!materialInput || materialFiltro) { setSugestoes([]); setDropdownAberto(false); return; }
     const timer = setTimeout(async () => {
       const { data } = await supabase
         .from("ordens")
-        .select("produto")
-        .ilike("produto", `%${materialFiltro}%`)
+        .select("produto, formula_id")
+        .ilike("produto", `%${materialInput}%`)
         .eq("status", "concluido")
-        .limit(1)
-        .single();
-      if (data?.produto) setMaterialLabel(data.produto);
-      else setMaterialLabel(materialFiltro);
-    }, 300);
+        .limit(20);
+      if (data) {
+        const seen = new Set<string>();
+        const unique = data.filter((r: any) => {
+          if (seen.has(r.produto)) return false;
+          seen.add(r.produto);
+          return true;
+        }).map((r: any) => ({ produto: r.produto, formula_id: r.formula_id ?? null }));
+        setSugestoes(unique);
+        setDropdownAberto(unique.length > 0);
+      }
+    }, 250);
     return () => clearTimeout(timer);
-  }, [materialFiltro]);
+  }, [materialInput, materialFiltro]);
 
   const { ordens: ordensRaw, loading } = useAnalises(dataInicio, dataFim);
   const { paradas: paradasRaw } = useParadasAnalises(dataInicio, dataFim);
@@ -640,15 +649,20 @@ export default function PainelAnalises() {
           </div>
         </div>
 
-        {/* Filtro de material */}
+        {/* Filtro de material — autocomplete */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <Search size={16} style={{ color: D.muted, flexShrink: 0 }} />
           <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
             <input
               type="text"
-              placeholder="Filtrar por produto ou fórmula..."
-              value={materialFiltro}
-              onChange={(e) => setMaterialFiltro(e.target.value)}
+              placeholder="Buscar produto..."
+              value={materialFiltro || materialInput}
+              onChange={(e) => {
+                setMaterialInput(e.target.value);
+                if (materialFiltro) { setMaterialFiltro(""); }
+              }}
+              onFocus={() => { if (sugestoes.length > 0) setDropdownAberto(true); }}
+              onBlur={() => setTimeout(() => setDropdownAberto(false), 150)}
               style={{
                 width: "100%",
                 borderRadius: "0.375rem",
@@ -661,31 +675,49 @@ export default function PainelAnalises() {
                 boxSizing: "border-box",
               }}
             />
-            {materialFiltro && (
+            {(materialFiltro || materialInput) && (
               <button
-                onClick={() => setMaterialFiltro("")}
-                style={{
-                  position: "absolute",
-                  right: "0.5rem",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: D.muted,
-                  display: "flex",
-                  alignItems: "center",
-                  padding: 0,
-                }}
+                onClick={() => { setMaterialFiltro(""); setMaterialInput(""); setSugestoes([]); setDropdownAberto(false); }}
+                style={{ position: "absolute", right: "0.5rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: D.muted, display: "flex", alignItems: "center", padding: 0 }}
               >
                 <X size={14} />
               </button>
+            )}
+            {dropdownAberto && sugestoes.length > 0 && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+                background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.5rem",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)", overflow: "hidden",
+              }}>
+                {sugestoes.map((s, i) => (
+                  <button
+                    key={i}
+                    onMouseDown={() => {
+                      setMaterialFiltro(s.produto);
+                      setMaterialInput("");
+                      setSugestoes([]);
+                      setDropdownAberto(false);
+                    }}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left",
+                      padding: "0.5rem 0.75rem", fontSize: "0.8125rem",
+                      background: "none", border: "none", cursor: "pointer",
+                      color: D.text, borderBottom: i < sugestoes.length - 1 ? `1px solid ${D.border}` : "none",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#ffffff10")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    <span style={{ fontWeight: 500 }}>{s.produto}</span>
+                    {s.formula_id && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: D.muted }}>ID {s.formula_id}</span>}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {materialFiltro && materialLabel && (
+      {materialFiltro && (
         <div style={{ paddingInline: "1.5rem", paddingBottom: "0.5rem" }}>
           <span
             style={{
@@ -701,9 +733,9 @@ export default function PainelAnalises() {
               fontWeight: 500,
             }}
           >
-            {materialLabel}
+            {materialFiltro}
             <button
-              onClick={() => setMaterialFiltro("")}
+              onClick={() => { setMaterialFiltro(""); setMaterialInput(""); setSugestoes([]); }}
               style={{ background: "none", border: "none", cursor: "pointer", color: D.amber, display: "flex", alignItems: "center", padding: 0 }}
             >
               <X size={12} />
