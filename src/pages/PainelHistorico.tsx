@@ -187,6 +187,27 @@ export default function PainelHistorico() {
               );
             })}
           </tbody>
+          {ordens.length > 0 && (
+            <tfoot>
+              <tr className="border-t-2 bg-muted/70 font-semibold text-sm">
+                <td colSpan={3} className="px-4 py-3 text-right text-muted-foreground">Total</td>
+                <td className="px-4 py-3">
+                  {ordens.reduce((s, o) => s + (o.quantidade || 0), 0).toLocaleString("pt-BR")} kg
+                </td>
+                <td className="px-4 py-3">
+                  {(() => {
+                    const total = ordens.reduce((s, o) => {
+                      const ov = overrides[o.id] ?? {};
+                      const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : o.quantidade_real;
+                      return s + (qtdReal ?? 0);
+                    }, 0);
+                    return total > 0 ? `${total.toLocaleString("pt-BR")} kg` : "—";
+                  })()}
+                </td>
+                <td colSpan={6} />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
