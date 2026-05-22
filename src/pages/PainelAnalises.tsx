@@ -475,9 +475,9 @@ export default function PainelAnalises() {
       let kgH = 0, hH = 0;
       ol.forEach((o) => {
         const h = horasMap[o.id] ?? null;
-        if (h !== null) { kgH += (o.quantidade_real ?? o.quantidade) || 0; hH += h; }
+        if (h !== null) { kgH += kgPorOrdem[o.id] || 0; hH += h; }
       });
-      const totalKg = ol.reduce((s, o) => s + ((o.quantidade_real ?? o.quantidade) || 0), 0);
+      const totalKg = ol.reduce((s, o) => s + (kgPorOrdem[o.id] || 0), 0);
       return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ol.length, totalKg };
     });
 
