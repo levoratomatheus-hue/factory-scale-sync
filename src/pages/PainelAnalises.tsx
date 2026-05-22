@@ -469,15 +469,15 @@ export default function PainelAnalises() {
 
     const dadosFaixas = FAIXAS.map(({ label, min, max }) => {
       const ol = ordens.filter((o) => {
-        const q = o.quantidade_real || 0;
+        const q = (o.quantidade_real ?? o.quantidade) || 0;
         return q >= min && (max === Infinity ? true : q < max);
       });
       let kgH = 0, hH = 0;
       ol.forEach((o) => {
         const h = horasMap[o.id] ?? null;
-        if (h !== null) { kgH += o.quantidade_real || 0; hH += h; }
+        if (h !== null) { kgH += (o.quantidade_real ?? o.quantidade) || 0; hH += h; }
       });
-      const totalKg = ol.reduce((s, o) => s + (o.quantidade_real || 0), 0);
+      const totalKg = ol.reduce((s, o) => s + ((o.quantidade_real ?? o.quantidade) || 0), 0);
       return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ol.length, totalKg };
     });
 
@@ -486,7 +486,7 @@ export default function PainelAnalises() {
       const chave = o.formula_id ? String(o.formula_id) : `sem_formula_${o.produto || "?"}`;
       if (!mapaP[chave]) mapaP[chave] = { produto: o.produto || "Desconhecido", ops: 0, kg: 0 };
       mapaP[chave].ops += 1;
-      mapaP[chave].kg += o.quantidade_real || 0;
+      mapaP[chave].kg += (o.quantidade_real ?? o.quantidade) || 0;
     });
     const linhasAgrupadas = Object.entries(mapaP).map(([formulaId, v]) => ({
       formulaId, produto: v.produto, ops: v.ops, kg: v.kg,
