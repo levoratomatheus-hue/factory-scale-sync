@@ -277,7 +277,7 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
   const fetchRegistros = useCallback(async () => {
     const { data } = await (supabase as any)
       .from("registros_diarios")
-      .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, ordens(linha)")
+      .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, ordens(linha, quantidade, quantidade_real)")
       .gte("data", dataInicio)
       .lte("data", dataFim);
     setRegistros(data ?? []);

@@ -467,18 +467,26 @@ export default function PainelAnalises() {
       return { linha, totalKg, media: hH > 0 ? kgH / hH : 0, ops: uniqueIds.size };
     });
 
+    // Monta mapa de quantidade por ordem a partir dos registros diários (mesma fonte do KPI)
+    const quantidadeOrdem = new Map<string, number>();
+    registrosDiariosRaw.forEach((r: any) => {
+      if (!quantidadeOrdem.has(r.ordem_id)) {
+        const q = (r.ordens?.quantidade_real ?? r.ordens?.quantidade) || 0;
+        quantidadeOrdem.set(r.ordem_id, q);
+      }
+    });
+
     const dadosFaixas = FAIXAS.map(({ label, min, max }) => {
-      const ol = ordens.filter((o) => {
-        const q = (o.quantidade_real ?? o.quantidade) || 0;
-        return q >= min && (max === Infinity ? true : q < max);
-      });
+      const ids = [...quantidadeOrdem.entries()]
+        .filter(([id, q]) => (id in kgPorOrdem) && q >= min && (max === Infinity ? true : q < max))
+        .map(([id]) => id);
       let kgH = 0, hH = 0;
-      ol.forEach((o) => {
-        const h = horasMap[o.id] ?? null;
-        if (h !== null) { kgH += kgPorOrdem[o.id] || 0; hH += h; }
+      ids.forEach((id) => {
+        const h = horasMap[id] ?? null;
+        if (h !== null) { kgH += kgPorOrdem[id] || 0; hH += h; }
       });
-      const totalKg = ol.reduce((s, o) => s + (kgPorOrdem[o.id] || 0), 0);
-      return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ol.length, totalKg };
+      const totalKg = ids.reduce((s, id) => s + (kgPorOrdem[id] || 0), 0);
+      return { faixa: label, media: hH > 0 ? kgH / hH : 0, ops: ids.length, totalKg };
     });
 
     const mapaP: Record<string, { produto: string; ops: number; kg: number }> = {};
