@@ -145,7 +145,7 @@ export default function Index() {
     setActiveTab(tab);
   }, []);
   const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(gruposGestor.map((g) => g.id))
+    () => new Set<string>()
   );
 
   const toggleGroup = useCallback((id: string) => {
