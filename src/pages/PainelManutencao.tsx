@@ -32,7 +32,7 @@ interface OS {
   aberta_por: string | null;
   tecnico_id: string | null;
   tecnico_nome: string | null;
-  solucao: string | null;
+  solucao_aplicada: string | null;
   aberta_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
@@ -77,8 +77,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [loading, setLoading] = useState(true);
   const [tabAtiva, setTabAtiva] = useState<string>("todas");
 
-  const [solucaoDialogOS, setSolucaoDialogOS] = useState<OS | null>(null);
-  const [solucaoText, setSolucaoText] = useState("");
+  const [solucao_aplicadaDialogOS, setSolucaoDialogOS] = useState<OS | null>(null);
+  const [solucao_aplicadaText, setSolucaoText] = useState("");
   const [savingSolucao, setSavingSolucao] = useState(false);
 
   const [confirmarConclusaoOS, setConfirmarConclusaoOS] = useState<OS | null>(null);
@@ -134,16 +134,16 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }
 
   async function registrarSolucao() {
-    if (!solucaoDialogOS) return;
-    if (!solucaoText.trim()) {
+    if (!solucao_aplicadaDialogOS) return;
+    if (!solucao_aplicadaText.trim()) {
       toast({ title: "Descreva a solução aplicada", variant: "destructive" });
       return;
     }
     setSavingSolucao(true);
     const { error } = await (supabase as any).from("ordens_servico").update({
       status: "aguardando_aprovacao",
-      solucao: solucaoText.trim(),
-    }).eq("id", solucaoDialogOS.id);
+      solucao_aplicada: solucao_aplicadaText.trim(),
+    }).eq("id", solucao_aplicadaDialogOS.id);
     setSavingSolucao(false);
     if (error) toast({ title: "Erro ao registrar solução", description: error.message, variant: "destructive" });
     else {
@@ -259,10 +259,10 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 </div>
 
                 {/* Solução (se houver) */}
-                {os.solucao && (
+                {os.solucao_aplicada && (
                   <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm">
                     <span className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">Solução: </span>
-                    {os.solucao}
+                    {os.solucao_aplicada}
                   </div>
                 )}
 
@@ -296,7 +296,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       size="sm"
                       variant="outline"
                       className="gap-1.5 h-7 text-xs"
-                      onClick={() => { setSolucaoDialogOS(os); setSolucaoText(os.solucao ?? ""); }}
+                      onClick={() => { setSolucaoDialogOS(os); setSolucaoText(os.solucao_aplicada ?? ""); }}
                     >
                       <CheckCircle2 className="h-3 w-3" />
                       Registrar Solução
@@ -322,21 +322,21 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       )}
 
       {/* Dialog: Registrar Solução */}
-      <Dialog open={!!solucaoDialogOS} onOpenChange={(o) => { if (!o) setSolucaoDialogOS(null); }}>
+      <Dialog open={!!solucao_aplicadaDialogOS} onOpenChange={(o) => { if (!o) setSolucaoDialogOS(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Registrar Solução</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            {solucaoDialogOS && (
+            {solucao_aplicadaDialogOS && (
               <p className="text-sm text-muted-foreground">
-                {solucaoDialogOS.equipamentos?.nome} — {solucaoDialogOS.descricao_problema}
+                {solucao_aplicadaDialogOS.equipamentos?.nome} — {solucao_aplicadaDialogOS.descricao_problema}
               </p>
             )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Solução aplicada *</label>
               <textarea
-                value={solucaoText}
+                value={solucao_aplicadaText}
                 onChange={(e) => setSolucaoText(e.target.value)}
                 rows={4}
                 placeholder="Descreva o que foi feito para resolver o problema..."
