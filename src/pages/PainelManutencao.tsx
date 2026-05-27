@@ -26,14 +26,14 @@ import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw } from "lucide-re
 interface OS {
   id: string;
   equipamento_id: string | null;
-  descricao: string;
+  descricao_problema: string;
   prioridade: string;
   status: string;
-  criado_por: string | null;
+  aberta_por: string | null;
   tecnico_id: string | null;
   tecnico_nome: string | null;
   solucao: string | null;
-  aberto_em: string | null;
+  aberta_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
   equipamentos?: { nome: string; tag: string | null; linha: number | null } | null;
@@ -90,7 +90,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     const { data, error } = await (supabase as any)
       .from("ordens_servico")
       .select("*, equipamentos(nome, tag, linha)")
-      .order("aberto_em", { ascending: false });
+      .order("aberta_em", { ascending: false });
     if (!error) setOss(data ?? []);
     setLoading(false);
   }, []);
@@ -246,7 +246,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                         <span className="text-xs text-muted-foreground">L{equip.linha}</span>
                       )}
                     </div>
-                    <p className="text-sm text-foreground/80 line-clamp-2">{os.descricao}</p>
+                    <p className="text-sm text-foreground/80 line-clamp-2">{os.descricao_problema}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${prio.class}`}>
@@ -270,7 +270,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    Aberta {fmtDate(os.aberto_em)} por {os.criado_por ?? "—"}
+                    Aberta {fmtDate(os.aberta_em)} por {os.aberta_por ?? "—"}
                   </span>
                   {os.tecnico_nome && (
                     <span>· Técnico: <span className="font-medium text-foreground">{os.tecnico_nome}</span></span>
@@ -330,7 +330,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           <div className="space-y-3 py-2">
             {solucaoDialogOS && (
               <p className="text-sm text-muted-foreground">
-                {solucaoDialogOS.equipamentos?.nome} — {solucaoDialogOS.descricao}
+                {solucaoDialogOS.equipamentos?.nome} — {solucaoDialogOS.descricao_problema}
               </p>
             )}
             <div className="space-y-1.5">
