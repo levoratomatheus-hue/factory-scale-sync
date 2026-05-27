@@ -18,6 +18,7 @@ const PainelComercial         = lazy(() => import('./PainelComercial'));
 const CadastroEquipamentos    = lazy(() => import('./CadastroEquipamentos'));
 const AbrirOS                 = lazy(() => import('./AbrirOS'));
 const PainelManutencao        = lazy(() => import('./PainelManutencao'));
+const PainelAnaliseManutencao = lazy(() => import('./PainelAnaliseManutencao'));
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
@@ -45,7 +46,7 @@ type TabGestorId =
   | 'analises'
   | 'consulta_formula'
   | 'comercial'
-  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os';
+  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao';
 
 const gruposGestor = [
   {
@@ -110,9 +111,10 @@ const gruposGestor = [
 ] as const;
 
 const manutencaoItems = [
-  { id: 'painel_manutencao'     as TabGestorId, label: 'Painel de Manutenção', icon: Wrench    },
-  { id: 'cadastro_equipamentos' as TabGestorId, label: 'Equipamentos',         icon: Settings  },
-  { id: 'abrir_os'              as TabGestorId, label: 'Abrir OS',             icon: PlusCircle },
+  { id: 'painel_manutencao'     as TabGestorId, label: 'Painel de Manutenção',    icon: Wrench    },
+  { id: 'analise_manutencao'    as TabGestorId, label: 'Análise de Manutenção',   icon: BarChart2 },
+  { id: 'cadastro_equipamentos' as TabGestorId, label: 'Equipamentos',            icon: Settings  },
+  { id: 'abrir_os'              as TabGestorId, label: 'Abrir OS',                icon: PlusCircle },
 ] as const;
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -508,6 +510,7 @@ export default function Index() {
             {activeTab === 'importar'               && <ImportarProgramacao />}
             {activeTab === 'comercial'              && <PainelComercial />}
             {activeTab === 'painel_manutencao'      && <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
+            {activeTab === 'analise_manutencao'     && <PainelAnaliseManutencao />}
             {activeTab === 'cadastro_equipamentos'  && <CadastroEquipamentos />}
             {activeTab === 'abrir_os'               && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
           </Suspense>
