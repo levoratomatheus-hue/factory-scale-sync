@@ -21,7 +21,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -55,6 +56,8 @@ interface OS {
   tecnico_id: string | null;
   tecnico_nome: string | null;
   solucao_aplicada: string | null;
+  peca_aguardada: string | null;
+  previsao_peca: string | null;
   aberta_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
@@ -77,6 +80,7 @@ const PRIORIDADE_CONFIG: Record<string, { label: string; class: string }> = {
 const STATUS_TABS = [
   { value: "aberta",                label: "Aberta" },
   { value: "em_andamento",          label: "Em Andamento" },
+  { value: "aguardando_peca",       label: "Aguard. Peça" },
   { value: "aguardando_aprovacao",  label: "Aguard. Aprovação" },
   { value: "concluida",             label: "Concluída" },
 ] as const;
@@ -84,6 +88,7 @@ const STATUS_TABS = [
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
   aberta:               { label: "Aberta",             class: "bg-slate-100 text-slate-700" },
   em_andamento:         { label: "Em Andamento",        class: "bg-blue-100 text-blue-700" },
+  aguardando_peca:      { label: "Aguard. Peça",        class: "bg-yellow-100 text-yellow-700" },
   aguardando_aprovacao: { label: "Aguard. Aprovação",   class: "bg-amber-100 text-amber-700" },
   concluida:            { label: "Concluída",           class: "bg-green-100 text-green-700" },
 };
@@ -106,6 +111,11 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [savingConclusao, setSavingConclusao] = useState(false);
 
   const [iniciarConfirmOS, setIniciarConfirmOS] = useState<OS | null>(null);
+
+  const [aguardarPecaOS, setAguardarPecaOS] = useState<OS | null>(null);
+  const [pecaText, setPecaText] = useState("");
+  const [previsaoText, setPrevisaoText] = useState("");
+  const [savingPeca, setSavingPeca] = useState(false);
 
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
@@ -161,6 +171,38 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       return true;
     });
   }, [oss, tabAtiva, dataInicio, dataFim]);
+
+  async function salvarAguardarPeca() {
+    if (!aguardarPecaOS) return;
+    if (!pecaText.trim()) {
+      toast({ title: "Informe qual peça está sendo aguardada", variant: "destructive" });
+      return;
+    }
+    setSavingPeca(true);
+    const { error } = await (supabase as any).from("ordens_servico").update({
+      status: "aguardando_peca",
+      peca_aguardada: pecaText.trim(),
+      previsao_peca: previsaoText || null,
+    }).eq("id", aguardarPecaOS.id);
+    setSavingPeca(false);
+    if (error) toast({ title: "Erro ao registrar peça", description: error.message, variant: "destructive" });
+    else {
+      toast({ title: "OS aguardando peça" });
+      setAguardarPecaOS(null);
+      setPecaText("");
+      setPrevisaoText("");
+    }
+  }
+
+  async function pecaChegou(os: OS) {
+    const { error } = await (supabase as any).from("ordens_servico").update({
+      status: "em_andamento",
+      peca_aguardada: null,
+      previsao_peca: null,
+    }).eq("id", os.id);
+    if (error) toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" });
+    else toast({ title: "Peça registrada — OS voltou para Em Andamento" });
+  }
 
   async function iniciarOS(os: OS) {
     const { error } = await (supabase as any).from("ordens_servico").update({
@@ -336,6 +378,22 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   </div>
                 </div>
 
+                {/* Peça aguardada (destaque âmbar) */}
+                {os.peca_aguardada && (
+                  <div className="rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm flex items-start gap-2">
+                    <Package className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-yellow-700">Aguardando peça: </span>
+                      <span className="text-yellow-800">{os.peca_aguardada}</span>
+                      {os.previsao_peca && (
+                        <span className="ml-2 text-yellow-600 text-xs">
+                          · Previsão: {format(new Date(os.previsao_peca + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Solução (se houver) */}
                 {os.solucao_aplicada && (
                   <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm">
@@ -368,6 +426,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     </Button>
                   )}
 
+                  {/* Técnico: aguardar peça */}
+                  {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 h-7 text-xs text-yellow-700 border-yellow-300 hover:bg-yellow-50"
+                      onClick={() => { setAguardarPecaOS(os); setPecaText(os.peca_aguardada ?? ""); setPrevisaoText(os.previsao_peca ?? ""); }}
+                    >
+                      <Package className="h-3 w-3" />
+                      Aguardar Peça
+                    </Button>
+                  )}
+
                   {/* Técnico: registrar solução */}
                   {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
                     <Button
@@ -378,6 +449,18 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     >
                       <CheckCircle2 className="h-3 w-3" />
                       Registrar Solução
+                    </Button>
+                  )}
+
+                  {/* Técnico: peça chegou */}
+                  {(papel === "tecnico" || papel === "gestor") && os.status === "aguardando_peca" && (
+                    <Button
+                      size="sm"
+                      className="gap-1.5 h-7 text-xs bg-yellow-500 hover:bg-yellow-600 text-white"
+                      onClick={() => pecaChegou(os)}
+                    >
+                      <PackageCheck className="h-3 w-3" />
+                      Peça Chegou
                     </Button>
                   )}
 
@@ -398,6 +481,49 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           })}
         </div>
       )}
+
+      {/* Dialog: Aguardar Peça */}
+      <Dialog open={!!aguardarPecaOS} onOpenChange={(o) => { if (!o) setAguardarPecaOS(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Aguardar Peça</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {aguardarPecaOS && (
+              <p className="text-sm text-muted-foreground">
+                {aguardarPecaOS.equipamentos?.nome} — {aguardarPecaOS.descricao_problema}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Qual peça está sendo aguardada? *</label>
+              <Input
+                value={pecaText}
+                onChange={(e) => setPecaText(e.target.value)}
+                placeholder="Ex: Rolamento 6205, Correia B-78..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Previsão de chegada</label>
+              <Input
+                type="date"
+                value={previsaoText}
+                onChange={(e) => setPrevisaoText(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAguardarPecaOS(null)}>Cancelar</Button>
+            <Button
+              onClick={salvarAguardarPeca}
+              disabled={savingPeca}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white"
+            >
+              {savingPeca && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: Registrar Solução */}
       <Dialog open={!!solucao_aplicadaDialogOS} onOpenChange={(o) => { if (!o) setSolucaoDialogOS(null); }}>
