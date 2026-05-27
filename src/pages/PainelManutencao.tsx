@@ -53,7 +53,6 @@ const PRIORIDADE_CONFIG: Record<string, { label: string; class: string }> = {
 };
 
 const STATUS_TABS = [
-  { value: "todas",                 label: "Todas" },
   { value: "aberta",                label: "Aberta" },
   { value: "em_andamento",          label: "Em Andamento" },
   { value: "aguardando_aprovacao",  label: "Aguard. Aprovação" },
@@ -75,7 +74,7 @@ function fmtDate(iso: string | null) {
 export default function PainelManutencao({ papel, perfilId, perfilNome }: PainelManutencaoProps) {
   const [oss, setOss] = useState<OS[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tabAtiva, setTabAtiva] = useState<string>("todas");
+  const [tabAtiva, setTabAtiva] = useState<string>("aberta");
 
   const [solucao_aplicadaDialogOS, setSolucaoDialogOS] = useState<OS | null>(null);
   const [solucao_aplicadaText, setSolucaoText] = useState("");
@@ -118,7 +117,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }, [oss]);
 
   const ossFiltradas = useMemo(
-    () => tabAtiva === "todas" ? oss : oss.filter((o) => o.status === tabAtiva),
+    () => oss.filter((o) => o.status === tabAtiva),
     [oss, tabAtiva],
   );
 
@@ -219,7 +218,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       {/* Lista de OS */}
       {ossFiltradas.length === 0 ? (
         <div className="rounded-lg border bg-card py-12 text-center text-muted-foreground">
-          Nenhuma OS {tabAtiva !== "todas" ? `com status "${STATUS_TABS.find(t => t.value === tabAtiva)?.label}"` : "cadastrada"}.
+          Nenhuma OS com status "{STATUS_TABS.find(t => t.value === tabAtiva)?.label}".
         </div>
       ) : (
         <div className="space-y-3">
