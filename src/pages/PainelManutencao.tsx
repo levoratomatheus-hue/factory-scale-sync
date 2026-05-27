@@ -21,7 +21,29 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange } from "lucide-react";
+
+function toStr(d: Date) { return d.toISOString().split("T")[0]; }
+function inicioSemana(d: Date) {
+  const dow = d.getDay();
+  const seg = new Date(d);
+  seg.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return seg;
+}
+
+type AtalhoData = "hoje" | "semana" | "mes" | null;
+const ATALHOS: { id: AtalhoData; label: string }[] = [
+  { id: "hoje",   label: "Hoje" },
+  { id: "semana", label: "Esta semana" },
+  { id: "mes",    label: "Este mês" },
+];
+function calcAtalho(id: AtalhoData): { inicio: string; fim: string } {
+  const d = new Date();
+  if (id === "hoje")   return { inicio: toStr(d), fim: toStr(d) };
+  if (id === "semana") return { inicio: toStr(inicioSemana(d)), fim: toStr(d) };
+  if (id === "mes")    return { inicio: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, fim: toStr(d) };
+  return { inicio: "", fim: "" };
+}
 
 interface OS {
   id: string;
@@ -85,6 +107,18 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   const [iniciarConfirmOS, setIniciarConfirmOS] = useState<OS | null>(null);
 
+  const mesAtual = useMemo(() => calcAtalho("mes"), []);
+  const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
+  const [dataFim, setDataFim] = useState(mesAtual.fim);
+  const [atalhoAtivo, setAtalhoAtivo] = useState<AtalhoData>("mes");
+
+  function aplicarAtalho(id: AtalhoData) {
+    const { inicio, fim } = calcAtalho(id);
+    setDataInicio(inicio);
+    setDataFim(fim);
+    setAtalhoAtivo(id);
+  }
+
   const fetchOss = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("ordens_servico")
@@ -116,10 +150,17 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     return c;
   }, [oss]);
 
-  const ossFiltradas = useMemo(
-    () => oss.filter((o) => o.status === tabAtiva),
-    [oss, tabAtiva],
-  );
+  const ossFiltradas = useMemo(() => {
+    const porStatus = oss.filter((o) => o.status === tabAtiva);
+    if (tabAtiva !== "concluida") return porStatus;
+    return porStatus.filter((o) => {
+      if (!o.concluido_em) return false;
+      const dia = o.concluido_em.split("T")[0];
+      if (dataInicio && dia < dataInicio) return false;
+      if (dataFim && dia > dataFim) return false;
+      return true;
+    });
+  }, [oss, tabAtiva, dataInicio, dataFim]);
 
   async function iniciarOS(os: OS) {
     const { error } = await (supabase as any).from("ordens_servico").update({
@@ -191,7 +232,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       {/* Tabs */}
       <div className="flex gap-1 flex-wrap">
         {STATUS_TABS.map(({ value, label }) => {
-          const count = value === "todas" ? oss.length : (counts[value] ?? 0);
+          const count = counts[value] ?? 0;
           return (
             <button
               key={value}
@@ -214,6 +255,44 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           );
         })}
       </div>
+
+      {/* Filtro de período — apenas na aba Concluída */}
+      {tabAtiva === "concluida" && (
+        <div className="flex items-center gap-3 flex-wrap rounded-lg border bg-card px-4 py-3">
+          <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="flex gap-1 flex-wrap">
+            {ATALHOS.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => aplicarAtalho(a.id)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                  atalhoAtivo === a.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-input bg-background text-muted-foreground hover:border-foreground/30"
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => { setDataInicio(e.target.value); setAtalhoAtivo(null); }}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <span className="text-xs text-muted-foreground">até</span>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => { setDataFim(e.target.value); setAtalhoAtivo(null); }}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Lista de OS */}
       {ossFiltradas.length === 0 ? (
