@@ -145,6 +145,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       solucao_aplicada: solucao_aplicadaText.trim(),
     }).eq("id", solucao_aplicadaDialogOS.id);
     setSavingSolucao(false);
+    console.log('erro:', error);
     if (error) toast({ title: "Erro ao registrar solução", description: error.message, variant: "destructive" });
     else {
       toast({ title: "Solução registrada — aguardando aprovação do gestor" });
