@@ -378,10 +378,17 @@ export default function Index() {
 
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase px-2">
-              <Package className="h-3 w-3 shrink-0" />
-              Produção
-            </SidebarGroupLabel>
+            <button
+              onClick={() => toggleGroup('producao')}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex items-center gap-1.5">
+                <Package className="h-3 w-3 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">Produção</span>
+              </span>
+              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('producao') && '-rotate-90')} />
+            </button>
+            {openGroups.has('producao') && (
             <SidebarGroupContent>
               {gruposGestor.map((grupo: typeof gruposGestor[number]) => {
                 const isOpen = openGroups.has(grupo.id);
@@ -423,13 +430,21 @@ export default function Index() {
                 );
               })}
             </SidebarGroupContent>
+            )}
           </SidebarGroup>
 
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase px-2">
-              <Wrench className="h-3 w-3 shrink-0" />
-              Manutenção
-            </SidebarGroupLabel>
+            <button
+              onClick={() => toggleGroup('manutencao')}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex items-center gap-1.5">
+                <Wrench className="h-3 w-3 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">Manutenção</span>
+              </span>
+              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('manutencao') && '-rotate-90')} />
+            </button>
+            {openGroups.has('manutencao') && (
             <SidebarGroupContent>
               <SidebarMenu>
                 {manutencaoItems.map((item) => (
@@ -447,13 +462,21 @@ export default function Index() {
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
+            )}
           </SidebarGroup>
 
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase px-2">
-              <Briefcase className="h-3 w-3 shrink-0" />
-              Comercial
-            </SidebarGroupLabel>
+            <button
+              onClick={() => toggleGroup('comercial')}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex items-center gap-1.5">
+                <Briefcase className="h-3 w-3 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">Comercial</span>
+              </span>
+              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('comercial') && '-rotate-90')} />
+            </button>
+            {openGroups.has('comercial') && (
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -469,6 +492,7 @@ export default function Index() {
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
+            )}
           </SidebarGroup>
         </SidebarContent>
 
