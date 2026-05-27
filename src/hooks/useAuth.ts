@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 interface Perfil {
   id: string;
   nome: string;
-  papel: 'gestor' | 'operador' | 'comercial';
+  papel: 'gestor' | 'operador' | 'comercial' | 'tecnico';
   balanca: string | null;
 }
 

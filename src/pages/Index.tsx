@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -15,6 +15,9 @@ const PainelProgramacao       = lazy(() => import('./PainelProgramacao'));
 const PainelProgramacaoBalanca = lazy(() => import('./PainelProgramacaoBalanca'));
 const PainelConsultaFormula   = lazy(() => import('./PainelConsultaFormula'));
 const PainelComercial         = lazy(() => import('./PainelComercial'));
+const CadastroEquipamentos    = lazy(() => import('./CadastroEquipamentos'));
+const AbrirOS                 = lazy(() => import('./AbrirOS'));
+const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
@@ -41,7 +44,8 @@ type TabGestorId =
   | 'liberacao'
   | 'analises'
   | 'consulta_formula'
-  | 'comercial';
+  | 'comercial'
+  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os';
 
 const gruposGestor = [
   {
@@ -87,6 +91,16 @@ const gruposGestor = [
     icon: BarChart2,
     items: [
       { id: 'analises' as TabGestorId, label: 'Análises da Produção', icon: BarChart2 },
+    ],
+  },
+  {
+    id: 'manutencao',
+    label: 'Manutenção',
+    icon: Wrench,
+    items: [
+      { id: 'painel_manutencao'       as TabGestorId, label: 'Painel de Manutenção', icon: Wrench },
+      { id: 'cadastro_equipamentos'   as TabGestorId, label: 'Equipamentos',         icon: Settings },
+      { id: 'abrir_os'                as TabGestorId, label: 'Abrir OS',             icon: PlusCircle },
     ],
   },
   {
@@ -203,6 +217,84 @@ export default function Index() {
           <PainelLinha linha={linhaNum} />
         </Suspense>
       </OperadorLayout>
+    );
+  }
+
+  if (perfil.papel === 'tecnico') {
+    return (
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="border-b">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton size="lg" tooltip="Manutenção">
+                  <Wrench className="h-5 w-5 text-primary shrink-0" />
+                  <div className="flex flex-col leading-tight min-w-0">
+                    <span className="font-bold text-sm truncate">Manutenção</span>
+                    <span className="text-xs text-muted-foreground truncate">{perfil.nome}</span>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeTab === 'painel_manutencao'}
+                      tooltip="Painel de Manutenção"
+                      onClick={() => goToTab('painel_manutencao')}
+                      size="sm"
+                    >
+                      <Wrench className="h-3.5 w-3.5 shrink-0" />
+                      <span>Painel de Manutenção</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeTab === 'abrir_os'}
+                      tooltip="Abrir OS"
+                      onClick={() => goToTab('abrir_os')}
+                      size="sm"
+                    >
+                      <PlusCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>Abrir OS</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter className="border-t">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Sair" onClick={logout}>
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span>Sair</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset className="overflow-x-hidden">
+          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
+            <SidebarTrigger />
+            <span className="font-semibold text-sm">
+              {activeTab === 'abrir_os' ? 'Abrir OS' : 'Painel de Manutenção'}
+            </span>
+            <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
+          </header>
+          <main className="p-6 overflow-x-hidden">
+            <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+              {activeTab === 'abrir_os'
+                ? <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
+                : <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
+            </Suspense>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
     );
   }
 
@@ -391,9 +483,12 @@ export default function Index() {
             {activeTab === 'liberacao'           && <PainelLiberacao />}
             {activeTab === 'historico'           && <PainelHistorico />}
             {activeTab === 'consulta_formula'    && <PainelConsultaFormula />}
-            {activeTab === 'analises'            && <PainelAnalises />}
-            {activeTab === 'importar'            && <ImportarProgramacao />}
-            {activeTab === 'comercial'           && <PainelComercial />}
+            {activeTab === 'analises'               && <PainelAnalises />}
+            {activeTab === 'importar'               && <ImportarProgramacao />}
+            {activeTab === 'comercial'              && <PainelComercial />}
+            {activeTab === 'painel_manutencao'      && <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
+            {activeTab === 'cadastro_equipamentos'  && <CadastroEquipamentos />}
+            {activeTab === 'abrir_os'               && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
           </Suspense>
         </main>
       </SidebarInset>
