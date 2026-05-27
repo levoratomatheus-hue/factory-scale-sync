@@ -56,10 +56,11 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
     setSaving(true);
     const { error } = await (supabase as any).from("ordens_servico").insert({
       equipamento_id: equipamentoId,
-      descricao: descricao.trim(),
+      descricao_problema: descricao.trim(),
       prioridade,
       status: "aberta",
-      criado_por: perfilNome,
+      aberta_por: perfilNome,
+      aberta_em: new Date().toISOString(),
     });
     setSaving(false);
     if (error) {
