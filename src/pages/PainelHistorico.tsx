@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useHistorico } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MarcaBadge } from "@/components/MarcaBadge";
-import { Loader2, History, Pencil, Eye } from "lucide-react";
+import { Loader2, History, Pencil, Eye, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
 import { EditarRegistrosDiariosModal } from "@/components/EditarRegistrosDiariosModal";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Modo = "dia" | "periodo";
 
@@ -28,6 +30,31 @@ export default function PainelHistorico() {
 
   const [ordemDetalhe, setOrdemDetalhe] = useState<any | null>(null);
   const [editandoRegistrosOrdem, setEditandoRegistrosOrdem] = useState<any | null>(null);
+
+  const [reabrindo, setReabrindo] = useState<string | null>(null);
+
+  async function handleReabrir(ordem: any, e: React.MouseEvent) {
+    e.stopPropagation();
+    const ok = window.confirm(`Reabrir a OP ${ordem.lote} — ${ordem.produto}?\nO status voltará para "Aguardando Liberação" e a data de conclusão será removida.`);
+    if (!ok) return;
+    setReabrindo(ordem.id);
+    const { error } = await (supabase as any)
+      .from("ordens")
+      .update({ status: "aguardando_liberacao", data_conclusao: null })
+      .eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao reabrir OP", description: error.message, variant: "destructive" });
+      setReabrindo(null);
+      return;
+    }
+    await (supabase as any).from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: "concluido",
+      status_novo: "aguardando_liberacao",
+    });
+    toast({ title: `OP ${ordem.lote} reaberta`, description: "Status voltou para Aguardando Liberação." });
+    setReabrindo(null);
+  }
 
   const handleRegistroSalvo = (ordemId: string, novaQtdReal: number) => {
     setOverrides((prev) => ({
@@ -181,6 +208,20 @@ export default function PainelHistorico() {
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setEditandoRegistrosOrdem(ordem); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
+                      {ordem.status === "concluido" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                          disabled={reabrindo === ordem.id}
+                          onClick={(e) => handleReabrir(ordem, e)}
+                          title="Reabrir OP"
+                        >
+                          {reabrindo === ordem.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <RotateCcw className="h-3.5 w-3.5" />}
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
