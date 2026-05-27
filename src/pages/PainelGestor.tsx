@@ -44,7 +44,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const { ordens, loading } = useOrdens(dateStr);
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const [todasPendentes, setTodasPendentes] = useState<any[]>([]);
 
   const fetchTodasPendentes = useCallback(async () => {

@@ -248,11 +248,18 @@ function SectionTitle({ icon: Icon, children }: { icon: any; children: React.Rea
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PainelAnalises() {
-  const hoje = new Date();
-  const primeiroDiaMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-01`;
+  const { hoje, primeiroDiaMes, hojeStr, inicioAnual } = useMemo(() => {
+    const d = new Date();
+    return {
+      hoje: d,
+      hojeStr: toStr(d),
+      primeiroDiaMes: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
+      inicioAnual: toStr(new Date(d.getFullYear(), d.getMonth() - 11, 1)),
+    };
+  }, []);
 
   const [dataInicio, setDataInicio] = useState(primeiroDiaMes);
-  const [dataFim, setDataFim] = useState(toStr(hoje));
+  const [dataFim, setDataFim] = useState(hojeStr);
   const [atalhoAtivo, setAtalhoAtivo] = useState<Atalho>("mes");
   const [linhaFiltro, setLinhaFiltro] = useState<number>(0);
   const [materialFiltro, setMaterialFiltro] = useState("");
@@ -287,10 +294,9 @@ export default function PainelAnalises() {
   const { paradas: paradasRaw } = useParadasAnalises(dataInicio, dataFim);
   const { registros: registrosDiariosRaw } = useRegistrosDiariosAnalises(dataInicio, dataFim);
 
-  const inicioAnual = toStr(new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1));
-  const { ordens: ordensAnuaisRaw } = useAnalises(inicioAnual, toStr(hoje));
-  const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, toStr(hoje));
-  const { paradas: paradasAnuaisRaw } = useParadasAnalises(inicioAnual, toStr(hoje));
+  const { ordens: ordensAnuaisRaw } = useAnalises(inicioAnual, hojeStr);
+  const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, hojeStr);
+  const { paradas: paradasAnuaisRaw } = useParadasAnalises(inicioAnual, hojeStr);
 
   const matchesMaterial = (o: any) => {
     if (!materialFiltro) return true;
