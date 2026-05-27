@@ -94,16 +94,6 @@ const gruposGestor = [
     ],
   },
   {
-    id: 'manutencao',
-    label: 'Manutenção',
-    icon: Wrench,
-    items: [
-      { id: 'painel_manutencao'       as TabGestorId, label: 'Painel de Manutenção', icon: Wrench },
-      { id: 'cadastro_equipamentos'   as TabGestorId, label: 'Equipamentos',         icon: Settings },
-      { id: 'abrir_os'                as TabGestorId, label: 'Abrir OS',             icon: PlusCircle },
-    ],
-  },
-  {
     id: 'gestao',
     label: 'Gestão',
     icon: LayoutDashboard,
@@ -117,6 +107,12 @@ const gruposGestor = [
       { id: 'importar'    as TabGestorId, label: 'Importar',         icon: FileUp },
     ],
   },
+] as const;
+
+const manutencaoItems = [
+  { id: 'painel_manutencao'     as TabGestorId, label: 'Painel de Manutenção', icon: Wrench    },
+  { id: 'cadastro_equipamentos' as TabGestorId, label: 'Equipamentos',         icon: Settings  },
+  { id: 'abrir_os'              as TabGestorId, label: 'Abrir OS',             icon: PlusCircle },
 ] as const;
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -162,7 +158,8 @@ export default function Index() {
   };
 
   const activeLabel =
-    gruposGestor.flatMap((g) => g.items).find((i) => i.id === activeTab)?.label ?? '';
+    [...gruposGestor.flatMap((g) => g.items), ...manutencaoItems, { id: 'comercial' as TabGestorId, label: 'Painel Comercial' }]
+      .find((i) => i.id === activeTab)?.label ?? '';
 
   if (loading) {
     return (
@@ -423,6 +420,30 @@ export default function Index() {
                   </div>
                 );
               })}
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase px-2">
+              <Wrench className="h-3 w-3 shrink-0" />
+              Manutenção
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {manutencaoItems.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      isActive={activeTab === item.id}
+                      tooltip={item.label}
+                      onClick={() => goToTab(item.id)}
+                      size="sm"
+                    >
+                      <item.icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
 
