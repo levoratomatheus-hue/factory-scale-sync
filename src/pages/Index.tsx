@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings } from 'lucide-react';
 import Login from './Login';
 
@@ -181,9 +182,11 @@ export default function Index() {
         icon={<Scale className="h-4 w-4 shrink-0" />}
         onLogout={logout}
       >
-        <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-          <PainelBalanca balanca={parseInt(perfil.balanca)} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+            <PainelBalanca balanca={parseInt(perfil.balanca)} />
+          </Suspense>
+        </ErrorBoundary>
       </OperadorLayout>
     );
   }
@@ -196,9 +199,11 @@ export default function Index() {
         icon={<FlaskConical className="h-4 w-4 shrink-0" />}
         onLogout={logout}
       >
-        <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-          <PainelMistura />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+            <PainelMistura />
+          </Suspense>
+        </ErrorBoundary>
       </OperadorLayout>
     );
   }
@@ -212,9 +217,11 @@ export default function Index() {
         icon={<Factory className="h-4 w-4 shrink-0" />}
         onLogout={logout}
       >
-        <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-          <PainelLinha linha={linhaNum} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+            <PainelLinha linha={linhaNum} />
+          </Suspense>
+        </ErrorBoundary>
       </OperadorLayout>
     );
   }
@@ -286,11 +293,13 @@ export default function Index() {
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
           <main className="p-6 overflow-x-hidden">
-            <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-              {activeTab === 'abrir_os'
-                ? <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
-                : <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+                {activeTab === 'abrir_os'
+                  ? <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
+                  : <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
+              </Suspense>
+            </ErrorBoundary>
           </main>
         </SidebarInset>
       </SidebarProvider>
@@ -347,9 +356,11 @@ export default function Index() {
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
           <main className="p-6 overflow-x-hidden">
-            <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-              <PainelComercial />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+                <PainelComercial />
+              </Suspense>
+            </ErrorBoundary>
           </main>
         </SidebarInset>
       </SidebarProvider>
@@ -514,6 +525,7 @@ export default function Index() {
           <span className="font-semibold text-sm">{activeLabel}</span>
         </header>
         <main className="p-6 overflow-x-hidden">
+          <ErrorBoundary>
           <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
             {activeTab === 'gestor'              && <PainelGestor onCriarOP={handleCriarOP} />}
             {activeTab === 'programacao'         && <PainelProgramacao />}
@@ -538,6 +550,7 @@ export default function Index() {
             {activeTab === 'cadastro_equipamentos'  && <CadastroEquipamentos />}
             {activeTab === 'abrir_os'               && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
           </Suspense>
+          </ErrorBoundary>
         </main>
       </SidebarInset>
     </SidebarProvider>
