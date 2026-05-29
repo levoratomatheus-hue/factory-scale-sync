@@ -179,8 +179,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
 
     setSaving(true);
 
-    // Salva campos da ordem
-    await onSalvar(ordem.id, {
+    const payload = {
       quantidade: qtd,
       tamanho_batelada: tamanhoBatelada ? parseFloat(tamanhoBatelada) : null,
       linha: parseInt(linha),
@@ -191,11 +190,14 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
       marca: marca || null,
       formula_id: formulaId.trim() || null,
       obs: obsJson,
-    });
+    };
 
-    // Salva ingredientes (se existirem)
     if (formulaItens.length > 0) {
-      await supabase.from("ordens_formula").delete().eq("ordem_id", ordem.id);
+      // Paraleliza update da ordem com delete da fórmula (sem dependência entre si)
+      await Promise.all([
+        onSalvar(ordem.id, payload),
+        supabase.from("ordens_formula").delete().eq("ordem_id", ordem.id),
+      ]);
       await supabase.from("ordens_formula").insert(
         formulaItens.map((item) => ({
           ordem_id: ordem.id,
@@ -204,6 +206,8 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
           quantidade_kg: item.quantidade_kg,
         }))
       );
+    } else {
+      await onSalvar(ordem.id, payload);
     }
 
     setSaving(false);
