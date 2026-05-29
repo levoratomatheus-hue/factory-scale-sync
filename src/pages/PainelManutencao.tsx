@@ -132,7 +132,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const fetchOss = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("ordens_servico")
-      .select("*, equipamentos(nome, tag, linha)")
+      .select("id, status, prioridade, descricao_problema, peca_aguardada, previsao_peca, solucao_aplicada, aberta_em, aberta_por, tecnico_nome, concluido_em, equipamentos(nome, tag, linha)")
       .order("aberta_em", { ascending: false });
     if (!error) setOss(data ?? []);
     setLoading(false);
@@ -145,7 +145,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       .channel("ordens-servico-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens_servico" }, () => {
         if (debounce) clearTimeout(debounce);
-        debounce = setTimeout(() => fetchOss(), 600);
+        debounce = setTimeout(() => fetchOss(), 1500);
       })
       .subscribe();
     return () => {

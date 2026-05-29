@@ -187,7 +187,7 @@ export default function PainelLiberacao() {
       .channel("liberacao-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(), 300);
+        debounceTimer = setTimeout(() => fetchOrdens(), 1500);
       })
       .subscribe();
     return () => {

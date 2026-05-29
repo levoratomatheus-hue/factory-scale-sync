@@ -199,9 +199,9 @@ export function useParadasLinha(linha: number, data: string) {
     fetchParadasRef.current();
     const channel = supabase
       .channel(`paradas-linha-${linha}-${data}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "paradas" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "paradas", filter: `linha=eq.${linha}` }, () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchParadasRef.current(), 300);
+        debounceRef.current = setTimeout(() => fetchParadasRef.current(), 800);
       })
       .subscribe();
     return () => {
