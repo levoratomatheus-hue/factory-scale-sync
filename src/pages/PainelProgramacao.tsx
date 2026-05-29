@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -259,6 +259,7 @@ const SortableCard = memo(function SortableCard({
   onToggleConfirmado,
   onEditarRegistro,
   onEditarEmissao,
+  onAddParada,
 }: {
   ordem: Ordem;
   registros?: any[];
@@ -274,6 +275,7 @@ const SortableCard = memo(function SortableCard({
   onLab: (ordem: Ordem) => void;
   onToggleConfirmado: (ordem: Ordem) => void;
   onEditarEmissao: (ordem: Ordem) => void;
+  onAddParada: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -446,6 +448,13 @@ const SortableCard = memo(function SortableCard({
           <FlaskConical className="h-3.5 w-3.5" />
         </button>
         <button
+          onClick={(e) => { e.stopPropagation(); onAddParada(ordem); }}
+          className="text-muted-foreground/50 hover:text-amber-600"
+          title="Registrar Parada"
+        >
+          <PauseCircle className="h-3.5 w-3.5" />
+        </button>
+        <button
           onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
           className="text-muted-foreground/50 hover:text-destructive"
           title="Excluir"
@@ -474,6 +483,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onToggleConfirmado,
   onEditarRegistro,
   onEditarEmissao,
+  onAddParada,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -491,6 +501,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onToggleConfirmado: (ordem: Ordem) => void;
   onEditarRegistro: (ordem: Ordem, registro: any) => void;
   onEditarEmissao: (ordem: Ordem) => void;
+  onAddParada: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -531,7 +542,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onEditarEmissao={onEditarEmissao} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} />
             ))
           )}
         </div>
@@ -586,6 +597,12 @@ export default function PainelProgramacao() {
   const [editRegHoraFim, setEditRegHoraFim] = useState("");
   const [editRegItems, setEditRegItems] = useState<{ qty: string; peso: string }[]>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [editandoRegistro, setEditandoRegistro] = useState(false);
+  const [ordemParaParada, setOrdemParaParada] = useState<Ordem | null>(null);
+  const [paradaMotivo, setParadaMotivo] = useState("");
+  const [paradaData, setParadaData] = useState(todayStr);
+  const [paradaHoraInicio, setParadaHoraInicio] = useState("");
+  const [paradaHoraFim, setParadaHoraFim] = useState("");
+  const [salvandoParada, setSalvandoParada] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -1038,6 +1055,32 @@ export default function PainelProgramacao() {
     setEditRegRegistro(null);
   };
 
+  const handleSalvarParada = async () => {
+    if (!ordemParaParada || !paradaMotivo || !paradaData || !paradaHoraInicio || !paradaHoraFim) {
+      toast({ title: "Preencha todos os campos obrigatórios", variant: "destructive" });
+      return;
+    }
+    setSalvandoParada(true);
+    const { error } = await (supabase as any).from("paradas").insert({
+      linha: ordemParaParada.linha,
+      data: paradaData,
+      motivo: paradaMotivo,
+      hora_inicio: paradaHoraInicio,
+      hora_fim: paradaHoraFim,
+    });
+    setSalvandoParada(false);
+    if (error) {
+      toast({ title: "Erro ao salvar parada", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Parada registrada com sucesso" });
+    setOrdemParaParada(null);
+    setParadaMotivo("");
+    setParadaData(todayStr);
+    setParadaHoraInicio("");
+    setParadaHoraFim("");
+  };
+
   const ordensParaLinha = useCallback((l: number) => sortOrdens(ordens.filter((o) => o.linha === l)), [ordens]);
 
   const prevOrdensPerLinhaRef = useRef<Record<number, Ordem[]>>({});
@@ -1149,6 +1192,7 @@ export default function PainelProgramacao() {
                 onToggleConfirmado={handleToggleConfirmado}
                 onEditarRegistro={handleEditarRegistro}
                 onEditarEmissao={handleEditarEmissaoClick}
+                onAddParada={setOrdemParaParada}
               />
             ))}
           </div>
@@ -1489,6 +1533,89 @@ export default function PainelProgramacao() {
               {editandoRegistro && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <CalendarCheck2 className="mr-1.5 h-4 w-4" />
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!ordemParaParada}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrdemParaParada(null);
+            setParadaMotivo("");
+            setParadaData(todayStr);
+            setParadaHoraInicio("");
+            setParadaHoraFim("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar Parada</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaParada?.produto}</span>
+              <br />
+              Linha {ordemParaParada?.linha} — registre a parada de produção.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Motivo</label>
+              <Select value={paradaMotivo} onValueChange={setParadaMotivo}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o motivo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manutencao">Manutenção</SelectItem>
+                  <SelectItem value="sem_material">Sem Material</SelectItem>
+                  <SelectItem value="problema_processo">Problema de Processo</SelectItem>
+                  <SelectItem value="falta_energia">Falta de Energia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data</label>
+              <input
+                type="date"
+                value={paradaData}
+                onChange={(e) => setParadaData(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={paradaHoraInicio}
+                  onChange={(e) => setParadaHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={paradaHoraFim}
+                  onChange={(e) => setParadaHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaParada(null)} disabled={salvandoParada}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSalvarParada}
+              disabled={salvandoParada || !paradaMotivo || !paradaData || !paradaHoraInicio || !paradaHoraFim}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {salvandoParada && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <PauseCircle className="mr-1.5 h-4 w-4" />
+              Salvar Parada
             </Button>
           </DialogFooter>
         </DialogContent>
