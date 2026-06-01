@@ -68,12 +68,27 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
   const fetchLotesDisponiveis = useCallback(async () => {
     setLoadingLotes(true);
-    const [{ data: lotes }, { data: ordensExistentes }] = await Promise.all([
-      (supabase as any).from('cadastro_lotes').select('lote, produto, quantidade').eq('status', 'Em Aberto').order('lote', { ascending: true }),
-      supabase.from('ordens').select('lote'),
-    ]);
+    const { data: lotes } = await (supabase as any)
+      .from('cadastro_lotes')
+      .select('lote, produto, quantidade')
+      .eq('status', 'Em Aberto')
+      .order('lote', { ascending: true });
+
+    if (!lotes || lotes.length === 0) {
+      setLotesDisponiveis([]);
+      setLoadingLotes(false);
+      return;
+    }
+
+    // Busca apenas ordens cujo lote está na lista em aberto — evita trazer toda a tabela
+    const loteNums = lotes.map((l: any) => String(l.lote));
+    const { data: ordensExistentes } = await (supabase as any)
+      .from('ordens')
+      .select('lote')
+      .in('lote', loteNums);
+
     const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
-    setLotesDisponiveis((lotes ?? []).filter((l: any) => !lotesComOP.has(String(l.lote))));
+    setLotesDisponiveis(lotes.filter((l: any) => !lotesComOP.has(String(l.lote))));
     setLoadingLotes(false);
   }, []);
 

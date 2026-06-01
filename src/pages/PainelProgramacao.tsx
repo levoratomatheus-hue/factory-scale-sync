@@ -616,7 +616,7 @@ export default function PainelProgramacao() {
     if (showLoading) setLoading(true);
     const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao";
 
-    // Round-trip 1: OPs programadas + IDs de registros desta data (paralelo)
+    // Round-trip 1: OPs programadas + IDs de ordens com registros nesta data (paralelo)
     const [{ data: programadas }, { data: regsHoje }] = await Promise.all([
       supabase
         .from("ordens")
@@ -634,17 +634,18 @@ export default function PainelProgramacao() {
     const extraIds = [...new Set((regsHoje ?? []).map((r: any) => r.ordem_id))]
       .filter((id: string) => !programadasIds.has(id));
 
-    // Round-trip 2: extra OPs + registros das OPs programadas (paralelo)
-    const progIds = [...programadasIds];
-    const [extraResult, mainRegsResult] = await Promise.all([
+    // Round-trip 2: extra OPs + registros de TODAS as ordens (programadas + extras) em paralelo
+    // Elimina o 3º round-trip anterior buscando tudo de uma vez
+    const allIds = [...programadasIds, ...extraIds];
+    const [extraResult, allRegsResult] = await Promise.all([
       extraIds.length > 0
         ? supabase.from("ordens").select(fields).in("id", extraIds).not("linha", "is", null)
         : Promise.resolve({ data: [] as any[] }),
-      progIds.length > 0
+      allIds.length > 0
         ? (supabase as any)
             .from("registros_diarios")
             .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
-            .in("ordem_id", progIds)
+            .in("ordem_id", allIds)
             .order("data", { ascending: true })
         : Promise.resolve({ data: [] as any[] }),
     ]);
@@ -653,20 +654,8 @@ export default function PainelProgramacao() {
     const all = [...(programadas ?? []) as Ordem[], ...extraOrdens];
     const deduped = [...new Map(all.map((o) => [o.id, o])).values()];
 
-    let allRegs: any[] = mainRegsResult.data ?? [];
-
-    // Round-trip 3 (só se houver extra OPs): registros das extras
-    if (extraOrdens.length > 0) {
-      const { data: extraRegs } = await (supabase as any)
-        .from("registros_diarios")
-        .select("id, ordem_id, data, registro_producao, hora_inicio, hora_fim")
-        .in("ordem_id", extraOrdens.map((o) => o.id))
-        .order("data", { ascending: true });
-      allRegs = [...allRegs, ...(extraRegs ?? [])];
-    }
-
     const regsPorOrdem: Record<string, any[]> = {};
-    allRegs.forEach((r: any) => {
+    ((allRegsResult.data ?? []) as any[]).forEach((r: any) => {
       if (!regsPorOrdem[r.ordem_id]) regsPorOrdem[r.ordem_id] = [];
       regsPorOrdem[r.ordem_id].push(r);
     });
@@ -681,15 +670,17 @@ export default function PainelProgramacao() {
     fetchOrdens(data, false);
   }, [data, fetchOrdens]);
 
-  // Subscription criada apenas uma vez — usa dataRef para sempre pegar o dia atual
+  // Subscription única — escuta ordens e registros_diarios
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => fetchOrdens(dataRef.current, false), 1500);
+    };
     const channel = supabase
       .channel('programacao-ordens')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, () => {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(dataRef.current, false), 1500);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens' }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'registros_diarios' }, trigger)
       .subscribe();
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
