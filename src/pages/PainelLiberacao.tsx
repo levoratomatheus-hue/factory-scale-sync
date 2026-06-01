@@ -8,7 +8,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { recalcularPosicoes } from "@/lib/recalcularPosicoes";
 import { gerarZplLiberacao } from "@/lib/printEtiqueta";
 import { ptBR } from "date-fns/locale";
 import {
@@ -524,7 +523,6 @@ export default function PainelLiberacao() {
       status_anterior: "aguardando_liberacao",
       status_novo: "aguardando_linha",
     });
-    await recalcularPosicoes(ordem.linha);
 
     setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
     setQtdReal((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });

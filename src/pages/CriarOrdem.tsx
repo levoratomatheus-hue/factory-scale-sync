@@ -12,7 +12,7 @@ import { Save, Loader2, Search, AlertTriangle, PackageSearch } from 'lucide-reac
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
-import { recalcularPosicoes } from '@/lib/recalcularPosicoes';
+import { getNextPosicao } from '@/lib/recalcularPosicoes';
 
 interface LoteDisponivel {
   lote: number;
@@ -155,15 +155,19 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
 
+    const linhaNum = parseInt(values.linha);
+    const posicao = await getNextPosicao(linhaNum);
+
     const { data: novaOrdem, error } = await supabase
       .from('ordens')
       .insert({
         lote: values.lote,
         produto: values.produto,
         quantidade: values.quantidade,
-        linha: parseInt(values.linha),
+        linha: linhaNum,
         balanca: parseInt(values.balanca),
         status: 'pendente',
+        posicao,
         data_programacao: dataProgramacao || format(new Date(), 'yyyy-MM-dd'),
         formula_id: formulaId,
         tamanho_batelada: tamanhoBatelada,
@@ -216,7 +220,6 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         .eq('lote', loteNum);
     }
 
-    await recalcularPosicoes(parseInt(values.linha));
 
     setSaving(false);
     toast({ title: 'Ordem criada com sucesso!' });

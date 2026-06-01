@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useFormula } from "@/hooks/useFormula";
 import { formatKg, sortOrdens } from "@/lib/utils";
 import { diasUteis, proximoDiaUtil } from "@/lib/diasUteis";
-import { recalcularPosicoes } from "@/lib/recalcularPosicoes";
+import { getNextPosicao } from "@/lib/recalcularPosicoes";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { EditarOrdemDialog } from "@/components/EditarOrdemDialog";
 import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
@@ -760,7 +760,6 @@ export default function PainelProgramacao() {
     if (error) {
       toast({ title: "Erro ao reprogramar ordem", description: error.message, variant: "destructive" });
     } else {
-      await recalcularPosicoes(ordem.linha);
       setOrdens((prev) => prev.filter((o) => o.id !== id));
       toast({ title: "Ordem reprogramada com sucesso" });
     }
@@ -785,11 +784,11 @@ export default function PainelProgramacao() {
   };
 
   const handleMoverLinha = async (id: string, novaLinha: number) => {
-    const ordemAtual = ordens.find((o) => o.id === id);
+    const novaPosicao = await getNextPosicao(novaLinha);
 
     const { error } = await supabase
       .from("ordens")
-      .update({ linha: novaLinha } as any)
+      .update({ linha: novaLinha, posicao: novaPosicao } as any)
       .eq("id", id);
 
     if (error) {
@@ -797,13 +796,8 @@ export default function PainelProgramacao() {
       return;
     }
 
-    await Promise.all([
-      recalcularPosicoes(novaLinha),
-      ...(ordemAtual && ordemAtual.linha !== novaLinha ? [recalcularPosicoes(ordemAtual.linha)] : []),
-    ]);
-
     setOrdens((prev) =>
-      prev.map((o) => o.id === id ? { ...o, linha: novaLinha } : o)
+      prev.map((o) => o.id === id ? { ...o, linha: novaLinha, posicao: novaPosicao } : o)
     );
     toast({ title: `Ordem movida para Linha ${novaLinha}` });
   };
@@ -984,7 +978,6 @@ export default function PainelProgramacao() {
       toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate.message, variant: "destructive" });
       return;
     }
-    await recalcularPosicoes(ordemParaRegistrar.linha);
     setOrdens((prev) => prev.map((o) => o.id === ordemParaRegistrar!.id ? { ...o, data_programacao: proximaData } : o));
     setRegistrando(false);
     const dataFmt = format(new Date(dataRegistro + "T12:00:00"), "dd/MM/yyyy");

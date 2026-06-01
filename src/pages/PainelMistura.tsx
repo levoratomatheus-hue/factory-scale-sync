@@ -9,7 +9,6 @@ import { CheckCircle2, Loader2, FlaskConical, Layers, Play, Printer } from "luci
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { imprimirEtiqueta } from "@/lib/printEtiqueta";
-import { recalcularPosicoes } from "@/lib/recalcularPosicoes";
 
 interface FormulaRow {
   sequencia: number | null;
@@ -133,7 +132,6 @@ export default function PainelMistura() {
       status_anterior: "em_mistura",
       status_novo: "aguardando_linha",
     });
-    await recalcularPosicoes(ordem.linha);
     await fetchOrdens();
   };
 
