@@ -10,8 +10,13 @@ export function formatKg(value: number | null | undefined): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
-export function sortOrdens<T extends { status: string; posicao?: number | null }>(ordens: T[]): T[] {
-  return [...ordens].sort((a, b) => (a.posicao ?? 9999) - (b.posicao ?? 9999));
+export function sortOrdens<T extends { status: string; posicao?: number | null; id: string }>(ordens: T[]): T[] {
+  return [...ordens].sort((a, b) => {
+    const pa = a.posicao ?? 9999;
+    const pb = b.posicao ?? 9999;
+    if (pa !== pb) return pa - pb;
+    return a.id < b.id ? -1 : 1;
+  });
 }
 
 export function parseHoras(

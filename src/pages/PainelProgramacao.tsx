@@ -752,9 +752,10 @@ export default function PainelProgramacao() {
       if (!confirmado) return;
     }
 
+    const novaPosicao = await getNextPosicao(ordem.linha);
     const { error } = await supabase
       .from("ordens")
-      .update({ data_programacao: novaData, motivo_reprovacao: null } as any)
+      .update({ data_programacao: novaData, posicao: novaPosicao, motivo_reprovacao: null } as any)
       .eq("id", id);
 
     if (error) {
@@ -972,13 +973,14 @@ export default function PainelProgramacao() {
       return;
     }
     const proximaData = proximoDiaUtil(dataRegistro);
-    const { error: errUpdate } = await supabase.from("ordens").update({ data_programacao: proximaData } as any).eq("id", ordemParaRegistrar.id);
+    const proximaPosicao = await getNextPosicao(ordemParaRegistrar.linha);
+    const { error: errUpdate } = await supabase.from("ordens").update({ data_programacao: proximaData, posicao: proximaPosicao } as any).eq("id", ordemParaRegistrar.id);
     if (errUpdate) {
       setRegistrando(false);
       toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate.message, variant: "destructive" });
       return;
     }
-    setOrdens((prev) => prev.map((o) => o.id === ordemParaRegistrar!.id ? { ...o, data_programacao: proximaData } : o));
+    setOrdens((prev) => prev.map((o) => o.id === ordemParaRegistrar!.id ? { ...o, data_programacao: proximaData, posicao: proximaPosicao } : o));
     setRegistrando(false);
     const dataFmt = format(new Date(dataRegistro + "T12:00:00"), "dd/MM/yyyy");
     toast({ title: `Registro de ${dataFmt} salvo — próxima data: ${format(new Date(proximaData + "T12:00:00"), "dd/MM/yyyy")}` });
