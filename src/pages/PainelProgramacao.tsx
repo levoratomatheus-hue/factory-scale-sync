@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -54,6 +54,28 @@ interface Ordem {
   obs_linha: string | null;
   motivo_reprovacao: string | null;
 }
+
+interface NotaProgramacao {
+  id: string;
+  texto: string;
+  cor: "amarelo" | "azul" | "verde" | "rosa";
+  data: string | null;
+  criado_em: string | null;
+}
+
+const COR_CLASSES: Record<string, string> = {
+  amarelo: "bg-yellow-200 border-yellow-300",
+  azul: "bg-blue-200 border-blue-300",
+  verde: "bg-green-200 border-green-300",
+  rosa: "bg-pink-200 border-pink-300",
+};
+
+const COR_LABELS: Record<string, string> = {
+  amarelo: "Amarelo",
+  azul: "Azul",
+  verde: "Verde",
+  rosa: "Rosa",
+};
 
 const FormulaDialog = memo(function FormulaDialog({
   ordem,
@@ -599,6 +621,14 @@ export default function PainelProgramacao() {
   const [editandoRegistro, setEditandoRegistro] = useState(false);
   const [ordemParaParada, setOrdemParaParada] = useState<Ordem | null>(null);
   const [paradaMotivo, setParadaMotivo] = useState("");
+
+  // Notas
+  const [notas, setNotas] = useState<NotaProgramacao[]>([]);
+  const [modalNotaAberto, setModalNotaAberto] = useState(false);
+  const [notaTexto, setNotaTexto] = useState("");
+  const [notaCor, setNotaCor] = useState<"amarelo" | "azul" | "verde" | "rosa">("amarelo");
+  const [notaData, setNotaData] = useState("");
+  const [salvandoNota, setSalvandoNota] = useState(false);
   const [paradaData, setParadaData] = useState(todayStr);
   const [paradaHoraInicio, setParadaHoraInicio] = useState("");
   const [paradaHoraFim, setParadaHoraFim] = useState("");
@@ -687,6 +717,41 @@ export default function PainelProgramacao() {
       supabase.removeChannel(channel);
     };
   }, [fetchOrdens]);
+
+  const fetchNotas = useCallback(async () => {
+    const { data: rows } = await (supabase as any)
+      .from("notas_programacao")
+      .select("id, texto, cor, data, criado_em")
+      .order("criado_em", { ascending: true });
+    setNotas((rows ?? []) as NotaProgramacao[]);
+  }, []);
+
+  useEffect(() => { fetchNotas(); }, [fetchNotas]);
+
+  const handleSalvarNota = async () => {
+    if (!notaTexto.trim()) return;
+    setSalvandoNota(true);
+    const { error } = await (supabase as any).from("notas_programacao").insert({
+      texto: notaTexto.trim(),
+      cor: notaCor,
+      data: notaData || null,
+    });
+    setSalvandoNota(false);
+    if (error) { toast({ title: "Erro ao salvar nota", variant: "destructive" }); return; }
+    setModalNotaAberto(false);
+    setNotaTexto("");
+    setNotaCor("amarelo");
+    setNotaData("");
+    fetchNotas();
+  };
+
+  const handleDeletarNota = async (id: string) => {
+    const { error } = await (supabase as any).from("notas_programacao").delete().eq("id", id);
+    if (error) { toast({ title: "Erro ao deletar nota", variant: "destructive" }); return; }
+    setNotas((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const notasVisiveis = notas.filter((n) => !n.data || n.data === data);
 
   const handleReorder = async (linha: number, reordered: Ordem[]) => {
     const anterior = ordens;
@@ -1151,6 +1216,94 @@ export default function PainelProgramacao() {
           {format(new Date(data + "T12:00:00"), "EEEE", { locale: ptBR })}
         </span>
       </div>
+
+      {/* Painel de Notas */}
+      <div className="flex items-start gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="shrink-0 gap-1.5"
+          onClick={() => setModalNotaAberto(true)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Nova Nota
+        </Button>
+        {notasVisiveis.length > 0 && (
+          <div className="flex items-start gap-2 overflow-x-auto pb-1 flex-1">
+            {notasVisiveis.map((nota) => (
+              <div
+                key={nota.id}
+                className={`relative shrink-0 rounded border p-2 w-44 text-xs shadow-sm ${COR_CLASSES[nota.cor] ?? COR_CLASSES.amarelo}`}
+              >
+                <button
+                  onClick={() => handleDeletarNota(nota.id)}
+                  className="absolute top-1 right-1 rounded-full p-0.5 hover:bg-black/10 text-gray-500 hover:text-gray-800"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                <p className="pr-4 break-words whitespace-pre-wrap leading-relaxed">{nota.texto}</p>
+                {nota.data && (
+                  <p className="mt-1 text-[10px] text-gray-500">{nota.data.split("-").reverse().join("/")}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal Nova Nota */}
+      <Dialog open={modalNotaAberto} onOpenChange={(open) => { if (!open) { setModalNotaAberto(false); setNotaTexto(""); setNotaCor("amarelo"); setNotaData(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova Nota</DialogTitle>
+            <DialogDescription>Adicione um lembrete ao painel de programação.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Texto</label>
+              <textarea
+                value={notaTexto}
+                onChange={(e) => setNotaTexto(e.target.value)}
+                rows={3}
+                placeholder="Escreva sua nota..."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Cor</label>
+              <div className="flex gap-2">
+                {(["amarelo", "azul", "verde", "rosa"] as const).map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setNotaCor(c)}
+                    className={`flex-1 rounded border py-1.5 text-xs font-medium transition-all ${COR_CLASSES[c]} ${notaCor === c ? "ring-2 ring-offset-1 ring-gray-500 scale-105" : "opacity-70 hover:opacity-100"}`}
+                  >
+                    {COR_LABELS[c]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data (opcional)</label>
+              <input
+                type="date"
+                value={notaData}
+                onChange={(e) => setNotaData(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground">Sem data: aparece sempre. Com data: só aparece nesse dia.</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setModalNotaAberto(false)} disabled={salvandoNota}>Cancelar</Button>
+            <Button onClick={handleSalvarNota} disabled={salvandoNota || !notaTexto.trim()} className="bg-amber-500 hover:bg-amber-600 text-white">
+              {salvandoNota && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Plus className="mr-1.5 h-4 w-4" />
+              Salvar Nota
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
