@@ -46,12 +46,13 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   const [hist, setHist] = useState<any[]>([]);
   const [registros, setRegistros] = useState<any[]>([]);
   const [paradas, setParadas] = useState<any[]>([]);
+  const [formulaItens, setFormulaItens] = useState<{ sequencia: number | null; materia_prima: string; quantidade_kg: number }[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!ordem) return;
     setLoading(true);
-    setHist([]); setRegistros([]); setParadas([]);
+    setHist([]); setRegistros([]); setParadas([]); setFormulaItens([]);
 
     const today = format(new Date(), "yyyy-MM-dd");
     const dateFim = ordem.data_conclusao?.slice(0, 10) ?? today;
@@ -74,10 +75,34 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
         .gte("data", ordem.data_programacao)
         .lte("data", dateFim)
         .order("data", { ascending: true }),
-    ]).then(([h, r, p]) => {
+      (supabase as any)
+        .from("ordens_formula")
+        .select("sequencia, materia_prima, quantidade_kg")
+        .eq("ordem_id", ordem.id)
+        .order("sequencia", { ascending: true }),
+    ]).then(async ([h, r, p, f]) => {
       setHist(h.data ?? []);
       setRegistros(r.data ?? []);
       setParadas(p.data ?? []);
+
+      if (f.data && f.data.length > 0) {
+        setFormulaItens(f.data);
+      } else if (ordem.formula_id) {
+        const { data: padrao } = await (supabase as any)
+          .from("formulas")
+          .select("sequencia, materia_prima, percentual")
+          .eq("formula_id", ordem.formula_id)
+          .order("sequencia", { ascending: true });
+        if (padrao && padrao.length > 0) {
+          const batelada = ordem.tamanho_batelada ?? ordem.quantidade;
+          setFormulaItens(padrao.map((item: any) => ({
+            sequencia: item.sequencia,
+            materia_prima: item.materia_prima,
+            quantidade_kg: batelada ? (item.percentual / 100) * batelada : item.percentual,
+          })));
+        }
+      }
+
       setLoading(false);
     });
   }, [ordem?.id]);
@@ -168,7 +193,34 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
               </section>
             )}
 
-            {/* 4. Obs linha */}
+            {/* 4. Fórmula Utilizada */}
+            {formulaItens.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Fórmula Utilizada</h3>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-muted-foreground text-xs">
+                        <th className="text-left px-3 py-1.5 font-medium">Seq.</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Matéria-Prima</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Qtd (kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formulaItens.map((item, i) => (
+                        <tr key={i} className="border-t last:border-b-0">
+                          <td className="px-3 py-1.5 text-muted-foreground font-mono">{item.sequencia ?? i + 1}</td>
+                          <td className="px-3 py-1.5 font-medium">{item.materia_prima}</td>
+                          <td className="px-3 py-1.5 text-right font-mono">{formatKg(item.quantidade_kg)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* 5. Obs linha */}
             {ordem.obs_linha && (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Observações da Linha</h3>
