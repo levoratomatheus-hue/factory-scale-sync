@@ -615,6 +615,7 @@ export default function PainelProgramacao() {
   const [ordemLab, setOrdemLab] = useState<Ordem | null>(null);
   const [editRegOrdem, setEditRegOrdem] = useState<Ordem | null>(null);
   const [editRegRegistro, setEditRegRegistro] = useState<any>(null);
+  const editRegDataOriginal = useRef<string>("");
   const [editRegData, setEditRegData] = useState("");
   const [editRegHoraInicio, setEditRegHoraInicio] = useState("");
   const [editRegHoraFim, setEditRegHoraFim] = useState("");
@@ -1066,6 +1067,7 @@ export default function PainelProgramacao() {
   const handleEditarRegistro = useCallback((ordem: Ordem, registro: any) => {
     setEditRegOrdem(ordem);
     setEditRegRegistro(registro);
+    editRegDataOriginal.current = registro.data ?? "";
     setEditRegData(registro.data ?? "");
     setEditRegHoraInicio(registro.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : "");
     setEditRegHoraFim(registro.hora_fim ? String(registro.hora_fim).slice(0, 5) : "");
@@ -1108,21 +1110,14 @@ export default function PainelProgramacao() {
       items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
     });
     const novaDataRegistro = editRegData || editRegRegistro.data;
-    const dataAnterior = editRegRegistro.data;
-    const dataAlterada = novaDataRegistro && novaDataRegistro !== dataAnterior;
-
-    console.log("[editReg] novaDataRegistro:", novaDataRegistro);
-    console.log("[editReg] dataAnterior:", dataAnterior);
-    console.log("[editReg] dataAlterada:", dataAlterada);
-    console.log("[editReg] status:", editRegOrdem.status);
+    const dataAnterior = editRegDataOriginal.current;
+    const dataAlterada = !!novaDataRegistro && novaDataRegistro !== dataAnterior;
 
     const ordemUpdate: Record<string, any> = { quantidade_real: qtdReal };
     if (dataAlterada && editRegOrdem.status !== "concluido") {
       ordemUpdate.data_programacao = proximoDiaUtil(novaDataRegistro);
     }
-    console.log("[editReg] ordemUpdate:", ordemUpdate);
-    const updateResult = await (supabase as any).from("ordens").update(ordemUpdate as any).eq("id", editRegOrdem.id);
-    console.log("[editReg] resultado UPDATE ordens:", updateResult);
+    await (supabase as any).from("ordens").update(ordemUpdate as any).eq("id", editRegOrdem.id);
 
     setEditandoRegistro(false);
     setRegistrosDoDia((prev) => {
