@@ -615,6 +615,7 @@ export default function PainelProgramacao() {
   const [ordemLab, setOrdemLab] = useState<Ordem | null>(null);
   const [editRegOrdem, setEditRegOrdem] = useState<Ordem | null>(null);
   const [editRegRegistro, setEditRegRegistro] = useState<any>(null);
+  const [editRegData, setEditRegData] = useState("");
   const [editRegHoraInicio, setEditRegHoraInicio] = useState("");
   const [editRegHoraFim, setEditRegHoraFim] = useState("");
   const [editRegItems, setEditRegItems] = useState<{ qty: string; peso: string }[]>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
@@ -1065,6 +1066,7 @@ export default function PainelProgramacao() {
   const handleEditarRegistro = useCallback((ordem: Ordem, registro: any) => {
     setEditRegOrdem(ordem);
     setEditRegRegistro(registro);
+    setEditRegData(registro.data ?? "");
     setEditRegHoraInicio(registro.hora_inicio ? String(registro.hora_inicio).slice(0, 5) : "");
     setEditRegHoraFim(registro.hora_fim ? String(registro.hora_fim).slice(0, 5) : "");
     const existingItems: any[] = Array.isArray(registro.registro_producao) ? registro.registro_producao : [];
@@ -1084,23 +1086,41 @@ export default function PainelProgramacao() {
       peso: parseFloat(r.peso.replace(",", ".")) || 0,
     }));
     const { error } = await (supabase as any).from("registros_diarios").update({
+      data: editRegData || editRegRegistro.data,
       hora_inicio: editRegHoraInicio || null,
       hora_fim: editRegHoraFim || null,
       registro_producao: registroProducao,
     }).eq("id", editRegRegistro.id);
-    setEditandoRegistro(false);
     if (error) {
+      setEditandoRegistro(false);
       toast({ title: "Erro ao salvar registro", description: error.message, variant: "destructive" });
       return;
     }
+
+    // Recalcula quantidade_real somando todos os registros_diarios da ordem
+    const { data: todosRegistros } = await (supabase as any)
+      .from("registros_diarios")
+      .select("registro_producao")
+      .eq("ordem_id", editRegOrdem.id);
+    let qtdReal = 0;
+    (todosRegistros ?? []).forEach((r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
+    });
+    // Aplica o item recém-editado (que ainda não aparece no select acima pois foi atualizado)
+    // O select já retorna o valor atualizado pois o update já foi feito
+    await (supabase as any).from("ordens").update({ quantidade_real: qtdReal } as any).eq("id", editRegOrdem.id);
+
+    setEditandoRegistro(false);
     setRegistrosDoDia((prev) => {
       const ordemRegs = (prev[editRegOrdem.id] ?? []).map((r: any) =>
         r.id === editRegRegistro.id
-          ? { ...r, hora_inicio: editRegHoraInicio || null, hora_fim: editRegHoraFim || null, registro_producao: registroProducao }
+          ? { ...r, data: editRegData || r.data, hora_inicio: editRegHoraInicio || null, hora_fim: editRegHoraFim || null, registro_producao: registroProducao }
           : r
       );
       return { ...prev, [editRegOrdem.id]: ordemRegs };
     });
+    setOrdens((prev) => prev.map((o) => o.id === editRegOrdem.id ? { ...o, quantidade_real: qtdReal } : o));
     toast({ title: "Registro atualizado" });
     setEditRegOrdem(null);
     setEditRegRegistro(null);
@@ -1599,6 +1619,15 @@ export default function PainelProgramacao() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data</label>
+              <input
+                type="date"
+                value={editRegData}
+                onChange={(e) => setEditRegData(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Hora Início</label>
