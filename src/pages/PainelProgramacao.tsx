@@ -280,6 +280,7 @@ const SortableCard = memo(function SortableCard({
   onLab,
   onToggleConfirmado,
   onEditarRegistro,
+  onDeletarRegistro,
   onEditarEmissao,
   onAddParada,
 }: {
@@ -290,6 +291,7 @@ const SortableCard = memo(function SortableCard({
   onEditar: (ordem: Ordem) => void;
   onExcluir: (ordem: Ordem) => void;
   onEditarRegistro: (ordem: Ordem, registro: any) => void;
+  onDeletarRegistro: (ordem: Ordem, registro: any) => void;
   onVoltarFila: (ordem: Ordem) => void;
   onForcarConclusao: (ordem: Ordem) => void;
   onRegistrarDia: (ordem: Ordem) => void;
@@ -375,6 +377,13 @@ const SortableCard = memo(function SortableCard({
                       title="Editar registro"
                     >
                       <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeletarRegistro(ordem, reg); }}
+                      className="text-blue-300 hover:text-red-500 shrink-0"
+                      title="Deletar registro"
+                    >
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 );
@@ -504,6 +513,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onLab,
   onToggleConfirmado,
   onEditarRegistro,
+  onDeletarRegistro,
   onEditarEmissao,
   onAddParada,
 }: {
@@ -522,6 +532,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onLab: (ordem: Ordem) => void;
   onToggleConfirmado: (ordem: Ordem) => void;
   onEditarRegistro: (ordem: Ordem, registro: any) => void;
+  onDeletarRegistro: (ordem: Ordem, registro: any) => void;
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
 }) {
@@ -564,7 +575,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} />
             ))
           )}
         </div>
@@ -1079,6 +1090,25 @@ export default function PainelProgramacao() {
     );
   }, []);
 
+  const handleDeletarRegistro = useCallback(async (ordem: Ordem, registro: any) => {
+    if (!window.confirm(`Deletar registro de ${registro.data ? format(new Date(registro.data + "T12:00:00"), "dd/MM/yyyy") : "?"}?`)) return;
+    const { error } = await (supabase as any).from("registros_diarios").delete().eq("id", registro.id);
+    if (error) {
+      toast({ title: "Erro ao deletar registro", description: error.message, variant: "destructive" });
+      return;
+    }
+    const restantes = (registrosDoDia[ordem.id] ?? []).filter((r: any) => r.id !== registro.id);
+    let qtdReal = 0;
+    restantes.forEach((r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
+    });
+    await (supabase as any).from("ordens").update({ quantidade_real: qtdReal } as any).eq("id", ordem.id);
+    setRegistrosDoDia((prev) => ({ ...prev, [ordem.id]: restantes }));
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, quantidade_real: qtdReal } : o));
+    toast({ title: "Registro deletado" });
+  }, [registrosDoDia]);
+
   const handleSalvarEditarRegistro = async () => {
     if (!editRegOrdem || !editRegRegistro) return;
     setEditandoRegistro(true);
@@ -1362,6 +1392,7 @@ export default function PainelProgramacao() {
                 onLab={setOrdemLab}
                 onToggleConfirmado={handleToggleConfirmado}
                 onEditarRegistro={handleEditarRegistro}
+                onDeletarRegistro={handleDeletarRegistro}
                 onEditarEmissao={handleEditarEmissaoClick}
                 onAddParada={setOrdemParaParada}
               />
