@@ -1111,11 +1111,18 @@ export default function PainelProgramacao() {
     const dataAnterior = editRegRegistro.data;
     const dataAlterada = novaDataRegistro && novaDataRegistro !== dataAnterior;
 
+    console.log("[editReg] novaDataRegistro:", novaDataRegistro);
+    console.log("[editReg] dataAnterior:", dataAnterior);
+    console.log("[editReg] dataAlterada:", dataAlterada);
+    console.log("[editReg] status:", editRegOrdem.status);
+
     const ordemUpdate: Record<string, any> = { quantidade_real: qtdReal };
     if (dataAlterada && editRegOrdem.status !== "concluido") {
       ordemUpdate.data_programacao = proximoDiaUtil(novaDataRegistro);
     }
-    await (supabase as any).from("ordens").update(ordemUpdate as any).eq("id", editRegOrdem.id);
+    console.log("[editReg] ordemUpdate:", ordemUpdate);
+    const updateResult = await (supabase as any).from("ordens").update(ordemUpdate as any).eq("id", editRegOrdem.id);
+    console.log("[editReg] resultado UPDATE ordens:", updateResult);
 
     setEditandoRegistro(false);
     setRegistrosDoDia((prev) => {
