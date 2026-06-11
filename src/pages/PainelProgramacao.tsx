@@ -1107,20 +1107,30 @@ export default function PainelProgramacao() {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
     });
-    // Aplica o item recém-editado (que ainda não aparece no select acima pois foi atualizado)
-    // O select já retorna o valor atualizado pois o update já foi feito
-    await (supabase as any).from("ordens").update({ quantidade_real: qtdReal } as any).eq("id", editRegOrdem.id);
+    const novaDataRegistro = editRegData || editRegRegistro.data;
+    const dataAnterior = editRegRegistro.data;
+    const dataAlterada = novaDataRegistro && novaDataRegistro !== dataAnterior;
+
+    const ordemUpdate: Record<string, any> = { quantidade_real: qtdReal };
+    if (dataAlterada && editRegOrdem.status !== "concluido") {
+      ordemUpdate.data_programacao = proximoDiaUtil(novaDataRegistro);
+    }
+    await (supabase as any).from("ordens").update(ordemUpdate as any).eq("id", editRegOrdem.id);
 
     setEditandoRegistro(false);
     setRegistrosDoDia((prev) => {
       const ordemRegs = (prev[editRegOrdem.id] ?? []).map((r: any) =>
         r.id === editRegRegistro.id
-          ? { ...r, data: editRegData || r.data, hora_inicio: editRegHoraInicio || null, hora_fim: editRegHoraFim || null, registro_producao: registroProducao }
+          ? { ...r, data: novaDataRegistro, hora_inicio: editRegHoraInicio || null, hora_fim: editRegHoraFim || null, registro_producao: registroProducao }
           : r
       );
       return { ...prev, [editRegOrdem.id]: ordemRegs };
     });
-    setOrdens((prev) => prev.map((o) => o.id === editRegOrdem.id ? { ...o, quantidade_real: qtdReal } : o));
+    setOrdens((prev) => prev.map((o) =>
+      o.id === editRegOrdem.id
+        ? { ...o, quantidade_real: qtdReal, ...(dataAlterada && o.status !== "concluido" ? { data_programacao: proximoDiaUtil(novaDataRegistro) } : {}) }
+        : o
+    ));
     toast({ title: "Registro atualizado" });
     setEditRegOrdem(null);
     setEditRegRegistro(null);
