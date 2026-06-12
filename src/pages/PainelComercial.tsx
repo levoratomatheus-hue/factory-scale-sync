@@ -128,6 +128,8 @@ interface OrdemComercial {
   quantidade_real: number | null;
   formula_id: string | null;
   programacao_confirmada: boolean | null;
+  tipo_op: string | null;
+  data_disponibilidade_fixa: string | null;
 }
 
 function deduplicar(rows: OrdemComercial[]): OrdemComercial[] {
@@ -142,7 +144,7 @@ function deduplicar(rows: OrdemComercial[]): OrdemComercial[] {
     .sort((a, b) => a.produto.localeCompare(b.produto, 'pt-BR'));
 }
 
-const SELECT_FIELDS = 'id, produto, lote, quantidade, quantidade_real, status, data_programacao, data_emissao, data_conclusao, formula_id, programacao_confirmada';
+const SELECT_FIELDS = 'id, produto, lote, quantidade, quantidade_real, status, data_programacao, data_emissao, data_conclusao, formula_id, programacao_confirmada, tipo_op, data_disponibilidade_fixa';
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
@@ -184,12 +186,13 @@ export default function PainelComercial() {
           const dataMinEmissao = subDias(weekStart, 14);
           const diasSet = new Set(diasSemana);
 
-          const [{ data: dataProg, error: errProg }, { data: dataEmissao, error: errEmissao }] = await Promise.all([
+          const [{ data: dataProg, error: errProg }, { data: dataEmissao, error: errEmissao }, { data: dataEstoque, error: errEstoque }] = await Promise.all([
             supabase
               .from('ordens')
               .select(SELECT_FIELDS)
               .in('status', STATUS_VISIVEIS)
               .eq('programacao_confirmada', true)
+              .neq('tipo_op', 'estoque')
               .gte('data_programacao', dataMinProg)
               .lte('data_programacao', weekEnd)
               .order('produto', { ascending: true })
@@ -199,14 +202,25 @@ export default function PainelComercial() {
               .select(SELECT_FIELDS)
               .in('status', STATUS_VISIVEIS)
               .neq('programacao_confirmada', true)
+              .neq('tipo_op', 'estoque')
               .gte('data_emissao', dataMinEmissao)
               .lte('data_emissao', weekEnd)
+              .order('produto', { ascending: true })
+              .limit(500),
+            supabase
+              .from('ordens')
+              .select(SELECT_FIELDS)
+              .in('status', STATUS_VISIVEIS)
+              .eq('tipo_op', 'estoque')
+              .gte('data_disponibilidade_fixa', weekStart)
+              .lte('data_disponibilidade_fixa', weekEnd)
               .order('produto', { ascending: true })
               .limit(500),
           ]);
 
           if (errProg) throw new Error(errProg.message);
           if (errEmissao) throw new Error(errEmissao.message);
+          if (errEstoque) throw new Error(errEstoque.message);
 
           const confirmadas = ((dataProg as OrdemComercial[]) ?? [])
             .filter(op => {
@@ -216,8 +230,10 @@ export default function PainelComercial() {
             });
           const naoConfirmadas = ((dataEmissao as OrdemComercial[]) ?? [])
             .filter(op => op.data_emissao && diasSet.has(somarDiasUteis(op.data_emissao, 7)));
+          const estoqueOps = ((dataEstoque as OrdemComercial[]) ?? [])
+            .filter(op => op.data_disponibilidade_fixa && diasSet.has(op.data_disponibilidade_fixa));
 
-          rows = [...confirmadas, ...naoConfirmadas];
+          rows = [...confirmadas, ...naoConfirmadas, ...estoqueOps];
         }
 
         if (!cancelled) setOrdens(rows);
@@ -241,11 +257,14 @@ export default function PainelComercial() {
     if (!ordens || modoTexto) return map;
     for (const op of ordens) {
       const confirmada = op.programacao_confirmada === true;
+      const isEstoque = op.tipo_op === 'estoque';
       const dia = op.status === 'concluido' && op.data_conclusao
         ? op.data_conclusao.substring(0, 10)
-        : confirmada
-          ? proximoDiaUtil(op.data_programacao)
-          : (op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null);
+        : isEstoque
+          ? (op.data_disponibilidade_fixa ?? null)
+          : confirmada
+            ? proximoDiaUtil(op.data_programacao)
+            : (op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null);
       if (!dia) continue;
       if (!map.has(dia)) map.set(dia, []);
       map.get(dia)!.push(op);
@@ -300,6 +319,10 @@ export default function PainelComercial() {
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400" />
           Estimado
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-purple-500" />
+          Estoque
+        </span>
       </div>
 
       {/* Erro */}
@@ -337,11 +360,14 @@ export default function PainelComercial() {
                 ? format(new Date(op.data_conclusao.substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy')
                 : null;
               const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
+              const isEstoque = op.tipo_op === 'estoque';
               const dispStr = concluida
                 ? op.data_conclusao!.substring(0, 10)
-                : confirmada
-                  ? proximoDiaUtil(op.data_programacao)
-                  : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
+                : isEstoque
+                  ? (op.data_disponibilidade_fixa ?? null)
+                  : confirmada
+                    ? proximoDiaUtil(op.data_programacao)
+                    : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
               const dispFmt = dispStr
                 ? format(new Date(dispStr + 'T12:00:00'), 'dd/MM/yyyy')
                 : '—';
@@ -372,7 +398,12 @@ export default function PainelComercial() {
                       <p className="text-xs text-green-600 font-medium">Concluído em {conclusaoFmt}</p>
                     )}
                   </div>
-                  {dispLabel && (
+                  {isEstoque && dispStr ? (
+                    <div className="text-right shrink-0 rounded-lg px-2 py-1 bg-purple-50 border border-purple-300">
+                      <p className="text-[10px] uppercase tracking-wide text-purple-700 font-semibold">Estoque</p>
+                      <p className="text-sm font-semibold text-purple-800">Disponível em {dispFmt}</p>
+                    </div>
+                  ) : dispLabel && (
                     <div className={`text-right shrink-0 rounded-lg px-2 py-1 ${concluida ? 'bg-green-100 border border-green-300' : ''}`}>
                       <p className={`text-[10px] uppercase tracking-wide ${concluida ? 'text-green-700 font-semibold' : 'text-muted-foreground'}`}>{dispLabel}</p>
                       <p className={`text-sm font-semibold ${concluida ? 'text-green-800' : ''}`}>{dispStr === hj && !concluida ? '' : dispFmt}</p>
@@ -441,27 +472,43 @@ export default function PainelComercial() {
                             : { cls: 'bg-red-100 text-red-700 border-red-200', label: `${du}du` }
                         : null;
 
+                      const isEstoque = op.tipo_op === 'estoque';
+                      const dispFixaFmt = op.data_disponibilidade_fixa
+                        ? format(new Date(op.data_disponibilidade_fixa + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR })
+                        : null;
+
                       return (
-                        <div key={op.id} className="flex items-start gap-2 border rounded-lg p-2 bg-background">
+                        <div key={op.id} className={`flex items-start gap-2 border rounded-lg p-2 bg-background ${isEstoque ? 'border-purple-300' : ''}`}>
                           <span
                             className={`mt-[3px] h-2 w-2 rounded-full shrink-0 ${
-                              confirmada ? 'bg-green-500' : 'bg-orange-400'
+                              isEstoque ? 'bg-purple-500' : confirmada ? 'bg-green-500' : 'bg-orange-400'
                             }`}
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium leading-snug break-words">{op.produto}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-sm font-medium leading-snug break-words">{op.produto}</p>
+                              {isEstoque && (
+                                <span className="inline-flex items-center rounded-full border border-purple-300 bg-purple-50 px-1.5 py-0 text-[10px] font-bold leading-4 text-purple-700">Estoque</span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground mt-0.5">Lote {op.lote} · <span className="font-medium text-foreground">{formatKg(op.quantidade)} kg</span></p>
                             {op.quantidade_real != null && (
                               <p className="text-xs text-green-700 font-medium mt-0.5">Produzido: {formatKg(op.quantidade_real)} kg</p>
                             )}
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <span className="text-xs text-muted-foreground">Emitido {emissaoFmt}</span>
-                              {duBadge && (
-                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${duBadge.cls}`}>
-                                  {duBadge.label}
-                                </span>
-                              )}
-                            </div>
+                            {isEstoque ? (
+                              <p className="text-xs text-purple-700 font-medium mt-1">
+                                {dispFixaFmt ? `Disponível em ${dispFixaFmt}` : 'Data de disponibilidade não definida'}
+                              </p>
+                            ) : (
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className="text-xs text-muted-foreground">Emitido {emissaoFmt}</span>
+                                {duBadge && (
+                                  <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-bold leading-4 ${duBadge.cls}`}>
+                                    {duBadge.label}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             {conclusaoFmt && (
                               <p className="text-xs text-green-600 font-medium mt-0.5">Concluído {conclusaoFmt}</p>
                             )}

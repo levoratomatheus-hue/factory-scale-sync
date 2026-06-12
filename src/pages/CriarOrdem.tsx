@@ -51,6 +51,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     { qty: '', mp: '' },
   ]);
   const [nomes, setNomes] = useState<Record<string, string>>({});
+  const [tipoOp, setTipoOp] = useState<'venda' | 'estoque'>('venda');
   const [requerMistura, setRequerMistura] = useState(true);
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
@@ -172,6 +173,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         formula_id: formulaId,
         tamanho_batelada: tamanhoBatelada,
         marca: values.marca || null,
+        tipo_op: tipoOp,
         obs: (() => {
           const filled = obsItems
             .filter((r) => r.mp.trim() || r.qty.trim())
@@ -232,6 +234,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
     setNomes({});
     setRequerMistura(true);
+    setTipoOp('venda');
     setOrientacoes('');
     setDataEmissao(new Date().toISOString().split("T")[0]);
   };
@@ -366,6 +369,27 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                   onClick={() => setRequerMistura((v) => !v)}
                   className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}>
                   <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${requerMistura ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Tipo de OP */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium shrink-0">Tipo de OP:</span>
+              <div className="flex rounded-md border overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTipoOp('venda')}
+                  className={`px-3 py-1 transition-colors ${tipoOp === 'venda' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                >
+                  Venda
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTipoOp('estoque')}
+                  className={`px-3 py-1 border-l transition-colors ${tipoOp === 'estoque' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                >
+                  Estoque
                 </button>
               </div>
             </div>
