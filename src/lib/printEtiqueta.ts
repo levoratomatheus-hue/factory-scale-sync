@@ -116,39 +116,43 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
   doc.setLineWidth(0.3);
   doc.line(PAD, sepY, W - PAD, sepY);
 
-  // ── Campos de dados ──────────────────────────────────────────────────────
-  const campos: { label: string; value: string }[] = [
-    { label: "LOTE", value: String(data.lote) },
-    { label: "QUANTIDADE", value: `${fmtKg0(data.quantidade)} kg` },
-    ...(nBateladas && data.tamanhoBatelada
-      ? [{ label: "BATELADAS", value: `${nBateladas}× ${fmtKg0(data.tamanhoBatelada)} kg` }]
-      : []),
-    { label: "PRODUÇÃO", value: dataProd },
-  ];
+  // ── Campos de dados: 2 colunas × 2 linhas ────────────────────────────────
+  // Esquerda: LOTE (cima) + QUANTIDADE (baixo)
+  // Direita:  BATELADAS (cima) + PRODUÇÃO (baixo)
+  const colMid = W / 2;
+  const leftX  = PAD + (colMid - PAD) / 2;
+  const rightX = colMid + (W - PAD - colMid) / 2;
 
-  const labelsY = sepY + 5;
-  const valuesY = labelsY + 6;
-  const colW = (W - PAD * 2) / campos.length;
+  const rowTopLabelY = sepY + 5;
+  const rowTopValueY = rowTopLabelY + 7;
+  const rowBotLabelY = rowTopValueY + 9;
+  const rowBotValueY = rowBotLabelY + 7;
 
-  campos.forEach(({ label, value }, i) => {
-    const cx = PAD + colW * i + colW / 2;
-
-    if (i > 0) {
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.2);
-      doc.line(PAD + colW * i, sepY + 2, PAD + colW * i, H - PAD);
-    }
-
-    doc.setFontSize(7);
+  const drawCell = (label: string, value: string, cx: number, labelY: number, valueY: number) => {
+    doc.setFontSize(10);
     doc.setFont("Anton", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text(label, cx, labelsY, { align: "center" });
+    doc.setTextColor(110, 110, 110);
+    doc.text(label, cx, labelY, { align: "center" });
 
-    doc.setFontSize(14);
+    doc.setFontSize(15);
     doc.setFont("Anton", "normal");
     doc.setTextColor(10, 10, 10);
-    doc.text(value, cx, valuesY, { align: "center" });
-  });
+    doc.text(value, cx, valueY, { align: "center" });
+  };
+
+  // Linha divisória vertical entre colunas
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.2);
+  doc.line(colMid, sepY + 2, colMid, H - PAD);
+
+  drawCell("LOTE",       String(data.lote),                leftX,  rowTopLabelY, rowTopValueY);
+  drawCell("QUANTIDADE", `${fmtKg0(data.quantidade)} kg`,  leftX,  rowBotLabelY, rowBotValueY);
+
+  const batValue = nBateladas && data.tamanhoBatelada
+    ? `${nBateladas}× ${fmtKg0(data.tamanhoBatelada)} kg`
+    : "---";
+  drawCell("BATELADAS", batValue, rightX, rowTopLabelY, rowTopValueY);
+  drawCell("PRODUÇÃO",  dataProd, rightX, rowBotLabelY, rowBotValueY);
 
   // ── Borda geral ──────────────────────────────────────────────────────────
   doc.setDrawColor(160, 160, 160);
