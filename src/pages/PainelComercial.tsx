@@ -4,89 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Search, PackageSearch, Loader2, AlertCircle } from 'lucide-react';
 import { formatKg } from '@/lib/utils';
-
-// ── Helpers de data ───────────────────────────────────────────────────────────
-
-function hoje(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function fmtYmd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function pascoa(ano: number): Date {
-  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
-  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4), k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const mes = Math.floor((h + l - 7 * m + 114) / 31);
-  const dia = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(ano, mes - 1, dia, 12, 0, 0);
-}
-
-function feriadosDoAno(ano: number): Set<string> {
-  const fixos = [[1,1],[4,21],[5,1],[9,7],[10,12],[11,2],[11,15],[12,25]]
-    .map(([m, d]) => fmtYmd(new Date(ano, m - 1, d, 12)));
-  const e = pascoa(ano);
-  const add = (n: number) => { const x = new Date(e); x.setDate(x.getDate() + n); return fmtYmd(x); };
-  return new Set([...fixos, add(-48), add(-47), add(-2), fmtYmd(e), add(60)]);
-}
-
-function proximoDiaUtil(dataStr: string | null | undefined): string | null {
-  if (!dataStr) return null;
-  const d = new Date(dataStr.slice(0, 10) + 'T12:00:00');
-  if (isNaN(d.getTime())) return null;
-  let cacheAno = -1, feriados = new Set<string>();
-  for (let i = 0; i < 30; i++) {
-    d.setDate(d.getDate() + 1);
-    const ano = d.getFullYear();
-    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
-    if (d.getDay() !== 0 && d.getDay() !== 6 && !feriados.has(fmtYmd(d))) break;
-  }
-  return fmtYmd(d);
-}
-
-function subDias(dataStr: string, n: number): string {
-  const d = new Date(dataStr + 'T12:00:00');
-  d.setDate(d.getDate() - n);
-  return fmtYmd(d);
-}
-
-function somarDiasUteis(dataStr: string, n: number): string {
-  const d = new Date(dataStr + 'T12:00:00');
-  let feriados = feriadosDoAno(d.getFullYear());
-  let cacheAno = d.getFullYear();
-  let count = 0;
-  while (count < n) {
-    d.setDate(d.getDate() + 1);
-    const ano = d.getFullYear();
-    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
-    if (d.getDay() !== 0 && d.getDay() !== 6 && !feriados.has(fmtYmd(d))) count++;
-  }
-  return fmtYmd(d);
-}
-
-function diasUteisEntre(dataInicio: string, dataFim: string): number {
-  if (dataInicio >= dataFim) return 0;
-  const d = new Date(dataInicio + 'T12:00:00');
-  d.setDate(d.getDate() + 1);
-  const fim = new Date(dataFim + 'T12:00:00');
-  let count = 0;
-  let cacheAno = -1;
-  let feriados = new Set<string>();
-  while (d <= fim) {
-    const ano = d.getFullYear();
-    if (ano !== cacheAno) { feriados = feriadosDoAno(ano); cacheAno = ano; }
-    if (d.getDay() !== 0 && d.getDay() !== 6 && !feriados.has(fmtYmd(d))) count++;
-    d.setDate(d.getDate() + 1);
-  }
-  return count;
-}
+import { feriadosDoAno, proximoDiaUtil, diasUteis, somarDiasUteis, subDias } from '@/lib/diasUteis';
 
 function diasUteisSemanAtual(): string[] {
   const today = new Date();
@@ -99,7 +17,7 @@ function diasUteisSemanAtual(): string[] {
   for (let i = 0; i < 5; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const s = fmtYmd(d);
+    const s = format(d, 'yyyy-MM-dd');
     if (!feriadosDoAno(d.getFullYear()).has(s)) dias.push(s);
   }
   return dias;
@@ -156,7 +74,7 @@ export default function PainelComercial() {
   const term = busca.trim();
   const modoTexto = term.length >= 3;
   const diasSemana = useMemo(() => diasUteisSemanAtual(), []);
-  const hj = hoje();
+  const hj = format(new Date(), 'yyyy-MM-dd');
 
   useEffect(() => {
     let cancelled = false;
@@ -346,7 +264,7 @@ export default function PainelComercial() {
               const conclusaoFmt = op.data_conclusao
                 ? format(new Date(op.data_conclusao.substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy')
                 : null;
-              const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
+              const du = op.data_emissao ? diasUteis(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
               const dispStr = concluida
                 ? op.data_conclusao!.substring(0, 10)
                 : (confirmada || isEstoque)
@@ -446,7 +364,7 @@ export default function PainelComercial() {
                       const conclusaoFmt = op.data_conclusao
                         ? format(new Date(op.data_conclusao.substring(0, 10) + 'T12:00:00'), 'dd/MM', { locale: ptBR })
                         : null;
-                      const du = op.data_emissao ? diasUteisEntre(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
+                      const du = op.data_emissao ? diasUteis(op.data_emissao, (op.data_conclusao ?? hj).substring(0, 10)) : null;
 
                       const duBadge = du !== null
                         ? du <= 5

@@ -74,3 +74,20 @@ export function diasUteis(de: string, ate: string): number {
   }
   return count;
 }
+
+export function somarDiasUteis(dataStr: string, n: number): string {
+  const d = new Date(dataStr + "T12:00:00");
+  let count = 0;
+  while (count < n) {
+    d.setDate(d.getDate() + 1);
+    const key = fmtKey(d);
+    if (d.getDay() !== 0 && d.getDay() !== 6 && !feriadosDoAno(d.getFullYear()).has(key)) count++;
+  }
+  return fmtKey(d);
+}
+
+export function subDias(dataStr: string, n: number): string {
+  const d = new Date(dataStr + "T12:00:00");
+  d.setDate(d.getDate() - n);
+  return fmtKey(d);
+}
