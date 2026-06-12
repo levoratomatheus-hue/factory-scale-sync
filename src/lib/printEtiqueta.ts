@@ -254,3 +254,44 @@ export function gerarZplLiberacao(params: EtiquetaLiberacaoData): string {
 
   return lines.join("\n");
 }
+
+// ── Etiqueta de Balança/Mistura — ZPL para Zebra ZD220 (106×65mm / 832×512 dots) ──
+
+export function gerarZplBalancaMistura(data: EtiquetaData): string {
+  const dataProd =
+    data.dataProd ??
+    new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  const nBateladas =
+    data.tamanhoBatelada && data.tamanhoBatelada > 0
+      ? Math.round(data.quantidade / data.tamanhoBatelada)
+      : null;
+
+  const marcaSafe = sanitizeZpl(
+    data.marca === "Zan Collor" ? "Zan Collor Masterbatches" : data.marca ? data.marca : "---"
+  );
+  const prodSafe    = sanitizeZpl(data.produto);
+  const formulaSafe = data.formulaId ? sanitizeZpl(String(data.formulaId)) : "---";
+  const loteSafe    = sanitizeZpl(String(data.lote));
+  const batStr      = nBateladas && data.tamanhoBatelada
+    ? `${nBateladas}x ${data.tamanhoBatelada} kg`
+    : "---";
+
+  const lines: string[] = [
+    "^XA",
+    "^PW832",
+    "^LL512",
+    "^FO0,0^GB832,120,120^FS",
+    `^FO20,20^A0N,55,55^FR^FD${marcaSafe}^FS`,
+    `^FO20,140^A0N,40,40^FDCod.: ${formulaSafe}^FS`,
+    `^FO20,190^A0N,40,40^FDProd: ${prodSafe}^FS`,
+    `^FO20,240^A0N,40,40^FDLote: ${loteSafe}   24 MESES^FS`,
+    `^FO20,300^A0N,35,35^FD${dataProd}^FS`,
+    `^FO400,225^A0N,35,35^FDKG^FS`,
+    `^FO395,130^GB2,375,2^FS`,
+    `^FO400,280^A0N,45,45^FD${batStr}^FS`,
+    "^XZ",
+  ];
+
+  return lines.join("\n");
+}

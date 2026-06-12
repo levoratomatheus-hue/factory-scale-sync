@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { toast } from "@/hooks/use-toast";
-import { imprimirEtiqueta } from "@/lib/printEtiqueta";
+import { gerarZplBalancaMistura } from "@/lib/printEtiqueta";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +48,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [loadingOrdem, setLoadingOrdem] = useState(false);
   const [checkedItens, setCheckedItens] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [zplAtivo, setZplAtivo] = useState<string | null>(null);
+  const [zplCopiado, setZplCopiado] = useState(false);
   const [carga, setCarga] = useState(1);
   const [bateladaAtual, setBateladaAtual] = useState(1);
   const lastBateladaPress = useRef<{ type: '+' | '-'; time: number } | null>(null);
@@ -144,8 +152,9 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             <Button
               size="sm"
               variant="outline"
-              onClick={() =>
-                imprimirEtiqueta({
+              onClick={() => {
+                setZplCopiado(false);
+                setZplAtivo(gerarZplBalancaMistura({
                   ordemId: emPesagem.id,
                   produto: emPesagem.produto,
                   marca: emPesagem.marca,
@@ -155,8 +164,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   tamanhoBatelada,
                   itens: displayItens,
                   obs: emPesagem.obs,
-                }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
-              }
+                }));
+              }}
             >
               <Printer className="h-3.5 w-3.5 mr-1" />
               Etiqueta
@@ -424,6 +433,42 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
           </div>
         </div>
       )}
+
+      {/* Dialog — ZPL Etiqueta Zebra */}
+      <Dialog open={!!zplAtivo} onOpenChange={(open) => { if (!open) { setZplAtivo(null); setZplCopiado(false); } }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-4 w-4" />
+              Etiqueta ZPL — Zebra ZD220
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-xs text-muted-foreground">
+              Copie o código abaixo e envie para a impressora via BrowserPrint, Zebra Setup Utilities ou outro método de impressão raw.
+            </p>
+            <textarea
+              readOnly
+              value={zplAtivo ?? ""}
+              rows={14}
+              className="w-full rounded-md border bg-muted/40 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!zplAtivo) return;
+                await navigator.clipboard.writeText(zplAtivo);
+                setZplCopiado(true);
+                setTimeout(() => setZplCopiado(false), 2500);
+              }}
+            >
+              {zplCopiado ? "Copiado ✓" : "Copiar ZPL"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {emPesagem && (
         <div className="fixed bottom-4 left-4 flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-md z-20">
