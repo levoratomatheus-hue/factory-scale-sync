@@ -8,13 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CheckCircle2, Loader2, FlaskConical, Layers, Play, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { gerarZplBalancaMistura } from "@/lib/printEtiqueta";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { imprimirEtiqueta } from "@/lib/printEtiqueta";
 
 interface FormulaRow {
   sequencia: number | null;
@@ -29,8 +23,6 @@ export default function PainelMistura() {
   const [customItens, setCustomItens] = useState<FormulaRow[]>([]);
   const [hasCustom, setHasCustom] = useState(false);
   const [loadingOrdemFormula, setLoadingOrdemFormula] = useState(false);
-  const [zplAtivo, setZplAtivo] = useState<string | null>(null);
-  const [zplCopiado, setZplCopiado] = useState(false);
 
   const sorted = useMemo(() => sortOrdens(ordens), [ordens]);
   const emMistura = useMemo(() => sorted.find((o) => o.status === "em_mistura") ?? null, [sorted]);
@@ -166,9 +158,8 @@ export default function PainelMistura() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                setZplCopiado(false);
-                setZplAtivo(gerarZplBalancaMistura({
+              onClick={() =>
+                imprimirEtiqueta({
                   ordemId: emMistura.id,
                   produto: emMistura.produto,
                   marca: emMistura.marca,
@@ -182,8 +173,8 @@ export default function PainelMistura() {
                     quantidade_kg: i.quantidade_kg,
                   })),
                   obs: emMistura.obs,
-                }));
-              }}
+                }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
+              }
             >
               <Printer className="h-3.5 w-3.5 mr-1" />
               Etiqueta
@@ -352,41 +343,6 @@ export default function PainelMistura() {
         </div>
       )}
 
-      {/* Dialog — ZPL Etiqueta Zebra */}
-      <Dialog open={!!zplAtivo} onOpenChange={(open) => { if (!open) { setZplAtivo(null); setZplCopiado(false); } }}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Printer className="h-4 w-4" />
-              Etiqueta ZPL — Zebra ZD220
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <p className="text-xs text-muted-foreground">
-              Copie o código abaixo e envie para a impressora via BrowserPrint, Zebra Setup Utilities ou outro método de impressão raw.
-            </p>
-            <textarea
-              readOnly
-              value={zplAtivo ?? ""}
-              rows={14}
-              className="w-full rounded-md border bg-muted/40 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                if (!zplAtivo) return;
-                await navigator.clipboard.writeText(zplAtivo);
-                setZplCopiado(true);
-                setTimeout(() => setZplCopiado(false), 2500);
-              }}
-            >
-              {zplCopiado ? "Copiado ✓" : "Copiar ZPL"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
