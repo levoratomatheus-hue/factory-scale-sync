@@ -54,7 +54,6 @@ interface Ordem {
   obs_linha: string | null;
   motivo_reprovacao: string | null;
   tipo_op: string | null;
-  data_disponibilidade_fixa: string | null;
 }
 
 interface NotaProgramacao {
@@ -302,11 +301,7 @@ const SortableCard = memo(function SortableCard({
   onToggleConfirmado: (ordem: Ordem) => void;
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
-  onSalvarDisponibilidade: (ordemId: string, data: string | null) => void;
 }) {
-  const [dispDate, setDispDate] = useState<string>(ordem.data_disponibilidade_fixa ?? '');
-  const [savingDisp, setSavingDisp] = useState(false);
-
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
 
@@ -410,28 +405,9 @@ const SortableCard = memo(function SortableCard({
           </span>
         )}
         {ordem.tipo_op === 'estoque' && (
-          <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
-            <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded px-1 py-0 leading-4 shrink-0">Estoque</span>
-            <input
-              type="date"
-              value={dispDate}
-              onChange={(e) => setDispDate(e.target.value)}
-              className="h-5 text-[10px] rounded border border-input bg-background px-1 w-28 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            <button
-              disabled={savingDisp}
-              onClick={async () => {
-                setSavingDisp(true);
-                await (supabase as any).from('ordens').update({ data_disponibilidade_fixa: dispDate || null }).eq('id', ordem.id);
-                onSalvarDisponibilidade(ordem.id, dispDate || null);
-                setSavingDisp(false);
-              }}
-              className="text-purple-600 hover:text-purple-800 disabled:opacity-50"
-              title="Salvar data de disponibilidade"
-            >
-              {savingDisp ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-            </button>
-          </div>
+          <span className="inline-flex items-center text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded px-1 py-0 leading-4">
+            Estoque
+          </span>
         )}
       </div>
 
@@ -565,7 +541,6 @@ const LinhaColumn = memo(function LinhaColumn({
   onDeletarRegistro: (ordem: Ordem, registro: any) => void;
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
-  onSalvarDisponibilidade: (ordemId: string, data: string | null) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -688,7 +663,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = useCallback(async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
-    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, tipo_op, data_disponibilidade_fixa";
+    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, tipo_op";
 
     // Round-trip 1: OPs programadas + IDs de ordens com registros nesta data (paralelo)
     const [{ data: programadas }, { data: regsHoje }] = await Promise.all([
@@ -834,10 +809,6 @@ export default function PainelProgramacao() {
   const handleEditarEmissaoClick = useCallback((o: Ordem) => {
     setOrdemEditandoEmissao(o);
     setNovaDataEmissao(o.data_emissao ?? "");
-  }, []);
-
-  const handleSalvarDisponibilidade = useCallback((ordemId: string, data: string | null) => {
-    setOrdens((prev) => prev.map((o) => o.id === ordemId ? { ...o, data_disponibilidade_fixa: data } : o));
   }, []);
 
   const handleToggleConfirmado = useCallback(async (ordem: Ordem) => {
@@ -1430,7 +1401,6 @@ export default function PainelProgramacao() {
                 onDeletarRegistro={handleDeletarRegistro}
                 onEditarEmissao={handleEditarEmissaoClick}
                 onAddParada={setOrdemParaParada}
-                onSalvarDisponibilidade={handleSalvarDisponibilidade}
               />
             ))}
           </div>
