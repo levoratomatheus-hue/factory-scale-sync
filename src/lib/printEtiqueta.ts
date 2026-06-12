@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { ANTON_FONT_BASE64 } from "./antonFont";
 
 export interface EtiquetaData {
   ordemId: string;
@@ -24,6 +25,10 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [106, 65] });
 
+  doc.addFileToVFS("Anton-Regular.ttf", ANTON_FONT_BASE64);
+  doc.addFont("Anton-Regular.ttf", "Anton", "normal");
+
+
   const dataProd =
     data.dataProd ??
     new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -45,12 +50,12 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
     doc.rect(0, 0, W, headerH, "F");
 
     doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     doc.setTextColor(190, 24, 93);
     doc.text("PIGMA", W / 2, 12, { align: "center" });
 
     doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     doc.setTextColor(157, 64, 120);
     doc.text("Pigmentos de Alta Performance", W / 2, 17, { align: "center" });
 
@@ -63,7 +68,7 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
     doc.rect(0, 0, W, headerH, "F");
 
     doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     const zanPart = "ZAN ";
     const colPart = "COIIOR";
     const totalTW = doc.getTextWidth(zanPart + colPart);
@@ -74,7 +79,7 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
     doc.text(colPart, startX + doc.getTextWidth(zanPart), 12);
 
     doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     doc.setTextColor(99, 80, 180);
     doc.text("masterbatches", W / 2, 17, { align: "center" });
 
@@ -87,7 +92,7 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
     doc.rect(0, 0, W, headerH, "F");
 
     doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     doc.setTextColor(30, 30, 30);
     doc.text(data.marca ?? "", W / 2, 13, { align: "center" });
 
@@ -98,7 +103,7 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
 
   // ── Produto ──────────────────────────────────────────────────────────────
   doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Anton", "normal");
   doc.setTextColor(15, 15, 15);
   const prodLines = doc.splitTextToSize(data.produto, W - PAD * 2) as string[];
   const prodY = headerH + 7;
@@ -135,12 +140,12 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
     }
 
     doc.setFontSize(7);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     doc.setTextColor(100, 100, 100);
     doc.text(label, cx, labelsY, { align: "center" });
 
     doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Anton", "normal");
     doc.setTextColor(10, 10, 10);
     doc.text(value, cx, valuesY, { align: "center" });
   });
