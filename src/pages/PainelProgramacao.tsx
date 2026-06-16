@@ -653,6 +653,11 @@ export default function PainelProgramacao() {
   const [paradaHoraFim, setParadaHoraFim] = useState("");
   const [salvandoParada, setSalvandoParada] = useState(false);
 
+  // Copiar programação para outro dia
+  const [modalCopiarAberto, setModalCopiarAberto] = useState(false);
+  const [dataCopiarDestino, setDataCopiarDestino] = useState("");
+  const [copiando, setCopiando] = useState(false);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
@@ -1200,6 +1205,50 @@ export default function PainelProgramacao() {
     setParadaHoraFim("");
   };
 
+  const handleCopiarProgramacao = async () => {
+    if (!dataCopiarDestino) return;
+    const total = ordens.length;
+    if (total === 0) {
+      toast({ title: "Nenhuma OP nesta data para copiar." });
+      return;
+    }
+    const ok = window.confirm(`Isso vai copiar ${total} OP(s) da data ${data.split("-").reverse().join("/")} para ${dataCopiarDestino.split("-").reverse().join("/")}. As OPs serão duplicadas na nova data mantendo linha e posição. Confirmar?`);
+    if (!ok) return;
+    setCopiando(true);
+    try {
+      // Busca todas as OPs da data atual com todos os campos necessários para inserção
+      const { data: opsParaCopiar, error: fetchError } = await supabase
+        .from("ordens")
+        .select("produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_emissao, tipo_op")
+        .eq("data_programacao", data)
+        .not("linha", "is", null);
+      if (fetchError) throw fetchError;
+      if (!opsParaCopiar || opsParaCopiar.length === 0) {
+        toast({ title: "Nenhuma OP encontrada para copiar." });
+        return;
+      }
+      const novasOps = opsParaCopiar.map((op: any) => ({
+        ...op,
+        data_programacao: dataCopiarDestino,
+        status: "aguardando_linha",
+        quantidade_real: null,
+        programacao_confirmada: false,
+        obs_linha: null,
+        motivo_reprovacao: null,
+      }));
+      const { error: insertError } = await supabase.from("ordens").insert(novasOps);
+      if (insertError) throw insertError;
+      toast({ title: `${novasOps.length} OP(s) copiadas para ${dataCopiarDestino.split("-").reverse().join("/")} com sucesso!` });
+      setModalCopiarAberto(false);
+      setDataCopiarDestino("");
+      fetchOrdens(data);
+    } catch (err: any) {
+      toast({ title: "Erro ao copiar programação", description: err.message, variant: "destructive" });
+    } finally {
+      setCopiando(false);
+    }
+  };
+
   const ordensParaLinha = useCallback((l: number) => sortOrdens(ordens.filter((o) => o.linha === l)), [ordens]);
 
   const prevOrdensPerLinhaRef = useRef<Record<number, Ordem[]>>({});
@@ -1283,7 +1332,46 @@ export default function PainelProgramacao() {
         <span className="text-sm text-muted-foreground capitalize">
           {format(new Date(data + "T12:00:00"), "EEEE", { locale: ptBR })}
         </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 ml-2"
+          onClick={() => { setDataCopiarDestino(""); setModalCopiarAberto(true); }}
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          Copiar para Outro Dia
+        </Button>
       </div>
+
+      {/* Modal Copiar Programação */}
+      <Dialog open={modalCopiarAberto} onOpenChange={(open) => { if (!open) { setModalCopiarAberto(false); setDataCopiarDestino(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Copiar Programação para Outro Dia</DialogTitle>
+            <DialogDescription>
+              Selecione a data de destino. As {ordens.length} OP(s) da data atual serão copiadas mantendo linha e posição.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data de destino</label>
+              <input
+                type="date"
+                value={dataCopiarDestino}
+                onChange={(e) => setDataCopiarDestino(e.target.value)}
+                min={data}
+                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalCopiarAberto(false)} disabled={copiando}>Cancelar</Button>
+            <Button onClick={handleCopiarProgramacao} disabled={!dataCopiarDestino || copiando}>
+              {copiando ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Copiando...</> : "Copiar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Painel de Notas */}
       <div className="flex items-start gap-2">
