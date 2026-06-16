@@ -1119,6 +1119,7 @@ export default function PainelProgramacao() {
     setRegistrosDoDia((prev) => ({ ...prev, [ordem.id]: restantes }));
     setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, quantidade_real: qtdReal } : o));
     toast({ title: "Registro deletado" });
+    fetchOrdens(dataRef.current, false);
   }, [registrosDoDia]);
 
   const handleSalvarEditarRegistro = async () => {
