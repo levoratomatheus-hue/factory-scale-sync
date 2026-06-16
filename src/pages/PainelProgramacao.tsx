@@ -656,6 +656,7 @@ export default function PainelProgramacao() {
   // Copiar programação para outro dia
   const [modalCopiarAberto, setModalCopiarAberto] = useState(false);
   const [dataCopiarDestino, setDataCopiarDestino] = useState("");
+  const [copiarLinha, setCopiarLinha] = useState<string>("todas");
   const [copiando, setCopiando] = useState(false);
 
   const sensors = useSensors(
@@ -1207,21 +1208,24 @@ export default function PainelProgramacao() {
 
   const handleCopiarProgramacao = async () => {
     if (!dataCopiarDestino) return;
-    const total = ordens.length;
+    const opsFiltradas = copiarLinha === "todas" ? ordens : ordens.filter((o) => o.linha === Number(copiarLinha));
+    const total = opsFiltradas.length;
     if (total === 0) {
-      toast({ title: "Nenhuma OP nesta data para copiar." });
+      toast({ title: "Nenhuma OP encontrada com o filtro selecionado." });
       return;
     }
-    const ok = window.confirm(`Isso vai copiar ${total} OP(s) da data ${data.split("-").reverse().join("/")} para ${dataCopiarDestino.split("-").reverse().join("/")}. As OPs serão duplicadas na nova data mantendo linha e posição. Confirmar?`);
+    const descLinha = copiarLinha === "todas" ? "todas as linhas" : `Linha ${copiarLinha}`;
+    const ok = window.confirm(`Isso vai copiar ${total} OP(s) de ${descLinha} da data ${data.split("-").reverse().join("/")} para ${dataCopiarDestino.split("-").reverse().join("/")}. As OPs serão duplicadas na nova data mantendo linha e posição. Confirmar?`);
     if (!ok) return;
     setCopiando(true);
     try {
-      // Busca todas as OPs da data atual com todos os campos necessários para inserção
-      const { data: opsParaCopiar, error: fetchError } = await supabase
+      let query = supabase
         .from("ordens")
-        .select("produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_emissao, tipo_op")
+        .select("produto, lote, quantidade, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_emissao, tipo_op")
         .eq("data_programacao", data)
         .not("linha", "is", null);
+      if (copiarLinha !== "todas") query = query.eq("linha", Number(copiarLinha));
+      const { data: opsParaCopiar, error: fetchError } = await query;
       if (fetchError) throw fetchError;
       if (!opsParaCopiar || opsParaCopiar.length === 0) {
         toast({ title: "Nenhuma OP encontrada para copiar." });
@@ -1241,6 +1245,7 @@ export default function PainelProgramacao() {
       toast({ title: `${novasOps.length} OP(s) copiadas para ${dataCopiarDestino.split("-").reverse().join("/")} com sucesso!` });
       setModalCopiarAberto(false);
       setDataCopiarDestino("");
+      setCopiarLinha("todas");
       fetchOrdens(data);
     } catch (err: any) {
       toast({ title: "Erro ao copiar programação", description: err.message, variant: "destructive" });
@@ -1344,15 +1349,29 @@ export default function PainelProgramacao() {
       </div>
 
       {/* Modal Copiar Programação */}
-      <Dialog open={modalCopiarAberto} onOpenChange={(open) => { if (!open) { setModalCopiarAberto(false); setDataCopiarDestino(""); } }}>
+      <Dialog open={modalCopiarAberto} onOpenChange={(open) => { if (!open) { setModalCopiarAberto(false); setDataCopiarDestino(""); setCopiarLinha("todas"); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Copiar Programação para Outro Dia</DialogTitle>
             <DialogDescription>
-              Selecione a data de destino. As {ordens.length} OP(s) da data atual serão copiadas mantendo linha e posição.
+              Selecione a linha e a data de destino. As OPs serão copiadas mantendo linha e posição originais.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Linha</label>
+              <Select value={copiarLinha} onValueChange={setCopiarLinha}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione a linha" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as linhas</SelectItem>
+                  {[1, 2, 3, 4, 5].map((l) => (
+                    <SelectItem key={l} value={String(l)}>Linha {l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Data de destino</label>
               <input
