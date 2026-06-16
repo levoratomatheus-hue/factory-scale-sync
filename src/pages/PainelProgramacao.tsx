@@ -1215,40 +1215,23 @@ export default function PainelProgramacao() {
       return;
     }
     const descLinha = copiarLinha === "todas" ? "todas as linhas" : `Linha ${copiarLinha}`;
-    const ok = window.confirm(`Isso vai copiar ${total} OP(s) de ${descLinha} da data ${data.split("-").reverse().join("/")} para ${dataCopiarDestino.split("-").reverse().join("/")}. As OPs serão duplicadas na nova data mantendo linha e posição. Confirmar?`);
+    const ok = window.confirm(`Isso vai mover ${total} OP(s) de ${descLinha} da data ${data.split("-").reverse().join("/")} para ${dataCopiarDestino.split("-").reverse().join("/")}. As OPs terão a data alterada, mantendo linha e posição. Confirmar?`);
     if (!ok) return;
     setCopiando(true);
     try {
-      let query = supabase
+      const ids = opsFiltradas.map((o) => o.id);
+      const { error } = await supabase
         .from("ordens")
-        .select("produto, lote, quantidade, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_emissao, tipo_op")
-        .eq("data_programacao", data)
-        .not("linha", "is", null);
-      if (copiarLinha !== "todas") query = query.eq("linha", Number(copiarLinha));
-      const { data: opsParaCopiar, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-      if (!opsParaCopiar || opsParaCopiar.length === 0) {
-        toast({ title: "Nenhuma OP encontrada para copiar." });
-        return;
-      }
-      const novasOps = opsParaCopiar.map((op: any) => ({
-        ...op,
-        data_programacao: dataCopiarDestino,
-        status: "aguardando_linha",
-        quantidade_real: null,
-        programacao_confirmada: false,
-        obs_linha: null,
-        motivo_reprovacao: null,
-      }));
-      const { error: insertError } = await supabase.from("ordens").insert(novasOps);
-      if (insertError) throw insertError;
-      toast({ title: `${novasOps.length} OP(s) copiadas para ${dataCopiarDestino.split("-").reverse().join("/")} com sucesso!` });
+        .update({ data_programacao: dataCopiarDestino })
+        .in("id", ids);
+      if (error) throw error;
+      toast({ title: `${total} OP(s) movidas para ${dataCopiarDestino.split("-").reverse().join("/")} com sucesso!` });
       setModalCopiarAberto(false);
       setDataCopiarDestino("");
       setCopiarLinha("todas");
       fetchOrdens(data);
     } catch (err: any) {
-      toast({ title: "Erro ao copiar programação", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao mover programação", description: err.message, variant: "destructive" });
     } finally {
       setCopiando(false);
     }
@@ -1386,7 +1369,7 @@ export default function PainelProgramacao() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalCopiarAberto(false)} disabled={copiando}>Cancelar</Button>
             <Button onClick={handleCopiarProgramacao} disabled={!dataCopiarDestino || copiando}>
-              {copiando ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Copiando...</> : "Copiar"}
+              {copiando ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Movendo...</> : "Mover"}
             </Button>
           </DialogFooter>
         </DialogContent>
