@@ -89,7 +89,7 @@ export default function PainelLiberacao() {
   const fetchOrdens = async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao")
       .eq("status", "aguardando_liberacao")
       .order("posicao", { ascending: true, nullsFirst: false });
 
@@ -137,7 +137,10 @@ export default function PainelLiberacao() {
       for (const o of data) {
         if (!(o.id in next)) {
           const regs = regMap[o.id] ?? [];
-          const fromRegs = calcQtdFromRegistros(regs);
+          const regsParaCalculo = o.data_reprovacao
+            ? regs.filter((r: any) => r.data > o.data_reprovacao)
+            : regs;
+          const fromRegs = calcQtdFromRegistros(regsParaCalculo);
           if (fromRegs !== null) {
             next[o.id] = fromRegs.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
           } else {
@@ -228,7 +231,10 @@ export default function PainelLiberacao() {
     const regsAtualizados = allRegs ?? [];
     setRegistrosPorOrdem((prev) => ({ ...prev, [novoRegOrdem.id]: regsAtualizados }));
 
-    const total = calcQtdFromRegistros(regsAtualizados);
+    const regsParaCalculo = novoRegOrdem.data_reprovacao
+      ? regsAtualizados.filter((r: any) => r.data > novoRegOrdem.data_reprovacao)
+      : regsAtualizados;
+    const total = calcQtdFromRegistros(regsParaCalculo);
     if (total !== null) {
       setQtdReal((prev) => ({
         ...prev,
@@ -379,12 +385,15 @@ export default function PainelLiberacao() {
         }),
       }));
 
-      // Recalculate qtdReal from updated registros
-      const allItems = editDraft.registros.flatMap((reg) =>
-        reg.items
-          .filter((i) => i.qty.trim() !== "" || i.peso.trim() !== "")
-          .map((i) => ({ qty: parseFloat(i.qty) || 0, peso: parseFloat(i.peso.replace(",", ".")) || 0 }))
-      );
+      // Recalculate qtdReal from updated registros, ignoring pre-reprovação records
+      const dataReprovacao = editOrdem.data_reprovacao ?? null;
+      const allItems = editDraft.registros
+        .filter((reg) => !dataReprovacao || reg.data > dataReprovacao)
+        .flatMap((reg) =>
+          reg.items
+            .filter((i) => i.qty.trim() !== "" || i.peso.trim() !== "")
+            .map((i) => ({ qty: parseFloat(i.qty) || 0, peso: parseFloat(i.peso.replace(",", ".")) || 0 }))
+        );
       const newTotal = allItems.reduce((acc, i) => acc + i.qty * i.peso, 0);
       if (newTotal > 0) {
         setQtdReal((prev) => ({
@@ -511,6 +520,7 @@ export default function PainelLiberacao() {
         hora_fim: null,
         obs_linha: null,
         data_programacao: hoje,
+        data_reprovacao: hoje,
       } as any)
       .eq("id", ordem.id);
     if (error) {

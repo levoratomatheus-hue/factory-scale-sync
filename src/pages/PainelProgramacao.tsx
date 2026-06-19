@@ -53,6 +53,7 @@ interface Ordem {
   quantidade_real: number | null;
   obs_linha: string | null;
   motivo_reprovacao: string | null;
+  data_reprovacao: string | null;
   tipo_op: string | null;
 }
 
@@ -669,10 +670,10 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = useCallback(async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
-    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, tipo_op";
+    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, data_reprovacao, tipo_op";
 
-    // Round-trip 1: OPs programadas + IDs de ordens com registros nesta data (paralelo)
-    const [{ data: programadas }, { data: regsHoje }] = await Promise.all([
+    // Round-trip 1: OPs programadas + IDs de ordens com registros nesta data + OPs reprovadas nesta data (paralelo)
+    const [{ data: programadas }, { data: regsHoje }, { data: reprovadas }] = await Promise.all([
       supabase
         .from("ordens")
         .select(fields)
@@ -683,18 +684,29 @@ export default function PainelProgramacao() {
         .from("registros_diarios")
         .select("ordem_id")
         .eq("data", dataSel),
+      (supabase as any)
+        .from("ordens")
+        .select(fields)
+        .eq("data_reprovacao", dataSel)
+        .not("motivo_reprovacao", "is", null)
+        .not("linha", "is", null),
     ]);
 
     const programadasIds = new Set((programadas ?? []).map((o: any) => o.id));
-    const extraIds = [...new Set((regsHoje ?? []).map((r: any) => r.ordem_id))]
-      .filter((id: string) => !programadasIds.has(id));
 
-    // Round-trip 2: extra OPs + registros de TODAS as ordens (programadas + extras) em paralelo
-    // Elimina o 3º round-trip anterior buscando tudo de uma vez
-    const allIds = [...programadasIds, ...extraIds];
+    // OPs reprovadas neste dia que não estão já nas programadas (ghost cards vermelhos)
+    const reprovadasExtras = (reprovadas ?? []).filter((o: any) => !programadasIds.has(o.id)) as Ordem[];
+    const reprovadasExtrasIds = new Set(reprovadasExtras.map((o) => o.id));
+
+    // IDs de ordens com registros neste dia, excluindo já conhecidos
+    const extraIdsFromRegs = [...new Set((regsHoje ?? []).map((r: any) => r.ordem_id))]
+      .filter((id: string) => !programadasIds.has(id) && !reprovadasExtrasIds.has(id));
+
+    // Round-trip 2: extra OPs (com regs mas não programadas) + registros de TODAS as ordens em paralelo
+    const allIds = [...programadasIds, ...reprovadasExtrasIds, ...extraIdsFromRegs];
     const [extraResult, allRegsResult] = await Promise.all([
-      extraIds.length > 0
-        ? supabase.from("ordens").select(fields).in("id", extraIds).not("linha", "is", null)
+      extraIdsFromRegs.length > 0
+        ? supabase.from("ordens").select(fields).in("id", extraIdsFromRegs).not("linha", "is", null)
         : Promise.resolve({ data: [] as any[] }),
       allIds.length > 0
         ? (supabase as any)
@@ -705,7 +717,7 @@ export default function PainelProgramacao() {
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
-    const extraOrdens = (extraResult.data ?? []) as Ordem[];
+    const extraOrdens = [...reprovadasExtras, ...(extraResult.data ?? [])] as Ordem[];
     const all = [...(programadas ?? []) as Ordem[], ...extraOrdens];
     const deduped = [...new Map(all.map((o) => [o.id, o])).values()];
 
