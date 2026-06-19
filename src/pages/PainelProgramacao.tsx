@@ -271,6 +271,7 @@ const EMPTY_REGS: any[] = [];
 const SortableCard = memo(function SortableCard({
   ordem,
   registros,
+  dataSelecionada,
   onReprogramarClick,
   onDblClick,
   onEditar,
@@ -288,6 +289,7 @@ const SortableCard = memo(function SortableCard({
 }: {
   ordem: Ordem;
   registros?: any[];
+  dataSelecionada: string;
   onReprogramarClick: (ordem: Ordem) => void;
   onDblClick: (ordem: Ordem) => void;
   onEditar: (ordem: Ordem) => void;
@@ -311,6 +313,7 @@ const SortableCard = memo(function SortableCard({
     [ordem.data_emissao, ordem.data_programacao]
   );
   const atrasado = du > 7;
+  const isGhostReprovado = !!ordem.motivo_reprovacao && ordem.data_programacao !== dataSelecionada;
 
   return (
     <div
@@ -320,7 +323,7 @@ const SortableCard = memo(function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ordem.motivo_reprovacao ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : isGhostReprovado ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         onVerDetalhes(ordem);
@@ -582,7 +585,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} />
             ))
           )}
         </div>
