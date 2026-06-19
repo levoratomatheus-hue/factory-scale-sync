@@ -107,10 +107,10 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     });
   }, [ordem?.id]);
 
-  const reprovaCount = useMemo(
-    () => hist.filter((h) => h.status_anterior === "aguardando_liberacao" && h.status_novo === "em_linha").length,
-    [hist]
-  );
+  const reprovaCount = useMemo(() => {
+    const fromHist = hist.filter((h) => h.status_anterior === "aguardando_liberacao" && h.status_novo === "em_linha").length;
+    return Math.max(fromHist, ordem?.motivo_reprovacao ? 1 : 0);
+  }, [hist, ordem?.motivo_reprovacao]);
 
   const totalProduzido = useMemo(
     () => registros.reduce((sum: number, r: any) => {
@@ -271,6 +271,11 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                 </h3>
                 {ordem.motivo_reprovacao && (
                   <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 whitespace-pre-wrap">
+                    {ordem.data_reprovacao && (
+                      <p className="text-xs text-red-600 mb-1 font-medium">
+                        {format(new Date(ordem.data_reprovacao + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                      </p>
+                    )}
                     {ordem.motivo_reprovacao}
                   </div>
                 )}
