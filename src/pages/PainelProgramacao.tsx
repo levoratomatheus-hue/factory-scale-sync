@@ -313,7 +313,6 @@ const SortableCard = memo(function SortableCard({
     [ordem.data_emissao, ordem.data_programacao]
   );
   const atrasado = du > 7;
-  const isGhostReprovado = !!ordem.motivo_reprovacao && ordem.data_programacao !== dataSelecionada;
 
   return (
     <div
@@ -323,7 +322,7 @@ const SortableCard = memo(function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : isGhostReprovado ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ordem.motivo_reprovacao ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         onVerDetalhes(ordem);
@@ -860,7 +859,7 @@ export default function PainelProgramacao() {
     const novaPosicao = await getNextPosicao(ordem.linha);
     const { error } = await supabase
       .from("ordens")
-      .update({ data_programacao: novaData, posicao: novaPosicao, motivo_reprovacao: null } as any)
+      .update({ data_programacao: novaData, posicao: novaPosicao } as any)
       .eq("id", id);
 
     if (error) {
