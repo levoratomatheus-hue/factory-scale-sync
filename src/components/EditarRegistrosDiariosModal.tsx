@@ -80,8 +80,11 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
     const regsAtualizados = todosRegistros ?? [];
     setRegistros(regsAtualizados);
 
+    const regsParaCalculo = ordem.data_reprovacao
+      ? regsAtualizados.filter((r: any) => r.data > ordem.data_reprovacao)
+      : regsAtualizados;
     let qtdReal = 0;
-    regsAtualizados.forEach((r: any) => {
+    regsParaCalculo.forEach((r: any) => {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
     });
@@ -175,14 +178,17 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
       return;
     }
 
-    // Recalcula quantidade_real somando todos os registros_diarios da ordem
+    // Recalcula quantidade_real somando registros após última reprovação
     const { data: todosRegistros } = await (supabase as any)
       .from("registros_diarios")
-      .select("registro_producao")
+      .select("data, registro_producao")
       .eq("ordem_id", ordem.id);
 
+    const regsParaCalculo = ordem.data_reprovacao
+      ? (todosRegistros ?? []).filter((r: any) => r.data > ordem.data_reprovacao)
+      : (todosRegistros ?? []);
     let qtdReal = 0;
-    (todosRegistros ?? []).forEach((r: any) => {
+    regsParaCalculo.forEach((r: any) => {
       const items: any[] = Array.isArray(r.registro_producao)
         ? r.registro_producao
         : [];

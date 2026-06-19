@@ -675,7 +675,10 @@ export default function PainelLiberacao() {
                       })}
                     </div>
                     {(() => {
-                      const total = calcQtdFromRegistros(regs);
+                      const regsParaTotal = ordem.data_reprovacao
+                        ? regs.filter((r: any) => r.data > ordem.data_reprovacao)
+                        : regs;
+                      const total = calcQtdFromRegistros(regsParaTotal);
                       if (total === null) return null;
                       return (
                         <div className="px-4 py-2.5 bg-blue-100/80 border-t border-blue-200 flex items-center justify-between">

@@ -112,13 +112,15 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     return Math.max(fromHist, ordem?.motivo_reprovacao ? 1 : 0);
   }, [hist, ordem?.motivo_reprovacao]);
 
-  const totalProduzido = useMemo(
-    () => registros.reduce((sum: number, r: any) => {
+  const totalProduzido = useMemo(() => {
+    const registrosFiltrados = ordem?.data_reprovacao
+      ? registros.filter((r: any) => r.data > ordem.data_reprovacao)
+      : registros;
+    return registrosFiltrados.reduce((sum: number, r: any) => {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       return sum + items.reduce((s: number, i: any) => s + (i.qty || 0) * (i.peso || 0), 0);
-    }, 0),
-    [registros]
-  );
+    }, 0);
+  }, [registros, ordem?.data_reprovacao]);
 
   if (!ordem) return null;
 
