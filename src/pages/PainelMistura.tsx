@@ -35,6 +35,7 @@ export default function PainelMistura() {
 
   const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
   const isLoadingFormula = loadingOrdemFormula || (!hasCustom && loadingFormula);
+  const obsItemsMistura = useMemo(() => parseObsItems(emMistura?.obs ?? null), [emMistura?.obs]);
   const formulaNaoEncontrada =
     !isLoadingFormula &&
     !hasCustom &&
@@ -212,23 +213,20 @@ export default function PainelMistura() {
                 </div>
               </div>
 
-              {emMistura.obs && (() => {
-                const items = parseObsItems(emMistura.obs);
-                return (
-                  <div className="flex-1 rounded-md border-2 border-blue-800 bg-blue-700 px-3 py-2 space-y-1 shadow-md">
-                    <p className="text-xs font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
-                    {items ? (
-                      <ul className="space-y-0.5">
-                        {items.map((item, i) => (
-                          <li key={i} className="text-sm font-bold text-white font-mono">{formatObsLine(item)}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm font-bold text-white whitespace-pre-wrap">{emMistura.obs}</p>
-                    )}
-                  </div>
-                );
-              })()}
+              {emMistura.obs && (
+                <div className="flex-1 rounded-md border-2 border-blue-800 bg-blue-700 px-3 py-2 space-y-1 shadow-md">
+                  <p className="text-xs font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
+                  {obsItemsMistura ? (
+                    <ul className="space-y-0.5">
+                      {obsItemsMistura.map((item, i) => (
+                        <li key={i} className="text-sm font-bold text-white font-mono">{formatObsLine(item)}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm font-bold text-white whitespace-pre-wrap">{emMistura.obs}</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {emMistura.orientacoes && (

@@ -47,7 +47,7 @@ export function useOrdens(date?: string) {
   }, [date]);
 
   // Called when weighing is done — next status depends on requer_mistura flag
-  const concluirOrdem = async (ordemId: string): Promise<string | null> => {
+  const concluirOrdem = useCallback(async (ordemId: string): Promise<string | null> => {
     const ordem = ordens.find((o) => o.id === ordemId);
     if (!ordem) return `Ordem ${ordemId} não encontrada no estado local`;
 
@@ -69,7 +69,7 @@ export function useOrdens(date?: string) {
     });
 
     return null;
-  };
+  }, [ordens]);
 
   const initBalanca = useCallback(async (balanca: number): Promise<string | null> => {
     const { data } = await supabase
@@ -257,7 +257,7 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`reg-diarios-${ordemId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios", filter: `ordem_id=eq.${ordemId}` }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => fetchRegistrosRef.current(), 800);
       })

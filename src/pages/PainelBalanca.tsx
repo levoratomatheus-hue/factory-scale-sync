@@ -104,6 +104,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
   const isLoadingFormula = loadingOrdem || (!hasCustom && loadingFormula);
   const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
+  const obsItemsPesagem = useMemo(() => parseObsItems(emPesagem?.obs ?? null), [emPesagem?.obs]);
 
   const totalHoje = useMemo(() => ordens.filter((o) => o.balanca === balanca).length, [ordens, balanca]);
 
@@ -360,23 +361,20 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             </AlertDialogContent>
           </AlertDialog>
 
-          {emPesagem.obs && (() => {
-            const items = parseObsItems(emPesagem.obs);
-            return (
-              <div className="rounded-lg border-2 border-blue-800 bg-blue-700 px-4 py-3 space-y-2 shadow-md">
-                <p className="text-sm font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
-                {items ? (
-                  <ul className="space-y-1">
-                    {items.map((item, i) => (
-                      <li key={i} className="text-base font-bold text-white font-mono">{formatObsLine(item)}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-base font-bold text-white whitespace-pre-wrap">{emPesagem.obs}</p>
-                )}
-              </div>
-            );
-          })()}
+          {emPesagem.obs && (
+            <div className="rounded-lg border-2 border-blue-800 bg-blue-700 px-4 py-3 space-y-2 shadow-md">
+              <p className="text-sm font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
+              {obsItemsPesagem ? (
+                <ul className="space-y-1">
+                  {obsItemsPesagem.map((item, i) => (
+                    <li key={i} className="text-base font-bold text-white font-mono">{formatObsLine(item)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-base font-bold text-white whitespace-pre-wrap">{emPesagem.obs}</p>
+              )}
+            </div>
+          )}
 
           {emPesagem.orientacoes && (
             <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-2 shadow-md">

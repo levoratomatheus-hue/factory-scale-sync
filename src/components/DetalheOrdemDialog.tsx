@@ -122,9 +122,26 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     }, 0);
   }, [registros, ordem?.data_reprovacao]);
 
-  if (!ordem) return null;
+  const obsItems = useMemo(() => parseObsItems(ordem?.obs ?? null), [ordem?.obs]);
 
-  const obsItems = parseObsItems(ordem.obs);
+  const registrosComputados = useMemo(() => {
+    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
+    return registros.map((r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const filled = items.filter((i) => i.qty || i.peso);
+      const prodStr = filled.map((i: any) => `${i.qty}× ${formatKg(i.peso)} kg`).join(" + ");
+      const totalReg = filled.reduce((s: number, i: any) => s + (i.qty || 0) * (i.peso || 0), 0);
+      const horas = parseHoras(r.hora_inicio, r.hora_fim);
+      const horasParadas = paradas
+        .filter((p: any) => p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+        .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
+      const horasNet = horas !== null ? Math.max(0, horas - horasParadas) : null;
+      const kgH = horasNet && horasNet > 0 && totalReg > 0 ? totalReg / horasNet : null;
+      return { ...r, prodStr, totalReg, horas, horasNet, kgH };
+    });
+  }, [registros, paradas]);
+
+  if (!ordem) return null;
 
   return (
     <Dialog open={!!ordem} onOpenChange={(open) => !open && onClose()}>
@@ -210,7 +227,7 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                     </thead>
                     <tbody>
                       {formulaItens.map((item, i) => (
-                        <tr key={i} className="border-t last:border-b-0">
+                        <tr key={`${item.sequencia ?? i}-${item.materia_prima}`} className="border-t last:border-b-0">
                           <td className="px-3 py-1.5 text-muted-foreground font-mono">{item.sequencia ?? i + 1}</td>
                           <td className="px-3 py-1.5 font-medium">{item.materia_prima}</td>
                           <td className="px-3 py-1.5 text-right font-mono">{formatKg(item.quantidade_kg)}</td>
@@ -322,39 +339,26 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                   Registros de Produção ({registros.length})
                 </h3>
                 <div className="space-y-2">
-                  {registros.map((r: any) => {
-                    const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-                    const filled = items.filter((i) => i.qty || i.peso);
-                    const prodStr = filled.map((i) => `${i.qty}× ${formatKg(i.peso)} kg`).join(" + ");
-                    const totalReg = filled.reduce((s, i) => s + (i.qty || 0) * (i.peso || 0), 0);
-                    const horas = parseHoras(r.hora_inicio, r.hora_fim);
-                    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
-                    const horasParadas = paradas
-                      .filter((p: any) => p.data === r.data && toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
-                      .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
-                    const horasNet = horas !== null ? Math.max(0, horas - horasParadas) : null;
-                    const kgH = horasNet && horasNet > 0 && totalReg > 0 ? totalReg / horasNet : null;
-                    return (
-                      <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm space-y-0.5">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="font-semibold">
-                            {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                          </span>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {fmtHora(r.hora_inicio)} – {fmtHora(r.hora_fim)}
-                            {horas !== null && <span className="ml-1">({horas.toFixed(1)}h)</span>}
-                          </span>
-                          {totalReg > 0 && (
-                            <span className="font-bold text-primary ml-auto">{formatKg(totalReg)} kg</span>
-                          )}
-                        </div>
-                        {prodStr && <p className="text-xs font-mono text-muted-foreground">{prodStr}</p>}
-                        {kgH !== null && (
-                          <p className="text-xs text-muted-foreground/70">{formatKg(kgH)} kg/h</p>
+                  {registrosComputados.map((r: any) => (
+                    <div key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm space-y-0.5">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="font-semibold">
+                          {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {fmtHora(r.hora_inicio)} – {fmtHora(r.hora_fim)}
+                          {r.horas !== null && <span className="ml-1">({r.horas.toFixed(1)}h)</span>}
+                        </span>
+                        {r.totalReg > 0 && (
+                          <span className="font-bold text-primary ml-auto">{formatKg(r.totalReg)} kg</span>
                         )}
                       </div>
-                    );
-                  })}
+                      {r.prodStr && <p className="text-xs font-mono text-muted-foreground">{r.prodStr}</p>}
+                      {r.kgH !== null && (
+                        <p className="text-xs text-muted-foreground/70">{formatKg(r.kgH)} kg/h</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </section>
             ) : (
