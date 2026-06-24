@@ -347,7 +347,7 @@ export default function Index() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton size="lg" tooltip="Zan Collor Produção">
-                  <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", height: "32px" }} />
+                  <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", height: "48px" }} />
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -412,7 +412,7 @@ export default function Index() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" tooltip="Zan Collor Produção" onClick={goHome}>
-                <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", height: "32px" }} />
+                <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", height: "48px" }} />
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
