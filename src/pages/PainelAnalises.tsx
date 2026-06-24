@@ -59,7 +59,7 @@ const CORES_LINHA = [
   "from-teal-500 to-teal-700",
 ];
 
-type Atalho = "hoje" | "semana" | "mes" | "mes_anterior" | "ano" | null;
+type Atalho = "hoje" | "ontem" | "semana" | "mes" | "mes_anterior" | "ano" | null;
 
 function toStr(d: Date) {
   return d.toISOString().split("T")[0];
@@ -207,6 +207,7 @@ function CardHorasLinha(h: HorasLinha) {
 
 const atalhos: { id: Atalho; label: string }[] = [
   { id: "hoje",          label: "Hoje" },
+  { id: "ontem",         label: "Ontem" },
   { id: "semana",        label: "Esta semana" },
   { id: "mes",           label: "Este mês" },
   { id: "mes_anterior",  label: "Mês anterior" },
@@ -218,6 +219,11 @@ function calcAtalho(id: Atalho): { inicio: string; fim: string } {
   switch (id) {
     case "hoje":
       return { inicio: toStr(hoje), fim: toStr(hoje) };
+    case "ontem": {
+      const ontem = new Date(hoje);
+      ontem.setDate(hoje.getDate() - 1);
+      return { inicio: toStr(ontem), fim: toStr(ontem) };
+    }
     case "semana":
       return { inicio: toStr(inicioSemana(hoje)), fim: toStr(hoje) };
     case "mes":
