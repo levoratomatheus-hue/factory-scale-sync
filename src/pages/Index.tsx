@@ -130,7 +130,7 @@ const WELCOME_ROLES = ['gestor', 'tecnico', 'comercial'];
 
 export default function Index() {
   const { perfil, loading, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabGestorId>('gestor');
+  const [activeTab, setActiveTab] = useState<TabGestorId | null>(null);
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeFading, setWelcomeFading] = useState(false);
@@ -168,7 +168,7 @@ export default function Index() {
     setTimeout(() => setShowWelcome(false), 500);
   }, []);
 
-  const goToTab = useCallback((tab: TabGestorId) => {
+  const goToTab = useCallback((tab: TabGestorId | null) => {
     setActiveTab(tab);
   }, []);
   const [openGroups, setOpenGroups] = useState<Set<string>>(
@@ -188,9 +188,10 @@ export default function Index() {
     goToTab('criar');
   };
 
-  const activeLabel =
-    [...gruposGestor.flatMap((g) => g.items), ...manutencaoItems, { id: 'comercial' as TabGestorId, label: 'Painel Comercial' }]
-      .find((i) => i.id === activeTab)?.label ?? '';
+  const activeLabel = activeTab === null
+    ? ''
+    : ([...gruposGestor.flatMap((g) => g.items), ...manutencaoItems, { id: 'comercial' as TabGestorId, label: 'Painel Comercial' }]
+        .find((i) => i.id === activeTab)?.label ?? '');
 
   if (loading) {
     return (
@@ -400,7 +401,7 @@ export default function Index() {
   }
 
   const goHome = () => {
-    goToTab('gestor');
+    goToTab(null);
     setOpenGroups(new Set());
   };
 
@@ -551,39 +552,43 @@ export default function Index() {
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="overflow-x-hidden">
-        <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
+      <SidebarInset className="overflow-x-hidden flex flex-col">
+        <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
           <SidebarTrigger />
-          <span className="font-semibold text-sm">{activeLabel}</span>
+          {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
         </header>
-        <main className="p-6 overflow-x-hidden">
-          <ErrorBoundary>
-          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-            {activeTab === 'gestor'              && <PainelGestor onCriarOP={handleCriarOP} />}
-            {activeTab === 'programacao'         && <PainelProgramacao />}
-            {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
-            {activeTab === 'criar'               && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
-            {activeTab === 'balanca1'            && <PainelBalanca balanca={1} />}
-            {activeTab === 'balanca2'            && <PainelBalanca balanca={2} />}
-            {activeTab === 'mistura'             && <PainelMistura />}
-            {activeTab === 'linha1'              && <PainelLinha linha={1} />}
-            {activeTab === 'linha2'              && <PainelLinha linha={2} />}
-            {activeTab === 'linha3'              && <PainelLinha linha={3} />}
-            {activeTab === 'linha4'              && <PainelLinha linha={4} />}
-            {activeTab === 'linha5'              && <PainelLinha linha={5} />}
-            {activeTab === 'liberacao'           && <PainelLiberacao />}
-            {activeTab === 'historico'           && <PainelHistorico />}
-            {activeTab === 'consulta_formula'    && <PainelConsultaFormula />}
-            {activeTab === 'analises'               && <PainelAnalises />}
-            {activeTab === 'importar'               && <ImportarProgramacao />}
-            {activeTab === 'comercial'              && <PainelComercial />}
-            {activeTab === 'painel_manutencao'      && <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
-            {activeTab === 'analise_manutencao'     && <PainelAnaliseManutencao />}
-            {activeTab === 'cadastro_equipamentos'  && <CadastroEquipamentos />}
-            {activeTab === 'abrir_os'               && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
-          </Suspense>
-          </ErrorBoundary>
-        </main>
+        {activeTab === null ? (
+          <PaginaInicial embedded onEnter={() => goToTab('gestor')} />
+        ) : (
+          <main className="p-6 overflow-x-hidden">
+            <ErrorBoundary>
+            <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+              {activeTab === 'gestor'              && <PainelGestor onCriarOP={handleCriarOP} />}
+              {activeTab === 'programacao'         && <PainelProgramacao />}
+              {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
+              {activeTab === 'criar'               && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
+              {activeTab === 'balanca1'            && <PainelBalanca balanca={1} />}
+              {activeTab === 'balanca2'            && <PainelBalanca balanca={2} />}
+              {activeTab === 'mistura'             && <PainelMistura />}
+              {activeTab === 'linha1'              && <PainelLinha linha={1} />}
+              {activeTab === 'linha2'              && <PainelLinha linha={2} />}
+              {activeTab === 'linha3'              && <PainelLinha linha={3} />}
+              {activeTab === 'linha4'              && <PainelLinha linha={4} />}
+              {activeTab === 'linha5'              && <PainelLinha linha={5} />}
+              {activeTab === 'liberacao'           && <PainelLiberacao />}
+              {activeTab === 'historico'           && <PainelHistorico />}
+              {activeTab === 'consulta_formula'    && <PainelConsultaFormula />}
+              {activeTab === 'analises'            && <PainelAnalises />}
+              {activeTab === 'importar'            && <ImportarProgramacao />}
+              {activeTab === 'comercial'           && <PainelComercial />}
+              {activeTab === 'painel_manutencao'   && <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
+              {activeTab === 'analise_manutencao'  && <PainelAnaliseManutencao />}
+              {activeTab === 'cadastro_equipamentos' && <CadastroEquipamentos />}
+              {activeTab === 'abrir_os'            && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
+            </Suspense>
+            </ErrorBoundary>
+          </main>
+        )}
       </SidebarInset>
     </SidebarProvider>
   );

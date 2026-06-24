@@ -6,12 +6,14 @@ interface PaginaInicialProps {
   onEnter?: () => void;
   /** Ativa transição de fade-out */
   fading?: boolean;
+  /** Modo embutido: ocupa a área disponível em vez de min-h-screen */
+  embedded?: boolean;
 }
 
-export default function PaginaInicial({ onEnter, fading }: PaginaInicialProps) {
+export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInicialProps) {
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden select-none transition-opacity duration-500"
+      className={`${embedded ? "flex-1 h-full" : "min-h-screen"} flex flex-col items-center justify-center relative overflow-hidden select-none transition-opacity duration-500`}
       style={{
         background: "hsl(220, 22%, 7%)",
         opacity: fading ? 0 : 1,
