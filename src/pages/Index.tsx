@@ -553,12 +553,14 @@ export default function Index() {
       </Sidebar>
 
       <SidebarInset className="overflow-x-hidden flex flex-col">
-        <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
-          <SidebarTrigger />
-          {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
-        </header>
+        {activeTab !== null && (
+          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
+            <SidebarTrigger />
+            {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
+          </header>
+        )}
         {activeTab === null ? (
-          <PaginaInicial embedded onEnter={() => goToTab('gestor')} />
+          <PaginaInicial embedded />
         ) : (
           <main className="p-6 overflow-x-hidden">
             <ErrorBoundary>

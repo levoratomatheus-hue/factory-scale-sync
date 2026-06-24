@@ -2,11 +2,11 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
 interface PaginaInicialProps {
-  /** Se fornecido, o botão chama onEnter em vez de navegar para /app */
+  /** Se fornecido, o botão chama onEnter em vez de navegar para /app (apenas na landing externa) */
   onEnter?: () => void;
   /** Ativa transição de fade-out */
   fading?: boolean;
-  /** Modo embutido: ocupa a área disponível em vez de min-h-screen */
+  /** Modo embutido: ocupa a área disponível, sem botão de ação */
   embedded?: boolean;
 }
 
@@ -62,33 +62,35 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
           Sistema de Gestão de Produção
         </p>
 
-        {/* CTA */}
-        {onEnter ? (
-          <button
-            onClick={onEnter}
-            className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
-            style={{
-              background: "hsl(220, 68%, 50%)",
-              color: "hsl(0, 0%, 100%)",
-              boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
-            }}
-          >
-            Entrar
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-          </button>
-        ) : (
-          <Link
-            to="/app"
-            className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
-            style={{
-              background: "hsl(220, 68%, 50%)",
-              color: "hsl(0, 0%, 100%)",
-              boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
-            }}
-          >
-            Acessar Sistema
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-          </Link>
+        {/* Botão apenas na versão splash (não embutida) */}
+        {!embedded && (
+          onEnter ? (
+            <button
+              onClick={onEnter}
+              className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
+              style={{
+                background: "hsl(220, 68%, 50%)",
+                color: "hsl(0, 0%, 100%)",
+                boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
+              }}
+            >
+              Entrar
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+            </button>
+          ) : (
+            <Link
+              to="/app"
+              className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
+              style={{
+                background: "hsl(220, 68%, 50%)",
+                color: "hsl(0, 0%, 100%)",
+                boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
+              }}
+            >
+              Acessar Sistema
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+            </Link>
+          )
         )}
       </main>
 
