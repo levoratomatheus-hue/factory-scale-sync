@@ -36,10 +36,11 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
         <img
           src="/logo.png"
           alt="ZanCollor"
-          className="w-[320px] md:w-[520px] lg:w-[600px] max-w-[80vw]"
+          className="w-[380px] md:w-[620px] lg:w-[740px] max-w-[85vw]"
           style={{
-            imageRendering: "auto",
+            imageRendering: "-webkit-optimize-contrast",
             filter: "invert(1) drop-shadow(0 0 32px hsl(220,60%,40%))",
+            transform: "translateZ(0)",
           }}
         />
 
