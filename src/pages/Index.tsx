@@ -17,6 +17,7 @@ const PainelProgramacaoBalanca = lazy(() => import('./PainelProgramacaoBalanca')
 const PainelConsultaFormula   = lazy(() => import('./PainelConsultaFormula'));
 const PainelComercial         = lazy(() => import('./PainelComercial'));
 const CadastroEquipamentos    = lazy(() => import('./CadastroEquipamentos'));
+const EstoqueManutencao       = lazy(() => import('./EstoqueManutencao'));
 const AbrirOS                 = lazy(() => import('./AbrirOS'));
 const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao = lazy(() => import('./PainelAnaliseManutencao'));
@@ -48,7 +49,7 @@ type TabGestorId =
   | 'analises'
   | 'consulta_formula'
   | 'comercial'
-  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao';
+  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao';
 
 const gruposGestor = [
   {
@@ -117,6 +118,7 @@ const manutencaoItems = [
   { id: 'analise_manutencao'    as TabGestorId, label: 'Análise de Manutenção',   icon: BarChart2 },
   { id: 'cadastro_equipamentos' as TabGestorId, label: 'Equipamentos',            icon: Settings  },
   { id: 'abrir_os'              as TabGestorId, label: 'Abrir OS',                icon: PlusCircle },
+  { id: 'estoque_manutencao'    as TabGestorId, label: 'Estoque',                 icon: Package   },
 ] as const;
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -583,6 +585,7 @@ export default function Index() {
               {activeTab === 'analise_manutencao'  && <PainelAnaliseManutencao />}
               {activeTab === 'cadastro_equipamentos' && <CadastroEquipamentos />}
               {activeTab === 'abrir_os'            && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
+              {activeTab === 'estoque_manutencao'  && <EstoqueManutencao papel={perfil.papel} perfilNome={perfil.nome} />}
             </Suspense>
             </ErrorBoundary>
           </main>

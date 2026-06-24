@@ -106,6 +106,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [solucao_aplicadaDialogOS, setSolucaoDialogOS] = useState<OS | null>(null);
   const [solucao_aplicadaText, setSolucaoText] = useState("");
   const [savingSolucao, setSavingSolucao] = useState(false);
+  const [estoqueItems, setEstoqueItems] = useState<{ id: string; nome: string; unidade: string; quantidade_atual: number }[]>([]);
+  const [pecasUtilizadas, setPecasUtilizadas] = useState<{ item_id: string; nome: string; unidade: string; quantidade: string }[]>([]);
 
   const [confirmarConclusaoOS, setConfirmarConclusaoOS] = useState<OS | null>(null);
   const [savingConclusao, setSavingConclusao] = useState(false);
@@ -215,6 +217,33 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     else { toast({ title: "OS iniciada!" }); setIniciarConfirmOS(null); }
   }
 
+  async function abrirDialogSolucao(os: OS) {
+    setSolucaoDialogOS(os);
+    setSolucaoText("");
+    setPecasUtilizadas([]);
+    const { data } = await (supabase as any)
+      .from("estoque_manutencao")
+      .select("id, nome, unidade, quantidade_atual")
+      .order("nome", { ascending: true });
+    setEstoqueItems(data ?? []);
+  }
+
+  function adicionarPeca() {
+    setPecasUtilizadas(prev => [...prev, { item_id: "", nome: "", unidade: "", quantidade: "1" }]);
+  }
+
+  function removerPeca(idx: number) {
+    setPecasUtilizadas(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  function updatePeca(idx: number, item_id: string) {
+    const item = estoqueItems.find(i => i.id === item_id);
+    if (!item) return;
+    setPecasUtilizadas(prev => prev.map((p, i) =>
+      i === idx ? { ...p, item_id, nome: item.nome, unidade: item.unidade } : p
+    ));
+  }
+
   async function registrarSolucao() {
     if (!solucao_aplicadaDialogOS) return;
     if (!solucao_aplicadaText.trim()) {
@@ -222,17 +251,44 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       return;
     }
     setSavingSolucao(true);
+
     const { error } = await (supabase as any).from("ordens_servico").update({
       status: "aguardando_aprovacao",
       solucao_aplicada: solucao_aplicadaText.trim(),
     }).eq("id", solucao_aplicadaDialogOS.id);
-    setSavingSolucao(false);
-    if (error) toast({ title: "Erro ao registrar solução", description: error.message, variant: "destructive" });
-    else {
-      toast({ title: "Solução registrada — aguardando aprovação do gestor" });
-      setSolucaoDialogOS(null);
-      setSolucaoText("");
+
+    if (error) {
+      setSavingSolucao(false);
+      toast({ title: "Erro ao registrar solução", description: error.message, variant: "destructive" });
+      return;
     }
+
+    // Baixa automática de peças utilizadas
+    const pecasValidas = pecasUtilizadas.filter(p => p.item_id && parseFloat(p.quantidade) > 0);
+    for (const peca of pecasValidas) {
+      const qtd = parseFloat(peca.quantidade);
+      const item = estoqueItems.find(i => i.id === peca.item_id);
+      if (!item) continue;
+      await Promise.all([
+        (supabase as any).from("estoque_movimentacoes").insert({
+          item_id: peca.item_id,
+          tipo: "saida",
+          quantidade: qtd,
+          motivo: `OS: ${solucao_aplicadaDialogOS.descricao_problema}`,
+          os_id: solucao_aplicadaDialogOS.id,
+          criado_por: perfilNome,
+        }),
+        (supabase as any).from("estoque_manutencao")
+          .update({ quantidade_atual: Math.max(0, item.quantidade_atual - qtd) })
+          .eq("id", peca.item_id),
+      ]);
+    }
+
+    setSavingSolucao(false);
+    toast({ title: "Solução registrada — aguardando aprovação do gestor" });
+    setSolucaoDialogOS(null);
+    setSolucaoText("");
+    setPecasUtilizadas([]);
   }
 
   async function concluirOS(os: OS) {
@@ -445,7 +501,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       size="sm"
                       variant="outline"
                       className="gap-1.5 h-7 text-xs"
-                      onClick={() => { setSolucaoDialogOS(os); setSolucaoText(os.solucao_aplicada ?? ""); }}
+                      onClick={() => { abrirDialogSolucao(os); setSolucaoText(os.solucao_aplicada ?? ""); }}
                     >
                       <CheckCircle2 className="h-3 w-3" />
                       Registrar Solução
@@ -526,12 +582,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       </Dialog>
 
       {/* Dialog: Registrar Solução */}
-      <Dialog open={!!solucao_aplicadaDialogOS} onOpenChange={(o) => { if (!o) setSolucaoDialogOS(null); }}>
-        <DialogContent className="max-w-md">
+      <Dialog open={!!solucao_aplicadaDialogOS} onOpenChange={(o) => { if (!o) { setSolucaoDialogOS(null); setPecasUtilizadas([]); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar Solução</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="space-y-4 py-2">
             {solucao_aplicadaDialogOS && (
               <p className="text-sm text-muted-foreground">
                 {solucao_aplicadaDialogOS.equipamentos?.nome} — {solucao_aplicadaDialogOS.descricao_problema}
@@ -542,14 +598,57 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
               <textarea
                 value={solucao_aplicadaText}
                 onChange={(e) => setSolucaoText(e.target.value)}
-                rows={4}
+                rows={3}
                 placeholder="Descreva o que foi feito para resolver o problema..."
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
             </div>
+
+            {/* Peças utilizadas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  Peças / Materiais utilizados
+                </label>
+                <button
+                  type="button"
+                  onClick={adicionarPeca}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  + Adicionar
+                </button>
+              </div>
+              {estoqueItems.length === 0 && pecasUtilizadas.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhum item cadastrado no estoque de manutenção</p>
+              )}
+              {pecasUtilizadas.map((peca, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    value={peca.item_id}
+                    onChange={(e) => updatePeca(idx, e.target.value)}
+                    className="flex-1 rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Selecione...</option>
+                    {estoqueItems.map(i => (
+                      <option key={i.id} value={i.id}>{i.nome} ({i.quantidade_atual} {i.unidade})</option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number" min="0.01" step="0.01"
+                    value={peca.quantidade}
+                    onChange={(e) => setPecasUtilizadas(prev => prev.map((p, i) => i === idx ? { ...p, quantidade: e.target.value } : p))}
+                    className="w-20"
+                    placeholder="Qtd"
+                  />
+                  {peca.unidade && <span className="text-xs text-muted-foreground shrink-0 w-6">{peca.unidade}</span>}
+                  <button type="button" onClick={() => removerPeca(idx)} className="text-muted-foreground hover:text-destructive text-lg leading-none">×</button>
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSolucaoDialogOS(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setSolucaoDialogOS(null); setPecasUtilizadas([]); }}>Cancelar</Button>
             <Button onClick={registrarSolucao} disabled={savingSolucao}>
               {savingSolucao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enviar para Aprovação
