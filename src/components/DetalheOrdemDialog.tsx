@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer, Clock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,12 @@ const MOTIVOS: Record<string, string> = {
 
 function fmtHora(h: string | null | undefined) {
   return h ? String(h).slice(0, 5) : "—";
+}
+
+function toH(s: string | null | undefined) {
+  if (!s) return 0;
+  const [h, m] = String(s).split(":").map(Number);
+  return (h || 0) + (m || 0) / 60;
 }
 
 export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
@@ -125,7 +131,6 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   const obsItems = useMemo(() => parseObsItems(ordem?.obs ?? null), [ordem?.obs]);
 
   const registrosComputados = useMemo(() => {
-    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
     return registros.map((r: any) => {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       const filled = items.filter((i) => i.qty || i.peso);
@@ -140,6 +145,11 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
       return { ...r, prodStr, totalReg, horas, horasNet, kgH };
     });
   }, [registros, paradas]);
+
+  const totalHorasParadas = useMemo(
+    () => paradas.reduce((acc: number, p: any) => acc + Math.max(0, toH(p.hora_fim) - toH(p.hora_inicio)), 0),
+    [paradas]
+  );
 
   if (!ordem) return null;
 
@@ -373,21 +383,48 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
             {/* 9. Paradas */}
             {paradas.length > 0 && (
               <section className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Paradas ({paradas.length})</h3>
-                <div className="space-y-1.5">
-                  {paradas.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-                      <div>
-                        <span className="font-medium">{MOTIVOS[p.motivo] ?? p.motivo}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {format(new Date(p.data + "T12:00:00"), "dd/MM", { locale: ptBR })}
-                        </span>
-                      </div>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {fmtHora(p.hora_inicio)} – {fmtHora(p.hora_fim)}
-                      </span>
-                    </div>
-                  ))}
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-orange-500" />
+                  Paradas ({paradas.length})
+                </h3>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-muted-foreground text-xs">
+                        <th className="text-left px-3 py-1.5 font-medium">Motivo</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Data</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Início</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Fim</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Duração</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paradas.map((p: any) => {
+                        const dur = Math.max(0, toH(p.hora_fim) - toH(p.hora_inicio));
+                        return (
+                          <tr key={p.id} className="border-t last:border-b-0">
+                            <td className="px-3 py-1.5 font-medium">{MOTIVOS[p.motivo] ?? p.motivo}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground">
+                              {format(new Date(p.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-mono">{fmtHora(p.hora_inicio)}</td>
+                            <td className="px-3 py-1.5 text-right font-mono">{fmtHora(p.hora_fim)}</td>
+                            <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{dur.toFixed(1)}h</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t bg-muted/40">
+                        <td colSpan={4} className="px-3 py-1.5 text-right text-xs font-medium text-muted-foreground">
+                          Total de paradas:
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-bold font-mono text-orange-600">
+                          {totalHorasParadas.toFixed(1)}h
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               </section>
             )}
