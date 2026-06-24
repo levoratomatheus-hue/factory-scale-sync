@@ -30,26 +30,30 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       />
 
       {/* Conteúdo central */}
-      <main className="relative z-10 flex flex-col items-center text-center px-6 gap-7">
+      <main className="relative z-10 flex flex-col items-center text-center px-6 gap-8">
 
         {/* Marca */}
         <img
           src="/logo.png"
           alt="ZanCollor"
-          className="w-80 md:w-[500px]"
-          style={{ filter: "invert(1)" }}
+          className="w-[320px] md:w-[520px] lg:w-[600px] max-w-[80vw]"
+          style={{
+            imageRendering: "auto",
+            WebkitFontSmoothing: "antialiased",
+            filter: "drop-shadow(0 0 32px hsl(220,60%,40%))",
+          }}
         />
 
         {/* Divisor */}
         <div
-          className="w-10 h-px rounded-full"
+          className="w-12 h-px rounded-full"
           style={{ background: "hsl(220, 25%, 28%)" }}
         />
 
         {/* Subtítulo */}
         <p
-          className="text-sm font-light tracking-widest uppercase"
-          style={{ color: "hsl(220, 10%, 48%)" }}
+          className="text-sm font-light tracking-[0.3em] uppercase"
+          style={{ color: "hsl(220, 10%, 45%)" }}
         >
           Sistema de Gestão de Produção
         </p>
