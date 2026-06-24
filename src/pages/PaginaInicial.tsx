@@ -39,8 +39,7 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
           className="w-[320px] md:w-[520px] lg:w-[600px] max-w-[80vw]"
           style={{
             imageRendering: "auto",
-            WebkitFontSmoothing: "antialiased",
-            filter: "drop-shadow(0 0 32px hsl(220,60%,40%))",
+            filter: "invert(1) drop-shadow(0 0 32px hsl(220,60%,40%))",
           }}
         />
 
