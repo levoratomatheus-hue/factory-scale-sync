@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, memo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer, Clock } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer, Clock, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +55,25 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   const [formulaItens, setFormulaItens] = useState<{ sequencia: number | null; materia_prima: string; quantidade_kg: number }[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const fetchParadas = useCallback(async (datas: string[]) => {
+    if (!ordem || datas.length === 0) return;
+    const { data: p } = await supabase
+      .from("paradas")
+      .select("id, data, motivo, hora_inicio, hora_fim")
+      .eq("linha", ordem.linha)
+      .in("data", datas)
+      .order("data", { ascending: true })
+      .order("hora_inicio", { ascending: true });
+    setParadas(p ?? []);
+  }, [ordem?.id, ordem?.linha]);
+
+  const handleDeleteParada = useCallback(async (id: string) => {
+    if (!window.confirm("Excluir esta parada?")) return;
+    await supabase.from("paradas").delete().eq("id", id);
+    const datas = [...new Set<string>(registros.map((r: any) => r.data))];
+    await fetchParadas(datas);
+  }, [registros, fetchParadas]);
+
   useEffect(() => {
     if (!ordem) return;
     setLoading(true);
@@ -81,16 +100,7 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
       setRegistros(r.data ?? []);
 
       const datas: string[] = [...new Set<string>((r.data ?? []).map((rd: any) => rd.data))];
-      if (datas.length > 0) {
-        const { data: p } = await supabase
-          .from("paradas")
-          .select("id, data, motivo, hora_inicio, hora_fim")
-          .eq("linha", ordem.linha)
-          .in("data", datas)
-          .order("data", { ascending: true })
-          .order("hora_inicio", { ascending: true });
-        setParadas(p ?? []);
-      }
+      await fetchParadas(datas);
 
       if (f.data && (f.data as any[]).length > 0) {
         setFormulaItens(f.data);
@@ -397,13 +407,14 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                         <th className="text-right px-3 py-1.5 font-medium">Início</th>
                         <th className="text-right px-3 py-1.5 font-medium">Fim</th>
                         <th className="text-right px-3 py-1.5 font-medium">Duração</th>
+                        <th className="w-8" />
                       </tr>
                     </thead>
                     <tbody>
                       {paradas.map((p: any) => {
                         const dur = Math.max(0, toH(p.hora_fim) - toH(p.hora_inicio));
                         return (
-                          <tr key={p.id} className="border-t last:border-b-0">
+                          <tr key={p.id} className="border-t last:border-b-0 group">
                             <td className="px-3 py-1.5 font-medium">{MOTIVOS[p.motivo] ?? p.motivo}</td>
                             <td className="px-3 py-1.5 text-muted-foreground">
                               {format(new Date(p.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
@@ -411,6 +422,15 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                             <td className="px-3 py-1.5 text-right font-mono">{fmtHora(p.hora_inicio)}</td>
                             <td className="px-3 py-1.5 text-right font-mono">{fmtHora(p.hora_fim)}</td>
                             <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{dur.toFixed(1)}h</td>
+                            <td className="px-1.5 py-1.5 text-right">
+                              <button
+                                onClick={() => handleDeleteParada(p.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                title="Excluir parada"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -423,6 +443,7 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                         <td className="px-3 py-1.5 text-right font-bold font-mono text-orange-600">
                           {totalHorasParadas.toFixed(1)}h
                         </td>
+                        <td />
                       </tr>
                     </tfoot>
                   </table>
