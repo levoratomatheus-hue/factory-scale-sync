@@ -60,9 +60,6 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     setLoading(true);
     setHist([]); setRegistros([]); setParadas([]); setFormulaItens([]);
 
-    const today = format(new Date(), "yyyy-MM-dd");
-    const dateFim = ordem.data_conclusao?.slice(0, 10) ?? today;
-
     Promise.all([
       supabase
         .from("historico")
@@ -74,24 +71,28 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
         .select("id, data, hora_inicio, hora_fim, registro_producao")
         .eq("ordem_id", ordem.id)
         .order("data", { ascending: true }),
-      supabase
-        .from("paradas")
-        .select("id, data, motivo, hora_inicio, hora_fim")
-        .eq("linha", ordem.linha)
-        .gte("data", ordem.data_programacao)
-        .lte("data", dateFim)
-        .order("data", { ascending: true }),
       (supabase as any)
         .from("ordens_formula")
         .select("sequencia, materia_prima, quantidade_kg")
         .eq("ordem_id", ordem.id)
         .order("sequencia", { ascending: true }),
-    ]).then(async ([h, r, p, f]) => {
+    ]).then(async ([h, r, f]) => {
       setHist(h.data ?? []);
       setRegistros(r.data ?? []);
-      setParadas(p.data ?? []);
 
-      if (f.data && f.data.length > 0) {
+      const datas: string[] = [...new Set<string>((r.data ?? []).map((rd: any) => rd.data))];
+      if (datas.length > 0) {
+        const { data: p } = await supabase
+          .from("paradas")
+          .select("id, data, motivo, hora_inicio, hora_fim")
+          .eq("linha", ordem.linha)
+          .in("data", datas)
+          .order("data", { ascending: true })
+          .order("hora_inicio", { ascending: true });
+        setParadas(p ?? []);
+      }
+
+      if (f.data && (f.data as any[]).length > 0) {
         setFormulaItens(f.data);
       } else if (ordem.formula_id) {
         const { data: padrao } = await (supabase as any)
