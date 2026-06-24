@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, memo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer, Clock, Trash2 } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowRight, FlaskConical, Thermometer, Clock, Trash2, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +54,8 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   const [paradas, setParadas] = useState<any[]>([]);
   const [formulaItens, setFormulaItens] = useState<{ sequencia: number | null; materia_prima: string; quantidade_kg: number }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editingParada, setEditingParada] = useState<any | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   const fetchParadas = useCallback(async (datas: string[]) => {
     if (!ordem || datas.length === 0) return;
@@ -73,6 +75,24 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
     const datas = [...new Set<string>(registros.map((r: any) => r.data))];
     await fetchParadas(datas);
   }, [registros, fetchParadas]);
+
+  const handleSaveParada = useCallback(async () => {
+    if (!editingParada) return;
+    setEditSaving(true);
+    await supabase
+      .from("paradas")
+      .update({
+        motivo: editingParada.motivo,
+        data: editingParada.data,
+        hora_inicio: editingParada.hora_inicio,
+        hora_fim: editingParada.hora_fim,
+      })
+      .eq("id", editingParada.id);
+    setEditSaving(false);
+    setEditingParada(null);
+    const datas = [...new Set<string>(registros.map((r: any) => r.data))];
+    await fetchParadas(datas);
+  }, [editingParada, registros, fetchParadas]);
 
   useEffect(() => {
     if (!ordem) return;
@@ -407,7 +427,7 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                         <th className="text-right px-3 py-1.5 font-medium">Início</th>
                         <th className="text-right px-3 py-1.5 font-medium">Fim</th>
                         <th className="text-right px-3 py-1.5 font-medium">Duração</th>
-                        <th className="w-8" />
+                        <th className="w-16" />
                       </tr>
                     </thead>
                     <tbody>
@@ -423,13 +443,22 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                             <td className="px-3 py-1.5 text-right font-mono">{fmtHora(p.hora_fim)}</td>
                             <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{dur.toFixed(1)}h</td>
                             <td className="px-1.5 py-1.5 text-right">
-                              <button
-                                onClick={() => handleDeleteParada(p.id)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                                title="Excluir parada"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => setEditingParada({ ...p })}
+                                  className="text-muted-foreground hover:text-primary"
+                                  title="Editar parada"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteParada(p.id)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                  title="Excluir parada"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -450,6 +479,76 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
                 </div>
               </section>
             )}
+
+            {/* Modal de edição de parada */}
+            <Dialog open={!!editingParada} onOpenChange={(open) => !open && setEditingParada(null)}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="text-base">Editar Parada</DialogTitle>
+                </DialogHeader>
+                {editingParada && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Motivo</label>
+                      <select
+                        value={editingParada.motivo}
+                        onChange={(e) => setEditingParada((prev: any) => ({ ...prev, motivo: e.target.value }))}
+                        className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {Object.entries(MOTIVOS).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Data</label>
+                      <input
+                        type="date"
+                        value={editingParada.data}
+                        onChange={(e) => setEditingParada((prev: any) => ({ ...prev, data: e.target.value }))}
+                        className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Hora início</label>
+                        <input
+                          type="time"
+                          value={fmtHora(editingParada.hora_inicio)}
+                          onChange={(e) => setEditingParada((prev: any) => ({ ...prev, hora_inicio: e.target.value }))}
+                          className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Hora fim</label>
+                        <input
+                          type="time"
+                          value={fmtHora(editingParada.hora_fim)}
+                          onChange={(e) => setEditingParada((prev: any) => ({ ...prev, hora_fim: e.target.value }))}
+                          className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        onClick={() => setEditingParada(null)}
+                        className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveParada}
+                        disabled={editSaving}
+                        className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {editSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
 
           </div>
         )}
