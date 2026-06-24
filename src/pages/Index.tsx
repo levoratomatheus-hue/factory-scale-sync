@@ -22,6 +22,7 @@ const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao = lazy(() => import('./PainelAnaliseManutencao'));
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import PaginaInicial from './PaginaInicial';
 import {
   Sidebar,
   SidebarContent,
@@ -124,10 +125,15 @@ function resolveLinhaNumber(balanca: string | null): number | null {
   return match ? parseInt(match[1]) : null;
 }
 
+const WELCOME_SESSION_KEY = 'zc_welcome_shown';
+const WELCOME_ROLES = ['gestor', 'tecnico', 'comercial'];
+
 export default function Index() {
   const { perfil, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabGestorId>('gestor');
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeFading, setWelcomeFading] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -138,6 +144,28 @@ export default function Index() {
       import('./PainelHistorico');
     }, 200);
     return () => clearTimeout(t);
+  }, []);
+
+  // Exibe splash de boas-vindas uma vez por sessão para gestores/técnicos/comerciais
+  useEffect(() => {
+    if (!perfil) return;
+    if (!WELCOME_ROLES.includes(perfil.papel)) return;
+    if (sessionStorage.getItem(WELCOME_SESSION_KEY)) return;
+    sessionStorage.setItem(WELCOME_SESSION_KEY, '1');
+    setShowWelcome(true);
+  }, [perfil?.papel]);
+
+  // Auto-dismiss após 2.5 s com fade-out de 500 ms
+  useEffect(() => {
+    if (!showWelcome) return;
+    const fadeTimer = setTimeout(() => setWelcomeFading(true), 2500);
+    const hideTimer = setTimeout(() => setShowWelcome(false), 3000);
+    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
+  }, [showWelcome]);
+
+  const dismissWelcome = useCallback(() => {
+    setWelcomeFading(true);
+    setTimeout(() => setShowWelcome(false), 500);
   }, []);
 
   const goToTab = useCallback((tab: TabGestorId) => {
@@ -173,6 +201,10 @@ export default function Index() {
   }
 
   if (!perfil) return <Login />;
+
+  if (showWelcome) {
+    return <PaginaInicial onEnter={dismissWelcome} fading={welcomeFading} />;
+  }
 
   if (perfil.papel === 'operador' && (perfil.balanca === '1' || perfil.balanca === '2')) {
     return (

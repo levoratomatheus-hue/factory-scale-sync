@@ -1,11 +1,21 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
-export default function PaginaInicial() {
+interface PaginaInicialProps {
+  /** Se fornecido, o botão chama onEnter em vez de navegar para /app */
+  onEnter?: () => void;
+  /** Ativa transição de fade-out */
+  fading?: boolean;
+}
+
+export default function PaginaInicial({ onEnter, fading }: PaginaInicialProps) {
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden select-none"
-      style={{ background: "hsl(220, 22%, 7%)" }}
+      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden select-none transition-opacity duration-500"
+      style={{
+        background: "hsl(220, 22%, 7%)",
+        opacity: fading ? 0 : 1,
+      }}
     >
       {/* Glow de fundo */}
       <div
@@ -51,18 +61,33 @@ export default function PaginaInicial() {
         </p>
 
         {/* CTA */}
-        <Link
-          to="/app"
-          className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
-          style={{
-            background: "hsl(220, 68%, 50%)",
-            color: "hsl(0, 0%, 100%)",
-            boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
-          }}
-        >
-          Acessar Sistema
-          <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-        </Link>
+        {onEnter ? (
+          <button
+            onClick={onEnter}
+            className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
+            style={{
+              background: "hsl(220, 68%, 50%)",
+              color: "hsl(0, 0%, 100%)",
+              boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
+            }}
+          >
+            Entrar
+            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </button>
+        ) : (
+          <Link
+            to="/app"
+            className="group mt-1 inline-flex items-center gap-2.5 rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 hover:brightness-110 active:scale-95"
+            style={{
+              background: "hsl(220, 68%, 50%)",
+              color: "hsl(0, 0%, 100%)",
+              boxShadow: "0 0 24px hsl(220,68%,50%,0.35)",
+            }}
+          >
+            Acessar Sistema
+            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </Link>
+        )}
       </main>
 
       {/* Rodapé */}
