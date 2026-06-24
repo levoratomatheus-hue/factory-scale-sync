@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -207,6 +207,11 @@ export default function Index() {
     return <PaginaInicial onEnter={dismissWelcome} fading={welcomeFading} />;
   }
 
+  const goHome = () => {
+    goToTab(null);
+    setOpenGroups(new Set());
+  };
+
   if (perfil.papel === 'operador' && (perfil.balanca === '1' || perfil.balanca === '2')) {
     return (
       <OperadorLayout
@@ -344,13 +349,12 @@ export default function Index() {
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton size="lg" tooltip="Zan Collor Produção">
-                  <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", width: "100%", maxHeight: "60px", objectFit: "contain", padding: "8px 16px" }} />
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <div className="flex items-center">
+              <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", flex: 1, minWidth: 0, maxHeight: "72px", objectFit: "contain", padding: "6px 12px" }} />
+              <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+                <Home className="h-4 w-4" />
+              </button>
+            </div>
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
@@ -399,23 +403,17 @@ export default function Index() {
     );
   }
 
-  const goHome = () => {
-    goToTab(null);
-    setOpenGroups(new Set());
-  };
-
   // Gestor — acesso completo
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
         <SidebarHeader className="border-b">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" tooltip="Zan Collor Produção" onClick={goHome}>
-                <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", width: "100%", maxHeight: "60px", objectFit: "contain", padding: "8px 16px" }} />
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          <div className="flex items-center">
+            <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", flex: 1, minWidth: 0, maxHeight: "72px", objectFit: "contain", padding: "6px 12px" }} />
+            <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+              <Home className="h-4 w-4" />
+            </button>
+          </div>
         </SidebarHeader>
 
         <SidebarContent>
