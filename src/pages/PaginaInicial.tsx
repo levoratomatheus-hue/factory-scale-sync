@@ -33,13 +33,8 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       <main className="relative z-10 flex flex-col items-center text-center px-6 gap-7">
 
         {/* Marca */}
-        <div className="space-y-2">
-          <h1
-            className="text-5xl sm:text-6xl font-black tracking-[0.28em] uppercase leading-none"
-            style={{ color: "hsl(220, 10%, 93%)" }}
-          >
-            ZAN COLLOR
-          </h1>
+        <div className="flex flex-col items-center space-y-3">
+          <img src="/logo.png" alt="ZanCollor" className="w-64 md:w-96" />
           <p
             className="text-xs font-semibold tracking-[0.55em] uppercase"
             style={{ color: "hsl(220, 60%, 62%)" }}
