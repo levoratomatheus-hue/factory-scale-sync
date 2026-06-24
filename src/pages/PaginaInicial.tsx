@@ -33,15 +33,12 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       <main className="relative z-10 flex flex-col items-center text-center px-6 gap-7">
 
         {/* Marca */}
-        <div className="flex flex-col items-center space-y-3">
-          <img src="/logo.png" alt="ZanCollor" className="w-64 md:w-96" />
-          <p
-            className="text-xs font-semibold tracking-[0.55em] uppercase"
-            style={{ color: "hsl(220, 60%, 62%)" }}
-          >
-            masterbatches
-          </p>
-        </div>
+        <img
+          src="/logo.png"
+          alt="ZanCollor"
+          className="w-80 md:w-[500px]"
+          style={{ filter: "invert(1)" }}
+        />
 
         {/* Divisor */}
         <div
