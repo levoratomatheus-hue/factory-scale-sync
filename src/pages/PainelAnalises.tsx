@@ -20,17 +20,17 @@ import {
 
 // ── Dark theme palette ────────────────────────────────────────────────────────
 const D = {
-  page:    "#0a0a0a",
-  card:    "#1a1a2e",
-  cardAlt: "#1e1e1e",
-  border:  "#2d2d2d",
-  text:    "#ffffff",
-  muted:   "#94a3b8",
-  cyan:    "#06B6D4",
-  grid:    "#1e293b",
-  emerald: "#10b981",
-  amber:   "#f59e0b",
-  red:     "#ef4444",
+  page:    "#f8fafc",
+  card:    "#ffffff",
+  cardAlt: "#f1f5f9",
+  border:  "#e2e8f0",
+  text:    "#0f172a",
+  muted:   "#64748b",
+  cyan:    "#0891b2",
+  grid:    "#e2e8f0",
+  emerald: "#059669",
+  amber:   "#d97706",
+  red:     "#dc2626",
 } as const;
 
 const cardStyle = {
@@ -175,7 +175,7 @@ function CardHorasLinha(h: HorasLinha) {
       <p style={{ fontSize: 11, color: D.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
         Linha {h.linha}
       </p>
-      <div style={{ background: "#0f172a", borderRadius: "0.5rem", padding: "0.5rem 0.75rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: D.cardAlt, borderRadius: "0.5rem", padding: "0.5rem 0.75rem", display: "flex", alignItems: "center", justifyContent: "space-between", border: `1px solid ${D.border}` }}>
         <span style={{ fontSize: 11, color: D.muted, fontWeight: 600 }}>🕐 Disponíveis</span>
         <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "monospace", color: D.text }}>{fmtHHMM(h.capacidade)}</span>
       </div>
@@ -185,7 +185,7 @@ function CardHorasLinha(h: HorasLinha) {
           return (
             <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 11, color: D.muted }}>{emoji} {label}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: "monospace", color: val === 0 ? "#334155" : color }}>
+              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: "monospace", color: val === 0 ? D.muted : color }}>
                 {fmtHHMM(val)}
               </span>
             </div>
@@ -196,7 +196,7 @@ function CardHorasLinha(h: HorasLinha) {
         <span style={{ fontSize: 11, color: D.muted }}>Eficiência</span>
         <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: efCor }}>{h.eficiencia.toFixed(1)}%</span>
       </div>
-      <div style={{ height: 6, width: "100%", borderRadius: 9999, background: "#1e293b", overflow: "hidden" }}>
+      <div style={{ height: 6, width: "100%", borderRadius: 9999, background: D.border, overflow: "hidden" }}>
         <div style={{ height: "100%", borderRadius: 9999, background: efCor, width: `${Math.min(100, h.eficiencia)}%` }} />
       </div>
     </div>
@@ -768,7 +768,7 @@ export default function PainelAnalises() {
           {/* KPI Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1.25rem" }}>
             {/* Produção Total */}
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: "1rem", background: "#0e1a2e", border: `1px solid #1d3557`, padding: "1.5rem" }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: "1rem", background: D.card, border: `1px solid ${D.border}`, padding: "1.5rem" }}>
               <div style={{ position: "absolute", right: -16, top: -16, height: 96, width: 96, borderRadius: 9999, background: `${D.cyan}15` }} />
               <div style={{ position: "absolute", right: -8, bottom: 8, height: 64, width: 64, borderRadius: 9999, background: `${D.cyan}10` }} />
               <div style={{ position: "relative" }}>
@@ -785,7 +785,7 @@ export default function PainelAnalises() {
             </div>
 
             {/* Média kg/h */}
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: "1rem", background: "#0e1a2e", border: `1px solid #1d3557`, padding: "1.5rem" }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: "1rem", background: D.card, border: `1px solid ${D.border}`, padding: "1.5rem" }}>
               <div style={{ position: "absolute", right: -16, top: -16, height: 96, width: 96, borderRadius: 9999, background: `${D.cyan}15` }} />
               <div style={{ position: "absolute", right: -8, bottom: 8, height: 64, width: 64, borderRadius: 9999, background: `${D.cyan}10` }} />
               <div style={{ position: "relative" }}>
@@ -989,7 +989,7 @@ export default function PainelAnalises() {
               {/* Produtividade kg/h por Mês */}
               <div>
                 <SectionTitle icon={TrendingUp}>Produtividade kg/h por Mês</SectionTitle>
-                <div style={{ ...cardStyle, background: "#0f172a" }}>
+                <div style={{ ...cardStyle }}>
                   <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>
                     Últimos 12 meses · média kg/h das OPs concluídas
                     {linhaFiltro !== 0 && <span style={{ color: D.cyan }}> · Linha {linhaFiltro}</span>}
@@ -1026,7 +1026,7 @@ export default function PainelAnalises() {
                         strokeWidth={2}
                         fill="url(#gradCiano)"
                         dot={{ r: 4, fill: D.cyan, strokeWidth: 0 }}
-                        activeDot={{ r: 6, fill: D.cyan, stroke: "#0f172a", strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: D.cyan, stroke: D.card, strokeWidth: 2 }}
                         connectNulls={false}
                       />
                     </AreaChart>

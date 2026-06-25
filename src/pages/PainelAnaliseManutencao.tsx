@@ -20,20 +20,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// ── Dark palette ──────────────────────────────────────────────────────────────
+// ── Light palette ─────────────────────────────────────────────────────────────
 const D = {
-  page:    "#0a0a0a",
-  card:    "#1a1a2e",
-  cardAlt: "#1e1e1e",
-  border:  "#2d2d2d",
-  text:    "#ffffff",
-  muted:   "#94a3b8",
-  cyan:    "#06B6D4",
-  emerald: "#10b981",
-  amber:   "#f59e0b",
-  red:     "#ef4444",
-  violet:  "#8b5cf6",
-  grid:    "#1e293b",
+  page:    "#f8fafc",
+  card:    "#ffffff",
+  cardAlt: "#f1f5f9",
+  border:  "#e2e8f0",
+  text:    "#0f172a",
+  muted:   "#64748b",
+  cyan:    "#0891b2",
+  emerald: "#059669",
+  amber:   "#d97706",
+  red:     "#dc2626",
+  violet:  "#7c3aed",
+  grid:    "#e2e8f0",
 } as const;
 
 const cardStyle: React.CSSProperties = {
