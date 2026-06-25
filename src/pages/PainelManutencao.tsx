@@ -702,19 +702,44 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   </div>
                 )}
 
-                {/* Peças registradas — em_andamento (somente leitura) */}
+                {/* Peças registradas — em_andamento (editável) */}
                 {os.status === "em_andamento" && movsPorOS[os.id] !== undefined && movsPorOS[os.id].length > 0 && (
-                  <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-1.5">
+                  <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Package className="h-3 w-3" /> Peças registradas até agora
                     </p>
-                    {movsPorOS[os.id].map(mov => (
-                      <div key={mov.id} className="flex items-center gap-2 text-sm">
-                        <span className="flex-1 text-foreground/80 truncate">{mov.nome}</span>
-                        <span className="tabular-nums text-xs font-medium">{mov.quantidade}</span>
-                        <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
-                      </div>
-                    ))}
+                    {movsPorOS[os.id].map(mov => {
+                      const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
+                      const salvando = savingMovIds[mov.id] ?? false;
+                      return (
+                        <div key={mov.id} className="flex items-center gap-2 text-sm">
+                          <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
+                          <input
+                            type="number" min="0.01" step="0.01"
+                            value={qtdAtual}
+                            onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
+                            className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
+                          <button
+                            onClick={() => salvarQtdMov(mov, os.id)}
+                            disabled={salvando}
+                            title="Salvar"
+                            className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
+                          >
+                            {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
+                          </button>
+                          <button
+                            onClick={() => removerMovimentacao(mov, os.id)}
+                            disabled={salvando}
+                            title="Remover peça"
+                            className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
