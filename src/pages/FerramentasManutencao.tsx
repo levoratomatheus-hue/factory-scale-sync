@@ -189,7 +189,7 @@ export default function FerramentasManutencao({ papel }: Props) {
   });
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -252,7 +252,7 @@ export default function FerramentasManutencao({ papel }: Props) {
         ))}
       </div>
 
-      {/* Lista */}
+      {/* Grid de cards */}
       {loading ? (
         <div className="flex items-center justify-center h-40">
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
@@ -262,48 +262,51 @@ export default function FerramentasManutencao({ papel }: Props) {
           {ferramentas.length === 0 ? "Nenhuma ferramenta cadastrada." : "Nenhuma ferramenta com este filtro."}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {listaFiltrada.map(f => {
             const st = STATUS_CONFIG[f.status];
             return (
-              <div key={f.id} className="bg-card rounded-lg border p-4 flex items-start gap-4">
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">{f.nome}</span>
-                    {f.codigo && (
-                      <span className="font-mono text-xs border rounded px-1.5 py-0.5 text-muted-foreground">
-                        {f.codigo}
-                      </span>
-                    )}
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${st.class}`}>
-                      {st.label}
-                    </span>
-                  </div>
+              <div key={f.id} className="bg-card rounded-lg border p-3 flex flex-col gap-2 min-w-0">
+                {/* Topo: código + ações */}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-mono text-xs text-muted-foreground border rounded px-1.5 py-0.5 shrink-0">
+                    {f.codigo ?? "—"}
+                  </span>
+                  {papel === "gestor" && (
+                    <div className="flex items-center gap-0.5 ml-auto">
+                      <button
+                        onClick={() => abrirEdicao(f)}
+                        title="Editar"
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => excluir(f)}
+                        title="Excluir"
+                        className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Nome */}
+                <p className="font-semibold text-sm leading-tight line-clamp-2">{f.nome}</p>
+
+                {/* Rodapé: badge + localização */}
+                <div className="flex flex-col gap-1 mt-auto">
+                  <span className={`self-start inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${st.class}`}>
+                    {st.label}
+                  </span>
                   {f.localizacao && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                      <MapPin className="h-3 w-3 shrink-0" />
                       {f.localizacao}
                     </p>
                   )}
                 </div>
-                {papel === "gestor" && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => abrirEdicao(f)}
-                      title="Editar"
-                      className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => excluir(f)}
-                      title="Excluir"
-                      className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })}
