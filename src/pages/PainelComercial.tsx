@@ -321,7 +321,8 @@ export default function PainelComercial() {
         )
       ) : (
         /* ── Modo semanal: cards por dia ── */
-        <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+        <div className="flex gap-4 overflow-x-auto pt-2 -mx-1 px-1" style={{ direction: "rtl" }}>
+          {/* direction:rtl move a scrollbar para cima; cada filho reverte para ltr */}
           {diasSemana.map((dia) => {
             const ops = ordPorDia.get(dia) ?? [];
             const isHoje = dia === hj;
@@ -333,6 +334,7 @@ export default function PainelComercial() {
             return (
               <div
                 key={dia}
+                style={{ direction: "ltr" }}
                 className={`min-w-[220px] w-[220px] shrink-0 rounded-xl border shadow-sm flex flex-col ${
                   isHoje
                     ? 'border-primary/60 bg-primary/5'
