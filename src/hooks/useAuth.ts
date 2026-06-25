@@ -10,6 +10,7 @@ interface Perfil {
 
 export function useAuth() {
   const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,6 +18,8 @@ export function useAuth() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setLoading(false); return; }
+
+        setEmail(user.email ?? null);
 
         const { data, error } = await supabase
           .from('perfis')
@@ -38,6 +41,7 @@ export function useAuth() {
         fetchPerfil();
       } else {
         setPerfil(null);
+        setEmail(null);
         setLoading(false);
       }
     });
@@ -48,7 +52,8 @@ export function useAuth() {
   const logout = async () => {
     await supabase.auth.signOut();
     setPerfil(null);
+    setEmail(null);
   };
 
-  return { perfil, loading, logout };
+  return { perfil, email, loading, logout };
 }

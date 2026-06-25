@@ -145,7 +145,7 @@ const papelLabel: Record<string, string> = {
   comercial: 'Comercial',
 };
 
-function UserProfile({ nome, papel }: { nome: string; papel: string }) {
+function UserProfile({ nome, papel, email }: { nome: string; papel: string; email: string | null }) {
   const inicial = nome?.trim()[0]?.toUpperCase() ?? '?';
   const bg = avatarColor[papel] ?? '#6b7280';
   return (
@@ -158,14 +158,14 @@ function UserProfile({ nome, papel }: { nome: string; papel: string }) {
       </div>
       <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
         <span className="text-sm font-semibold text-foreground truncate leading-tight">{nome}</span>
-        <span className="text-xs text-muted-foreground leading-tight">{papelLabel[papel] ?? papel}</span>
+        <span className="text-xs text-muted-foreground truncate leading-tight">{email ?? papelLabel[papel] ?? papel}</span>
       </div>
     </div>
   );
 }
 
 export default function Index() {
-  const { perfil, loading, logout } = useAuth();
+  const { perfil, email, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabGestorId | null>(null);
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
   const [showWelcome, setShowWelcome] = useState(false);
@@ -359,7 +359,7 @@ export default function Index() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="border-t">
-            <UserProfile nome={perfil.nome} papel={perfil.papel} />
+            <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Sair" onClick={logout}>
@@ -432,7 +432,7 @@ export default function Index() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="border-t">
-            <UserProfile nome={perfil.nome} papel={perfil.papel} />
+            <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Sair" onClick={logout}>
@@ -602,7 +602,7 @@ export default function Index() {
         </SidebarContent>
 
         <SidebarFooter className="border-t">
-          <UserProfile nome={perfil.nome} papel={perfil.papel} />
+          <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Sair" onClick={logout}>
