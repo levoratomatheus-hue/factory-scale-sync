@@ -367,8 +367,14 @@ export default function Index() {
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
             <div className="flex items-center">
-              <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2.5 group-data-[collapsible=icon]:hidden hover:opacity-70 transition-opacity">
-                <span className="text-base font-light tracking-tight" style={{ color: "#6b7280" }}>Zan</span><span className="text-base font-black tracking-tight" style={{ color: "#111827" }}>Collor</span>
+              <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
+                <div className="leading-none font-black tracking-wide" style={{ fontSize: "1rem", letterSpacing: "0.04em" }}>
+                  <span style={{ color: "#1f2937" }}>ZAN </span>
+                  <span style={{ color: "#2563eb" }}>COLLOR</span>
+                </div>
+                <div className="mt-0.5 tracking-widest uppercase" style={{ fontSize: "0.55rem", color: "#9ca3af", letterSpacing: "0.25em" }}>
+                  masterbatches
+                </div>
               </button>
               <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:mx-auto">
                 <Home className="h-4 w-4" />

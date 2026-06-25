@@ -24,29 +24,27 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       <main className="relative z-10 flex flex-col items-center text-center px-6 gap-8">
 
         {/* Marca */}
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-3">
           <h1
-            className="leading-none tracking-tight select-none"
-            style={{ fontSize: "clamp(3.5rem, 12vw, 8rem)", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.03em" }}
+            className="leading-none select-none"
+            style={{ fontSize: "clamp(3.5rem, 12vw, 8rem)", fontWeight: 900, letterSpacing: "0.05em" }}
           >
-            <span style={{ fontWeight: 300, color: "#374151" }}>Zan</span>
-            <span style={{ fontWeight: 900, color: "#111827" }}>Collor</span>
+            <span style={{ color: "#1f2937" }}>ZAN </span>
+            <span style={{ color: "#2563eb" }}>COLLOR</span>
           </h1>
+          <p
+            className="tracking-[0.45em] uppercase"
+            style={{ fontSize: "clamp(0.65rem, 1.8vw, 0.9rem)", color: "#9ca3af", fontWeight: 400, letterSpacing: "0.45em" }}
+          >
+            masterbatches
+          </p>
         </div>
 
         {/* Divisor */}
         <div
-          className="w-12 h-px rounded-full"
-          style={{ background: "#d1d5db" }}
+          className="w-16 h-px rounded-full"
+          style={{ background: "#e5e7eb" }}
         />
-
-        {/* Subtítulo */}
-        <p
-          className="text-sm font-light tracking-[0.3em] uppercase"
-          style={{ color: "#6b7280" }}
-        >
-          Sistema de Gestão de Produção
-        </p>
 
         {/* Botão apenas na versão splash (não embutida) */}
         {!embedded && (
