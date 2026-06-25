@@ -202,7 +202,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }, [oss, tabAtiva, dataInicio, dataFim]);
 
   useEffect(() => {
-    if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida") return;
+    if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida" && tabAtiva !== "em_andamento") return;
     ossFiltradas.forEach(os => recarregarMovsOS(os.id));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabAtiva, ossFiltradas]);
@@ -311,11 +311,13 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       ]);
     }
 
+    const osId = andamentoOS.id;
     setSavingAndamento(false);
     toast({ title: "Andamento registrado!" });
     setAndamentoOS(null);
     setAndamentoObs("");
     setAndamentoPecas([]);
+    await recarregarMovsOS(osId);
   }
 
   async function abrirDialogSolucao(os: OS) {
@@ -697,6 +699,22 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   <div className="rounded-md bg-blue-50/50 border border-blue-100 px-3 py-2 text-sm">
                     <span className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">Andamento: </span>
                     {os.observacoes_andamento}
+                  </div>
+                )}
+
+                {/* Peças registradas — em_andamento (somente leitura) */}
+                {os.status === "em_andamento" && movsPorOS[os.id] !== undefined && movsPorOS[os.id].length > 0 && (
+                  <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <Package className="h-3 w-3" /> Peças registradas até agora
+                    </p>
+                    {movsPorOS[os.id].map(mov => (
+                      <div key={mov.id} className="flex items-center gap-2 text-sm">
+                        <span className="flex-1 text-foreground/80 truncate">{mov.nome}</span>
+                        <span className="tabular-nums text-xs font-medium">{mov.quantidade}</span>
+                        <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
 
