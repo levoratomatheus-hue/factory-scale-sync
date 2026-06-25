@@ -177,19 +177,6 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     };
   }, [fetchOss]);
 
-  useEffect(() => {
-    if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida") return;
-    ossFiltradas.forEach(async (os) => {
-      const { data } = await (supabase as any)
-        .from("estoque_movimentacoes")
-        .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
-        .eq("os_id", os.id)
-        .eq("tipo", "saida");
-      setMovsPorOS(prev => ({ ...prev, [os.id]: data ?? [] }));
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabAtiva, ossFiltradas]);
-
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     oss.forEach((o) => { c[o.status] = (c[o.status] ?? 0) + 1; });
@@ -207,6 +194,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       return true;
     });
   }, [oss, tabAtiva, dataInicio, dataFim]);
+
+  useEffect(() => {
+    if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida") return;
+    ossFiltradas.forEach(async (os) => {
+      const { data } = await (supabase as any)
+        .from("estoque_movimentacoes")
+        .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
+        .eq("os_id", os.id)
+        .eq("tipo", "saida");
+      setMovsPorOS(prev => ({ ...prev, [os.id]: data ?? [] }));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabAtiva, ossFiltradas]);
 
   async function salvarAguardarPeca() {
     if (!aguardarPecaOS) return;
