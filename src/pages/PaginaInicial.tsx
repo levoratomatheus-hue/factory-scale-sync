@@ -24,16 +24,15 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       <main className="relative z-10 flex flex-col items-center text-center px-6 gap-8">
 
         {/* Marca */}
-        <img
-          src="/logo.png"
-          alt="ZanCollor"
-          className="w-[380px] md:w-[620px] lg:w-[740px] max-w-[85vw]"
-          style={{
-            imageRendering: "-webkit-optimize-contrast",
-            filter: "brightness(0)",
-            transform: "translateZ(0)",
-          }}
-        />
+        <div className="flex flex-col items-center gap-1">
+          <h1
+            className="leading-none tracking-tight select-none"
+            style={{ fontSize: "clamp(3.5rem, 12vw, 8rem)", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.03em" }}
+          >
+            <span style={{ fontWeight: 300, color: "#374151" }}>Zan</span>
+            <span style={{ fontWeight: 900, color: "#111827" }}>Collor</span>
+          </h1>
+        </div>
 
         {/* Divisor */}
         <div

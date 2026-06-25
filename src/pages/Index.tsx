@@ -367,8 +367,10 @@ export default function Index() {
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
             <div className="flex items-center">
-              <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", flex: 1, minWidth: 0, maxHeight: "72px", objectFit: "contain", padding: "6px 12px" }} />
-              <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+              <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2.5 group-data-[collapsible=icon]:hidden hover:opacity-70 transition-opacity">
+                <span className="text-base font-light tracking-tight" style={{ color: "#6b7280" }}>Zan</span><span className="text-base font-black tracking-tight" style={{ color: "#111827" }}>Collor</span>
+              </button>
+              <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:mx-auto">
                 <Home className="h-4 w-4" />
               </button>
             </div>
