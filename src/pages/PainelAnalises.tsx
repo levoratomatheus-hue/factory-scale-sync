@@ -635,7 +635,7 @@ export default function PainelAnalises() {
                   padding: "0.375rem 0.75rem",
                   fontSize: "0.875rem",
                   outline: "none",
-                  colorScheme: "dark",
+                  colorScheme: "light",
                 }}
               />
             </div>
