@@ -27,7 +27,7 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
         <div className="flex flex-col items-center gap-3">
           <h1
             className="leading-none select-none tracking-tight"
-            style={{ fontSize: "3.75rem", fontWeight: 800, fontFamily: "Syne, sans-serif", letterSpacing: "-0.02em" }}
+            style={{ fontSize: "4rem", fontFamily: "Bebas Neue, sans-serif", letterSpacing: "0.04em" }}
           >
             <span style={{ color: "#1f2937" }}>ZAN COLLOR</span>
           </h1>

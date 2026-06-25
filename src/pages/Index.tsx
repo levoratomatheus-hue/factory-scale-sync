@@ -368,9 +368,8 @@ export default function Index() {
           <SidebarHeader className="border-b">
             <div className="flex items-center">
               <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
-                <div className="leading-none font-black tracking-wide" style={{ fontSize: "1rem", letterSpacing: "0.04em" }}>
-                  <span style={{ color: "#1f2937" }}>ZAN </span>
-                  <span style={{ color: "#1f2937" }}>COLLOR</span>
+                <div className="leading-none" style={{ fontSize: "1.4rem", fontFamily: "Bebas Neue, sans-serif", letterSpacing: "0.06em", color: "#1f2937" }}>
+                  ZAN COLLOR
                 </div>
                 <div className="mt-0.5 tracking-widest uppercase" style={{ fontSize: "0.55rem", color: "#9ca3af", letterSpacing: "0.25em" }}>
                   masterbatches
@@ -435,8 +434,8 @@ export default function Index() {
         <SidebarHeader className="border-b">
           <div className="flex items-center">
             <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
-              <div className="leading-none font-black tracking-wide" style={{ fontSize: "1rem", letterSpacing: "0.04em" }}>
-                <span style={{ color: "#1f2937" }}>ZAN COLLOR</span>
+              <div className="leading-none" style={{ fontSize: "1.4rem", fontFamily: "Bebas Neue, sans-serif", letterSpacing: "0.06em", color: "#1f2937" }}>
+                ZAN COLLOR
               </div>
               <div className="mt-0.5 tracking-widest uppercase" style={{ fontSize: "0.55rem", color: "#9ca3af", letterSpacing: "0.25em" }}>
                 masterbatches
