@@ -72,14 +72,14 @@ export default function FerramentasManutencao({ papel }: Props) {
     const { data } = await (supabase as any)
       .from("ferramentas_manutencao")
       .select("codigo")
-      .like("codigo", "FER%")
+      .like("codigo", "FER-%")
       .order("codigo", { ascending: false })
       .limit(1);
     if (data && data.length > 0 && data[0].codigo) {
-      const num = parseInt(data[0].codigo.replace("FER", ""), 10);
-      return `FER${String(isNaN(num) ? 1 : num + 1).padStart(4, "0")}`;
+      const num = parseInt(data[0].codigo.replace("FER-", ""), 10);
+      return `FER-${String(isNaN(num) ? 1 : num + 1).padStart(4, "0")}`;
     }
-    return "FER0001";
+    return "FER-0001";
   }
 
   async function abrirCadastro() {
