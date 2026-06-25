@@ -63,7 +63,7 @@ interface OS {
   tecnico_nome: string | null;
   solucao_aplicada: string | null;
   peca_aguardada: string | null;
-  previsao_peca: string | null;
+  peca_previsao: string | null;
   aberta_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
@@ -217,7 +217,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     const { error } = await (supabase as any).from("ordens_servico").update({
       status: "aguardando_peca",
       peca_aguardada: pecaText.trim(),
-      previsao_peca: previsaoText || null,
+      peca_previsao: previsaoText || null,
     }).eq("id", aguardarPecaOS.id);
     setSavingPeca(false);
     if (error) toast({ title: "Erro ao registrar peça", description: error.message, variant: "destructive" });
@@ -233,7 +233,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     const { error } = await (supabase as any).from("ordens_servico").update({
       status: "em_andamento",
       peca_aguardada: null,
-      previsao_peca: null,
+      peca_previsao: null,
     }).eq("id", os.id);
     if (error) toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" });
     else toast({ title: "Peça registrada — OS voltou para Em Andamento" });
@@ -716,9 +716,9 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     <div>
                       <span className="font-semibold text-yellow-700">Aguardando peça: </span>
                       <span className="text-yellow-800">{os.peca_aguardada}</span>
-                      {os.previsao_peca && (
+                      {os.peca_previsao && (
                         <span className="ml-2 text-yellow-600 text-xs">
-                          · Previsão: {format(new Date(os.previsao_peca + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                          · Previsão: {format(new Date(os.peca_previsao + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
                         </span>
                       )}
                     </div>
@@ -859,7 +859,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       size="sm"
                       variant="outline"
                       className="gap-1.5 h-7 text-xs text-yellow-700 border-yellow-300 hover:bg-yellow-50"
-                      onClick={() => { setAguardarPecaOS(os); setPecaText(os.peca_aguardada ?? ""); setPrevisaoText(os.previsao_peca ?? ""); }}
+                      onClick={() => { setAguardarPecaOS(os); setPecaText(os.peca_aguardada ?? ""); setPrevisaoText(os.peca_previsao ?? ""); }}
                     >
                       <Package className="h-3 w-3" />
                       Aguardar Peça
