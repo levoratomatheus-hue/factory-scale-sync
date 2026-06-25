@@ -130,7 +130,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const [movsPorOS, setMovsPorOS] = useState<Record<string, { id: string; item_id: string; quantidade: number; estoque_manutencao: { nome: string; unidade: string } | null }[]>>({});
+  const [movsPorOS, setMovsPorOS] = useState<Record<string, { id: string; item_id: string; quantidade: number; nome: string; unidade: string }[]>>({});
   const [qtdEditadas, setQtdEditadas] = useState<Record<string, string>>({});
   const [savingMovIds, setSavingMovIds] = useState<Record<string, boolean>>({});
 
@@ -196,14 +196,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   useEffect(() => {
     if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida") return;
-    ossFiltradas.forEach(async (os) => {
-      const { data } = await (supabase as any)
-        .from("estoque_movimentacoes")
-        .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
-        .eq("os_id", os.id)
-        .eq("tipo", "saida");
-      setMovsPorOS(prev => ({ ...prev, [os.id]: data ?? [] }));
-    });
+    ossFiltradas.forEach(os => recarregarMovsOS(os.id));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabAtiva, ossFiltradas]);
 
@@ -366,11 +359,35 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }
 
   async function recarregarMovsOS(osId: string) {
-    const { data } = await (supabase as any)
+    const { data: movData } = await (supabase as any)
       .from("estoque_movimentacoes")
-      .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
-      .eq("os_id", osId).eq("tipo", "saida");
-    setMovsPorOS(prev => ({ ...prev, [osId]: data ?? [] }));
+      .select("id, item_id, quantidade")
+      .eq("os_id", osId)
+      .eq("tipo", "saida");
+
+    if (!movData || movData.length === 0) {
+      setMovsPorOS(prev => ({ ...prev, [osId]: [] }));
+      return;
+    }
+
+    const itemIds = [...new Set(movData.map((m: any) => m.item_id))];
+    const { data: estoqueData } = await (supabase as any)
+      .from("estoque_manutencao")
+      .select("id, nome, unidade")
+      .in("id", itemIds);
+
+    const itemMap: Record<string, { nome: string; unidade: string }> = {};
+    (estoqueData ?? []).forEach((i: any) => { itemMap[i.id] = { nome: i.nome, unidade: i.unidade }; });
+
+    const movs = movData.map((m: any) => ({
+      id: m.id,
+      item_id: m.item_id,
+      quantidade: m.quantidade,
+      nome: itemMap[m.item_id]?.nome ?? "—",
+      unidade: itemMap[m.item_id]?.unidade ?? "",
+    }));
+
+    setMovsPorOS(prev => ({ ...prev, [osId]: movs }));
   }
 
   async function salvarQtdMov(mov: { id: string; item_id: string; quantidade: number }, osId: string) {
@@ -608,7 +625,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                         return (
                           <div key={mov.id} className="flex items-center gap-2 text-sm">
                             <span className="flex-1 text-foreground/80 min-w-0 truncate">
-                              {mov.estoque_manutencao?.nome ?? mov.item_id}
+                              {mov.nome}
                             </span>
                             <input
                               type="number" min="0.01" step="0.01"
@@ -616,7 +633,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                               onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
                               className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                             />
-                            <span className="text-xs text-muted-foreground w-6 shrink-0">{mov.estoque_manutencao?.unidade}</span>
+                            <span className="text-xs text-muted-foreground w-6 shrink-0">{mov.unidade}</span>
                             {alterada && (
                               <button
                                 onClick={() => salvarQtdMov(mov, os.id)}
