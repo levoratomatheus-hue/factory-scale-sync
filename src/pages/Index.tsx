@@ -409,12 +409,9 @@ export default function Index() {
           <SidebarHeader className="border-b">
             <div className="flex items-center">
               <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
-                <div className="leading-none" style={{ fontSize: "1.4rem", fontFamily: "Bebas Neue, sans-serif", letterSpacing: "0.06em", color: "#1f2937" }}>
-                  ZAN COLLOR
-                </div>
-                <div className="mt-0.5 tracking-widest uppercase" style={{ fontSize: "0.55rem", color: "#9ca3af", letterSpacing: "0.25em" }}>
-                  masterbatches
-                </div>
+                <span className="text-sm font-semibold tracking-wide text-gray-600 dark:text-gray-400">
+                  Gestão Industrial
+                </span>
               </button>
               <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:mx-auto">
                 <Home className="h-4 w-4" />
