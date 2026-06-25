@@ -30,7 +30,7 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
             style={{ fontSize: "clamp(3.5rem, 12vw, 8rem)", fontWeight: 900, letterSpacing: "0.05em" }}
           >
             <span style={{ color: "#1f2937" }}>ZAN </span>
-            <span style={{ color: "#2563eb" }}>COLLOR</span>
+            <span style={{ color: "#1f2937" }}>COLLOR</span>
           </h1>
           <p
             className="tracking-[0.45em] uppercase"
