@@ -106,7 +106,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [solucao_aplicadaDialogOS, setSolucaoDialogOS] = useState<OS | null>(null);
   const [solucao_aplicadaText, setSolucaoText] = useState("");
   const [savingSolucao, setSavingSolucao] = useState(false);
-  const [estoqueItems, setEstoqueItems] = useState<{ id: string; nome: string; unidade: string; quantidade_atual: number }[]>([]);
+  const [estoqueItems, setEstoqueItems] = useState<{ id: string; nome: string; unidade: string; quantidade: number }[]>([]);
   const [pecasUtilizadas, setPecasUtilizadas] = useState<{ item_id: string; nome: string; unidade: string; quantidade: string }[]>([]);
 
   const [confirmarConclusaoOS, setConfirmarConclusaoOS] = useState<OS | null>(null);
@@ -223,7 +223,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setPecasUtilizadas([]);
     const { data } = await (supabase as any)
       .from("estoque_manutencao")
-      .select("id, nome, unidade, quantidade_atual")
+      .select("id, nome, unidade, quantidade")
       .order("nome", { ascending: true });
     setEstoqueItems(data ?? []);
   }
@@ -279,7 +279,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           criado_por: perfilNome,
         }),
         (supabase as any).from("estoque_manutencao")
-          .update({ quantidade_atual: Math.max(0, item.quantidade_atual - qtd) })
+          .update({ quantidade: Math.max(0, item.quantidade - qtd) })
           .eq("id", peca.item_id),
       ]);
     }
@@ -631,7 +631,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   >
                     <option value="">Selecione...</option>
                     {estoqueItems.map(i => (
-                      <option key={i.id} value={i.id}>{i.nome} ({i.quantidade_atual} {i.unidade})</option>
+                      <option key={i.id} value={i.id}>{i.nome} ({i.quantidade} {i.unidade})</option>
                     ))}
                   </select>
                   <Input
