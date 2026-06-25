@@ -132,6 +132,38 @@ function resolveLinhaNumber(balanca: string | null): number | null {
 const WELCOME_SESSION_KEY = 'zc_welcome_shown';
 const WELCOME_ROLES = ['gestor', 'tecnico', 'comercial'];
 
+const avatarColor: Record<string, string> = {
+  gestor:    '#2563eb',
+  operador:  '#16a34a',
+  tecnico:   '#ea580c',
+  comercial: '#7c3aed',
+};
+const papelLabel: Record<string, string> = {
+  gestor:    'Gestor',
+  operador:  'Operador',
+  tecnico:   'Técnico',
+  comercial: 'Comercial',
+};
+
+function UserProfile({ nome, papel }: { nome: string; papel: string }) {
+  const inicial = nome?.trim()[0]?.toUpperCase() ?? '?';
+  const bg = avatarColor[papel] ?? '#6b7280';
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+      <div
+        className="shrink-0 flex items-center justify-center rounded-full text-white font-bold text-sm"
+        style={{ width: 32, height: 32, background: bg, fontFamily: 'Bebas Neue, sans-serif', fontSize: '1rem', letterSpacing: '0.05em' }}
+      >
+        {inicial}
+      </div>
+      <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
+        <span className="text-sm font-semibold text-foreground truncate leading-tight">{nome}</span>
+        <span className="text-xs text-muted-foreground leading-tight">{papelLabel[papel] ?? papel}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Index() {
   const { perfil, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabGestorId | null>(null);
@@ -327,6 +359,7 @@ export default function Index() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="border-t">
+            <UserProfile nome={perfil.nome} papel={perfil.papel} />
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Sair" onClick={logout}>
@@ -399,6 +432,7 @@ export default function Index() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="border-t">
+            <UserProfile nome={perfil.nome} papel={perfil.papel} />
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Sair" onClick={logout}>
@@ -568,6 +602,7 @@ export default function Index() {
         </SidebarContent>
 
         <SidebarFooter className="border-t">
+          <UserProfile nome={perfil.nome} papel={perfil.papel} />
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Sair" onClick={logout}>
