@@ -296,12 +296,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       const item = estoqueItems.find(i => i.id === peca.item_id);
       if (!item) continue;
       await Promise.all([
-        (supabase as any).from("estoque_movimentacoes").insert({
+        (supabase as any).from("movimentacoes_estoque").insert({
           item_id: peca.item_id,
           tipo: "saida",
           quantidade: qtd,
           motivo: `OS: ${solucao_aplicadaDialogOS.descricao_problema}`,
-          os_id: solucao_aplicadaDialogOS.id,
+          ordem_servico_id: solucao_aplicadaDialogOS.id,
           criado_por: perfilNome,
         }),
         (supabase as any).from("estoque_manutencao")
@@ -359,11 +359,17 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }
 
   async function recarregarMovsOS(osId: string) {
-    const { data: movData } = await (supabase as any)
-      .from("estoque_movimentacoes")
+    const { data: movData, error } = await (supabase as any)
+      .from("movimentacoes_estoque")
       .select("id, item_id, quantidade")
-      .eq("os_id", osId)
+      .eq("ordem_servico_id", osId)
       .eq("tipo", "saida");
+
+    if (error) {
+      console.error("[recarregarMovsOS] erro:", error.message);
+      setMovsPorOS(prev => ({ ...prev, [osId]: [] }));
+      return;
+    }
 
     if (!movData || movData.length === 0) {
       setMovsPorOS(prev => ({ ...prev, [osId]: [] }));
@@ -408,7 +414,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     const novaQtdEstoque = Math.max(0, estoqueData.quantidade + mov.quantidade - novaQtd);
 
     const [movErr, estoqueErr] = await Promise.all([
-      (supabase as any).from("estoque_movimentacoes").update({ quantidade: novaQtd }).eq("id", mov.id).then((r: any) => r.error),
+      (supabase as any).from("movimentacoes_estoque").update({ quantidade: novaQtd }).eq("id", mov.id).then((r: any) => r.error),
       (supabase as any).from("estoque_manutencao").update({ quantidade: novaQtdEstoque }).eq("id", mov.item_id).then((r: any) => r.error),
     ]);
 
@@ -430,7 +436,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     const qtdRestaurada = estoqueData ? estoqueData.quantidade + mov.quantidade : null;
 
     const ops: Promise<any>[] = [
-      (supabase as any).from("estoque_movimentacoes").delete().eq("id", mov.id),
+      (supabase as any).from("movimentacoes_estoque").delete().eq("id", mov.id),
     ];
     if (qtdRestaurada !== null) {
       ops.push((supabase as any).from("estoque_manutencao").update({ quantidade: qtdRestaurada }).eq("id", mov.item_id));
@@ -609,24 +615,24 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   </div>
                 )}
 
-                {/* Peças utilizadas — visível em aguardando_aprovacao e concluida */}
-                {(os.status === "aguardando_aprovacao" || os.status === "concluida") && (() => {
-                  const movs = movsPorOS[os.id] ?? [];
-                  if (movs.length === 0) return null;
-                  return (
-                    <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                        <Package className="h-3 w-3" /> Peças utilizadas
-                      </p>
-                      {movs.map(mov => {
+                {/* Peças utilizadas — aguardando_aprovacao e concluida */}
+                {(os.status === "aguardando_aprovacao" || os.status === "concluida") && (
+                  <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <Package className="h-3 w-3" /> Peças utilizadas
+                    </p>
+                    {(movsPorOS[os.id] === undefined) ? (
+                      <p className="text-xs text-muted-foreground">Carregando...</p>
+                    ) : (movsPorOS[os.id].length === 0) ? (
+                      <p className="text-xs text-muted-foreground">Nenhuma peça registrada</p>
+                    ) : (
+                      movsPorOS[os.id].map(mov => {
                         const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
                         const alterada = qtdAtual !== String(mov.quantidade);
                         const salvando = savingMovIds[mov.id] ?? false;
                         return (
                           <div key={mov.id} className="flex items-center gap-2 text-sm">
-                            <span className="flex-1 text-foreground/80 min-w-0 truncate">
-                              {mov.nome}
-                            </span>
+                            <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
                             <input
                               type="number" min="0.01" step="0.01"
                               value={qtdAtual}
@@ -654,10 +660,10 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                             </button>
                           </div>
                         );
-                      })}
-                    </div>
-                  );
-                })()}
+                      })
+                    )}
+                  </div>
+                )}
 
                 {/* Metadados */}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
