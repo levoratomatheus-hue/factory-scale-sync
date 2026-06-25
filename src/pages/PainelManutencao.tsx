@@ -610,39 +610,31 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                             <span className="flex-1 text-foreground/80 min-w-0 truncate">
                               {mov.estoque_manutencao?.nome ?? mov.item_id}
                             </span>
-                            {(papel === "gestor" || papel === "tecnico") ? (
-                              <>
-                                <input
-                                  type="number" min="0.01" step="0.01"
-                                  value={qtdAtual}
-                                  onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
-                                  className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                                />
-                                <span className="text-xs text-muted-foreground w-6 shrink-0">{mov.estoque_manutencao?.unidade}</span>
-                                {alterada && (
-                                  <button
-                                    onClick={() => salvarQtdMov(mov, os.id)}
-                                    disabled={salvando}
-                                    title="Salvar"
-                                    className="p-1 rounded text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
-                                  >
-                                    {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => removerMovimentacao(mov, os.id)}
-                                  disabled={salvando}
-                                  title="Remover peça"
-                                  className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </>
-                            ) : (
-                              <span className="font-mono tabular-nums text-xs">
-                                {mov.quantidade} {mov.estoque_manutencao?.unidade}
-                              </span>
+                            <input
+                              type="number" min="0.01" step="0.01"
+                              value={qtdAtual}
+                              onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
+                              className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
+                            <span className="text-xs text-muted-foreground w-6 shrink-0">{mov.estoque_manutencao?.unidade}</span>
+                            {alterada && (
+                              <button
+                                onClick={() => salvarQtdMov(mov, os.id)}
+                                disabled={salvando}
+                                title="Salvar"
+                                className="p-1 rounded text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                              >
+                                {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                              </button>
                             )}
+                            <button
+                              onClick={() => removerMovimentacao(mov, os.id)}
+                              disabled={salvando}
+                              title="Remover peça"
+                              className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
                           </div>
                         );
                       })}
