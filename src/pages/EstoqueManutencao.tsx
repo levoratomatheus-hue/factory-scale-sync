@@ -124,7 +124,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       : modalMov.item.quantidade - qtd;
 
     const [movErr, updErr] = await Promise.all([
-      (supabase as any).from("estoque_movimentacoes").insert({
+      (supabase as any).from("movimentacoes_estoque").insert({
         item_id: modalMov.item.id,
         tipo: modalMov.tipo,
         quantidade: qtd,
@@ -149,7 +149,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     setModalHist(item);
     setLoadingHist(true);
     const { data } = await (supabase as any)
-      .from("estoque_movimentacoes")
+      .from("movimentacoes_estoque")
       .select("*")
       .eq("item_id", item.id)
       .order("criado_em", { ascending: false });
