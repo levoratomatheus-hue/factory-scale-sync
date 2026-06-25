@@ -705,23 +705,30 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
                   {/* Solução */}
                   {os.solucao_aplicada && (
-                    <div className="flex items-start gap-1.5 rounded-md bg-green-100/70 border border-green-200 px-2.5 py-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-green-600" />
-                      <span className="text-xs text-green-900">{os.solucao_aplicada}</span>
+                    <div className="rounded-md bg-green-100/70 border border-green-200 px-2.5 py-1.5 space-y-0.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Solução
+                      </p>
+                      <p className="text-xs text-green-900">{os.solucao_aplicada}</p>
                     </div>
                   )}
 
-                  {/* Peças — somente leitura, compacto */}
+                  {/* Peças utilizadas — somente leitura */}
                   {movs && movs.length > 0 && (
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5">
-                      {movs.map(mov => (
-                        <span key={mov.id} className="text-xs text-muted-foreground">
-                          {mov.nome}{" "}
-                          <span className="font-medium text-foreground tabular-nums">
-                            {mov.quantidade} {mov.unidade}
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                        <Package className="h-3 w-3" /> Peças Utilizadas
+                      </p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                        {movs.map(mov => (
+                          <span key={mov.id} className="text-xs text-muted-foreground">
+                            {mov.nome}{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {mov.quantidade} {mov.unidade}
+                            </span>
                           </span>
-                        </span>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
 
