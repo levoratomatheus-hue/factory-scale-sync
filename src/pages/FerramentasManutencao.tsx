@@ -23,6 +23,11 @@ interface Ferramenta {
   criado_em: string | null;
 }
 
+interface Localizacao {
+  id: string;
+  nome: string;
+}
+
 const STATUS_CONFIG: Record<StatusFerramenta, { label: string; class: string }> = {
   disponivel: { label: "Disponível",  class: "bg-green-100 text-green-700 border-green-200" },
   em_uso:     { label: "Em Uso",      class: "bg-blue-100 text-blue-700 border-blue-200" },
@@ -48,10 +53,16 @@ export default function FerramentasManutencao({ papel }: Props) {
   const [filtroStatus, setFiltroStatus] = useState<StatusFerramenta | "todos">("todos");
   const [filtroLocalizacao, setFiltroLocalizacao] = useState("");
 
+  const [localizacoes, setLocalizacoes] = useState<Localizacao[]>([]);
+
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Ferramenta | null>(null);
   const [form, setForm] = useState(FORM_VAZIO);
   const [saving, setSaving] = useState(false);
+
+  const [modalLocalAberto, setModalLocalAberto] = useState(false);
+  const [nomeLocal, setNomeLocal] = useState("");
+  const [savingLocal, setSavingLocal] = useState(false);
 
   const fetchFerramentas = useCallback(async () => {
     const { data, error } = await (supabase as any)
@@ -66,7 +77,18 @@ export default function FerramentasManutencao({ papel }: Props) {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchFerramentas(); }, [fetchFerramentas]);
+  const fetchLocalizacoes = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("localizacoes_ferramentas")
+      .select("id, nome")
+      .order("nome", { ascending: true });
+    setLocalizacoes(data ?? []);
+  }, []);
+
+  useEffect(() => {
+    fetchFerramentas();
+    fetchLocalizacoes();
+  }, [fetchFerramentas, fetchLocalizacoes]);
 
   async function gerarProximoCodigo(): Promise<string> {
     const { data } = await (supabase as any)
@@ -109,7 +131,7 @@ export default function FerramentasManutencao({ papel }: Props) {
     const payload = {
       nome: form.nome.trim(),
       codigo: form.codigo.trim() || null,
-      localizacao: form.localizacao.trim() || null,
+      localizacao: form.localizacao || null,
       status: form.status,
     };
 
@@ -144,9 +166,21 @@ export default function FerramentasManutencao({ papel }: Props) {
     else { toast({ title: "Ferramenta excluída" }); fetchFerramentas(); }
   }
 
-  const localizacoesDisponiveis = Array.from(
-    new Set(ferramentas.map(f => f.localizacao).filter(Boolean) as string[])
-  ).sort();
+  async function salvarLocalizacao() {
+    if (!nomeLocal.trim()) {
+      toast({ title: "Informe o nome da localização", variant: "destructive" }); return;
+    }
+    setSavingLocal(true);
+    const { error } = await (supabase as any)
+      .from("localizacoes_ferramentas")
+      .insert({ nome: nomeLocal.trim() });
+    setSavingLocal(false);
+    if (error) { toast({ title: "Erro ao cadastrar localização", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Localização cadastrada!" });
+    setModalLocalAberto(false);
+    setNomeLocal("");
+    fetchLocalizacoes();
+  }
 
   const listaFiltrada = ferramentas.filter(f => {
     if (filtroStatus !== "todos" && f.status !== filtroStatus) return false;
@@ -166,10 +200,16 @@ export default function FerramentasManutencao({ papel }: Props) {
           </div>
         </div>
         {papel === "gestor" && (
-          <Button onClick={abrirCadastro} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Ferramenta
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => { setNomeLocal(""); setModalLocalAberto(true); }} className="gap-2">
+              <MapPin className="h-4 w-4" />
+              + Localização
+            </Button>
+            <Button onClick={abrirCadastro} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Ferramenta
+            </Button>
+          </div>
         )}
       </div>
 
@@ -182,8 +222,8 @@ export default function FerramentasManutencao({ papel }: Props) {
           className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">Todas as localizações</option>
-          {localizacoesDisponiveis.map(loc => (
-            <option key={loc} value={loc}>{loc}</option>
+          {localizacoes.map(loc => (
+            <option key={loc.id} value={loc.nome}>{loc.nome}</option>
           ))}
         </select>
       </div>
@@ -219,7 +259,7 @@ export default function FerramentasManutencao({ papel }: Props) {
         </div>
       ) : listaFiltrada.length === 0 ? (
         <div className="rounded-lg border bg-card py-12 text-center text-muted-foreground">
-          {ferramentas.length === 0 ? "Nenhuma ferramenta cadastrada." : "Nenhuma ferramenta com este status."}
+          {ferramentas.length === 0 ? "Nenhuma ferramenta cadastrada." : "Nenhuma ferramenta com este filtro."}
         </div>
       ) : (
         <div className="space-y-2">
@@ -270,7 +310,7 @@ export default function FerramentasManutencao({ papel }: Props) {
         </div>
       )}
 
-      {/* Modal cadastro / edição */}
+      {/* Modal: cadastro / edição de ferramenta */}
       <Dialog open={modalAberto} onOpenChange={(o) => { if (!o) fecharModal(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -299,11 +339,19 @@ export default function FerramentasManutencao({ papel }: Props) {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Localização</label>
-              <Input
+              <select
                 value={form.localizacao}
                 onChange={(e) => setForm(f => ({ ...f, localizacao: e.target.value }))}
-                placeholder="Ex: Caixa A - Prateleira 2"
-              />
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Selecione a localização...</option>
+                {localizacoes.map(loc => (
+                  <option key={loc.id} value={loc.nome}>{loc.nome}</option>
+                ))}
+              </select>
+              {localizacoes.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhuma localização cadastrada. Use "+ Localização" no topo.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Status</label>
@@ -333,6 +381,34 @@ export default function FerramentasManutencao({ papel }: Props) {
             <Button onClick={salvar} disabled={saving} className="gap-2">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {editando ? "Salvar" : "Cadastrar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: nova localização */}
+      <Dialog open={modalLocalAberto} onOpenChange={(o) => { if (!o) { setModalLocalAberto(false); setNomeLocal(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova Localização</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nome *</label>
+              <Input
+                value={nomeLocal}
+                onChange={(e) => setNomeLocal(e.target.value)}
+                placeholder="Ex: Caixa A - Prateleira 2"
+                onKeyDown={(e) => { if (e.key === "Enter") salvarLocalizacao(); }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setModalLocalAberto(false); setNomeLocal(""); }}>Cancelar</Button>
+            <Button onClick={salvarLocalizacao} disabled={savingLocal} className="gap-2">
+              {savingLocal && <Loader2 className="h-4 w-4 animate-spin" />}
+              Cadastrar
             </Button>
           </DialogFooter>
         </DialogContent>
