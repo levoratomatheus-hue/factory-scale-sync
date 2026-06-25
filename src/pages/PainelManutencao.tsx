@@ -130,6 +130,11 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const [movsPorOS, setMovsPorOS] = useState<Record<string, { id: string; item_id: string; quantidade: number; estoque_manutencao: { nome: string; unidade: string } | null }[]>>({});
+  const [editPeca, setEditPeca] = useState<{ id: string; item_id: string; quantidade: number; nome: string; unidade: string; os_id: string } | null>(null);
+  const [editPecaNovaQtd, setEditPecaNovaQtd] = useState("");
+  const [savingEditPeca, setSavingEditPeca] = useState(false);
+
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
   const [dataFim, setDataFim] = useState(mesAtual.fim);
@@ -171,6 +176,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       supabase.removeChannel(channel);
     };
   }, [fetchOss]);
+
+  useEffect(() => {
+    if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida") return;
+    ossFiltradas.forEach(async (os) => {
+      const { data } = await (supabase as any)
+        .from("estoque_movimentacoes")
+        .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
+        .eq("os_id", os.id)
+        .eq("tipo", "saida");
+      setMovsPorOS(prev => ({ ...prev, [os.id]: data ?? [] }));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabAtiva, ossFiltradas]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -348,6 +366,45 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     else { toast({ title: "OS excluída" }); fetchOss(); }
   }
 
+  async function salvarEditPeca() {
+    if (!editPeca) return;
+    const novaQtd = parseFloat(editPecaNovaQtd);
+    if (!novaQtd || novaQtd <= 0) {
+      toast({ title: "Quantidade inválida", variant: "destructive" }); return;
+    }
+    setSavingEditPeca(true);
+
+    const { data: estoqueData } = await (supabase as any)
+      .from("estoque_manutencao").select("quantidade").eq("id", editPeca.item_id).single();
+
+    if (!estoqueData) {
+      setSavingEditPeca(false);
+      toast({ title: "Item não encontrado no estoque", variant: "destructive" }); return;
+    }
+
+    // Desfaz saída antiga e aplica nova
+    const novaQtdEstoque = Math.max(0, estoqueData.quantidade + editPeca.quantidade - novaQtd);
+
+    const [movErr, estoqueErr] = await Promise.all([
+      (supabase as any).from("estoque_movimentacoes").update({ quantidade: novaQtd }).eq("id", editPeca.id).then((r: any) => r.error),
+      (supabase as any).from("estoque_manutencao").update({ quantidade: novaQtdEstoque }).eq("id", editPeca.item_id).then((r: any) => r.error),
+    ]);
+
+    setSavingEditPeca(false);
+    if (movErr || estoqueErr) {
+      toast({ title: "Erro ao salvar", variant: "destructive" }); return;
+    }
+
+    toast({ title: "Quantidade atualizada!" });
+    // Recarrega movs desta OS
+    const { data } = await (supabase as any)
+      .from("estoque_movimentacoes")
+      .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
+      .eq("os_id", editPeca.os_id).eq("tipo", "saida");
+    setMovsPorOS(prev => ({ ...prev, [editPeca.os_id]: data ?? [] }));
+    setEditPeca(null);
+  }
+
   async function concluirOS(os: OS) {
     setSavingConclusao(true);
     const { error } = await (supabase as any).from("ordens_servico").update({
@@ -514,6 +571,41 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     {os.solucao_aplicada}
                   </div>
                 )}
+
+                {/* Peças utilizadas — visível em aguardando_aprovacao e concluida */}
+                {(os.status === "aguardando_aprovacao" || os.status === "concluida") && (() => {
+                  const movs = movsPorOS[os.id] ?? [];
+                  if (movs.length === 0) return null;
+                  return (
+                    <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-1.5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        <Package className="h-3 w-3" /> Peças utilizadas
+                      </p>
+                      {movs.map(mov => (
+                        <div key={mov.id} className="flex items-center justify-between text-sm">
+                          <span className="text-foreground/80">{mov.estoque_manutencao?.nome ?? mov.item_id}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono tabular-nums text-xs">
+                              {mov.quantidade} {mov.estoque_manutencao?.unidade}
+                            </span>
+                            {papel === "gestor" && (
+                              <button
+                                title="Editar quantidade"
+                                onClick={() => {
+                                  setEditPeca({ id: mov.id, item_id: mov.item_id, quantidade: mov.quantidade, nome: mov.estoque_manutencao?.nome ?? "", unidade: mov.estoque_manutencao?.unidade ?? "", os_id: os.id });
+                                  setEditPecaNovaQtd(String(mov.quantidade));
+                                }}
+                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Metadados */}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -810,6 +902,39 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             <Button variant="outline" onClick={() => setEditOS(null)}>Cancelar</Button>
             <Button onClick={salvarEdicao} disabled={savingEdit}>
               {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Editar quantidade de peça */}
+      <Dialog open={!!editPeca} onOpenChange={(o) => { if (!o) setEditPeca(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar quantidade — {editPeca?.nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Quantidade registrada: <span className="font-semibold">{editPeca?.quantidade} {editPeca?.unidade}</span>
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nova quantidade *</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number" min="0.01" step="0.01"
+                  value={editPecaNovaQtd}
+                  onChange={(e) => setEditPecaNovaQtd(e.target.value)}
+                  className="flex-1"
+                />
+                <span className="text-sm text-muted-foreground shrink-0">{editPeca?.unidade}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPeca(null)}>Cancelar</Button>
+            <Button onClick={salvarEditPeca} disabled={savingEditPeca}>
+              {savingEditPeca && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar
             </Button>
           </DialogFooter>
