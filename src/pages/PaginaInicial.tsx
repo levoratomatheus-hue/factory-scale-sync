@@ -15,19 +15,10 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
     <div
       className={`${embedded ? "flex-1 h-full" : "min-h-screen"} flex flex-col items-center justify-center relative overflow-hidden select-none transition-opacity duration-500`}
       style={{
-        background: "hsl(220, 22%, 7%)",
+        background: "#ffffff",
         opacity: fading ? 0 : 1,
       }}
     >
-      {/* Glow de fundo */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 50% at 50% 38%, hsl(220,65%,22%) 0%, transparent 70%)",
-          opacity: 0.45,
-        }}
-      />
 
       {/* Conteúdo central */}
       <main className="relative z-10 flex flex-col items-center text-center px-6 gap-8">
@@ -39,7 +30,7 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
           className="w-[380px] md:w-[620px] lg:w-[740px] max-w-[85vw]"
           style={{
             imageRendering: "-webkit-optimize-contrast",
-            filter: "invert(1) drop-shadow(0 0 32px hsl(220,60%,40%))",
+            filter: "brightness(0)",
             transform: "translateZ(0)",
           }}
         />
@@ -47,13 +38,13 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
         {/* Divisor */}
         <div
           className="w-12 h-px rounded-full"
-          style={{ background: "hsl(220, 25%, 28%)" }}
+          style={{ background: "#d1d5db" }}
         />
 
         {/* Subtítulo */}
         <p
           className="text-sm font-light tracking-[0.3em] uppercase"
-          style={{ color: "hsl(220, 10%, 45%)" }}
+          style={{ color: "#6b7280" }}
         >
           Sistema de Gestão de Produção
         </p>
@@ -93,7 +84,7 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       {/* Rodapé */}
       <footer
         className="absolute bottom-6 text-xs tracking-widest uppercase"
-        style={{ color: "hsl(220, 10%, 30%)" }}
+        style={{ color: "#9ca3af" }}
       >
         ZanCollor © 2026
       </footer>
