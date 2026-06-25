@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -20,7 +20,8 @@ const CadastroEquipamentos    = lazy(() => import('./CadastroEquipamentos'));
 const EstoqueManutencao       = lazy(() => import('./EstoqueManutencao'));
 const AbrirOS                 = lazy(() => import('./AbrirOS'));
 const PainelManutencao        = lazy(() => import('./PainelManutencao'));
-const PainelAnaliseManutencao = lazy(() => import('./PainelAnaliseManutencao'));
+const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao'));
+const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import PaginaInicial from './PaginaInicial';
@@ -49,7 +50,7 @@ type TabGestorId =
   | 'analises'
   | 'consulta_formula'
   | 'comercial'
-  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao';
+  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao';
 
 const gruposGestor = [
   {
@@ -114,11 +115,12 @@ const gruposGestor = [
 ] as const;
 
 const manutencaoItems = [
-  { id: 'painel_manutencao'     as TabGestorId, label: 'Painel de Manutenção',    icon: Wrench    },
-  { id: 'analise_manutencao'    as TabGestorId, label: 'Análise de Manutenção',   icon: BarChart2 },
-  { id: 'cadastro_equipamentos' as TabGestorId, label: 'Equipamentos',            icon: Settings  },
-  { id: 'abrir_os'              as TabGestorId, label: 'Abrir OS',                icon: PlusCircle },
-  { id: 'estoque_manutencao'    as TabGestorId, label: 'Estoque',                 icon: Package   },
+  { id: 'painel_manutencao'       as TabGestorId, label: 'Painel de Manutenção',    icon: Wrench    },
+  { id: 'analise_manutencao'      as TabGestorId, label: 'Análise de Manutenção',   icon: BarChart2 },
+  { id: 'cadastro_equipamentos'   as TabGestorId, label: 'Equipamentos',            icon: Settings  },
+  { id: 'abrir_os'                as TabGestorId, label: 'Abrir OS',                icon: PlusCircle },
+  { id: 'estoque_manutencao'      as TabGestorId, label: 'Estoque',                 icon: Package   },
+  { id: 'ferramentas_manutencao'  as TabGestorId, label: 'Ferramentas',             icon: Hammer    },
 ] as const;
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -309,6 +311,17 @@ export default function Index() {
                       <span>Abrir OS</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeTab === 'ferramentas_manutencao'}
+                      tooltip="Ferramentas"
+                      onClick={() => goToTab('ferramentas_manutencao')}
+                      size="sm"
+                    >
+                      <Hammer className="h-3.5 w-3.5 shrink-0" />
+                      <span>Ferramentas</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -328,7 +341,7 @@ export default function Index() {
           <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
             <SidebarTrigger />
             <span className="font-semibold text-sm">
-              {activeTab === 'abrir_os' ? 'Abrir OS' : 'Painel de Manutenção'}
+              {activeTab === 'abrir_os' ? 'Abrir OS' : activeTab === 'ferramentas_manutencao' ? 'Ferramentas' : 'Painel de Manutenção'}
             </span>
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
@@ -337,6 +350,8 @@ export default function Index() {
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
                 {activeTab === 'abrir_os'
                   ? <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
+                  : activeTab === 'ferramentas_manutencao'
+                  ? <FerramentasManutencao papel={perfil.papel} />
                   : <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
               </Suspense>
             </ErrorBoundary>
@@ -585,7 +600,8 @@ export default function Index() {
               {activeTab === 'analise_manutencao'  && <PainelAnaliseManutencao />}
               {activeTab === 'cadastro_equipamentos' && <CadastroEquipamentos />}
               {activeTab === 'abrir_os'            && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
-              {activeTab === 'estoque_manutencao'  && <EstoqueManutencao papel={perfil.papel} perfilNome={perfil.nome} />}
+              {activeTab === 'estoque_manutencao'      && <EstoqueManutencao papel={perfil.papel} perfilNome={perfil.nome} />}
+              {activeTab === 'ferramentas_manutencao' && <FerramentasManutencao papel={perfil.papel} />}
             </Suspense>
             </ErrorBoundary>
           </main>
