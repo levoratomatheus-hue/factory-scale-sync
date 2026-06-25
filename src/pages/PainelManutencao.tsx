@@ -411,7 +411,9 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       toast({ title: "Item não encontrado no estoque", variant: "destructive" }); return;
     }
 
-    const novaQtdEstoque = Math.max(0, estoqueData.quantidade + mov.quantidade - novaQtd);
+    // diferença: positiva = reduz estoque, negativa = devolve ao estoque
+    const diferenca = novaQtd - mov.quantidade;
+    const novaQtdEstoque = Math.max(0, estoqueData.quantidade - diferenca);
 
     const [movErr, estoqueErr] = await Promise.all([
       (supabase as any).from("movimentacoes_estoque").update({ quantidade: novaQtd }).eq("id", mov.id).then((r: any) => r.error),
@@ -628,7 +630,6 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     ) : (
                       movsPorOS[os.id].map(mov => {
                         const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
-                        const alterada = qtdAtual !== String(mov.quantidade);
                         const salvando = savingMovIds[mov.id] ?? false;
                         return (
                           <div key={mov.id} className="flex items-center gap-2 text-sm">
@@ -639,17 +640,15 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                               onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
                               className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                             />
-                            <span className="text-xs text-muted-foreground w-6 shrink-0">{mov.unidade}</span>
-                            {alterada && (
-                              <button
-                                onClick={() => salvarQtdMov(mov, os.id)}
-                                disabled={salvando}
-                                title="Salvar"
-                                className="p-1 rounded text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
-                              >
-                                {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                              </button>
-                            )}
+                            <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
+                            <button
+                              onClick={() => salvarQtdMov(mov, os.id)}
+                              disabled={salvando}
+                              title="Salvar"
+                              className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
+                            >
+                              {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
+                            </button>
                             <button
                               onClick={() => removerMovimentacao(mov, os.id)}
                               disabled={salvando}
