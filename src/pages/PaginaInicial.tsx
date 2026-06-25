@@ -26,11 +26,10 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
         {/* Marca */}
         <div className="flex flex-col items-center gap-3">
           <h1
-            className="leading-none select-none"
-            style={{ fontSize: "clamp(3.5rem, 12vw, 8rem)", fontWeight: 900, letterSpacing: "0.05em" }}
+            className="leading-none select-none tracking-tight"
+            style={{ fontSize: "3.75rem", fontWeight: 800, fontFamily: "Syne, sans-serif", letterSpacing: "-0.02em" }}
           >
-            <span style={{ color: "#1f2937" }}>ZAN </span>
-            <span style={{ color: "#1f2937" }}>COLLOR</span>
+            <span style={{ color: "#1f2937" }}>ZAN COLLOR</span>
           </h1>
           <p
             className="tracking-[0.45em] uppercase"
