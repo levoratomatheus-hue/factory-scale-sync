@@ -430,9 +430,41 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   async function deletarOS(os: OS) {
     if (!window.confirm(`Excluir a OS "${os.descricao_problema}"? Esta ação não pode ser desfeita.`)) return;
+
+    // 1. Busca movimentações de saída vinculadas a esta OS
+    const { data: movs } = await (supabase as any)
+      .from("movimentacoes_estoque")
+      .select("id, item_id, quantidade, tipo")
+      .eq("ordem_servico_id", os.id);
+
+    // 2. Devolve ao estoque cada saída
+    const saidas = (movs ?? []).filter((m: any) => m.tipo === "saida");
+    for (const m of saidas) {
+      const { data: estoqueData } = await (supabase as any)
+        .from("estoque_manutencao")
+        .select("quantidade")
+        .eq("id", m.item_id)
+        .single();
+      if (estoqueData) {
+        await (supabase as any)
+          .from("estoque_manutencao")
+          .update({ quantidade: estoqueData.quantidade + m.quantidade })
+          .eq("id", m.item_id);
+      }
+    }
+
+    // 3. Deleta todas as movimentações da OS
+    if ((movs ?? []).length > 0) {
+      await (supabase as any)
+        .from("movimentacoes_estoque")
+        .delete()
+        .eq("ordem_servico_id", os.id);
+    }
+
+    // 4. Deleta a OS
     const { error } = await (supabase as any).from("ordens_servico").delete().eq("id", os.id);
     if (error) toast({ title: "Erro ao excluir OS", description: error.message, variant: "destructive" });
-    else { toast({ title: "OS excluída" }); fetchOss(); }
+    else { toast({ title: "OS excluída e estoque restaurado" }); fetchOss(); }
   }
 
   async function recarregarMovsOS(osId: string) {
