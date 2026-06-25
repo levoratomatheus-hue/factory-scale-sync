@@ -131,9 +131,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [movsPorOS, setMovsPorOS] = useState<Record<string, { id: string; item_id: string; quantidade: number; estoque_manutencao: { nome: string; unidade: string } | null }[]>>({});
-  const [editPeca, setEditPeca] = useState<{ id: string; item_id: string; quantidade: number; nome: string; unidade: string; os_id: string } | null>(null);
-  const [editPecaNovaQtd, setEditPecaNovaQtd] = useState("");
-  const [savingEditPeca, setSavingEditPeca] = useState(false);
+  const [qtdEditadas, setQtdEditadas] = useState<Record<string, string>>({});
+  const [savingMovIds, setSavingMovIds] = useState<Record<string, boolean>>({});
 
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
@@ -366,43 +365,64 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     else { toast({ title: "OS excluída" }); fetchOss(); }
   }
 
-  async function salvarEditPeca() {
-    if (!editPeca) return;
-    const novaQtd = parseFloat(editPecaNovaQtd);
-    if (!novaQtd || novaQtd <= 0) {
-      toast({ title: "Quantidade inválida", variant: "destructive" }); return;
-    }
-    setSavingEditPeca(true);
-
-    const { data: estoqueData } = await (supabase as any)
-      .from("estoque_manutencao").select("quantidade").eq("id", editPeca.item_id).single();
-
-    if (!estoqueData) {
-      setSavingEditPeca(false);
-      toast({ title: "Item não encontrado no estoque", variant: "destructive" }); return;
-    }
-
-    // Desfaz saída antiga e aplica nova
-    const novaQtdEstoque = Math.max(0, estoqueData.quantidade + editPeca.quantidade - novaQtd);
-
-    const [movErr, estoqueErr] = await Promise.all([
-      (supabase as any).from("estoque_movimentacoes").update({ quantidade: novaQtd }).eq("id", editPeca.id).then((r: any) => r.error),
-      (supabase as any).from("estoque_manutencao").update({ quantidade: novaQtdEstoque }).eq("id", editPeca.item_id).then((r: any) => r.error),
-    ]);
-
-    setSavingEditPeca(false);
-    if (movErr || estoqueErr) {
-      toast({ title: "Erro ao salvar", variant: "destructive" }); return;
-    }
-
-    toast({ title: "Quantidade atualizada!" });
-    // Recarrega movs desta OS
+  async function recarregarMovsOS(osId: string) {
     const { data } = await (supabase as any)
       .from("estoque_movimentacoes")
       .select("id, item_id, quantidade, estoque_manutencao(nome, unidade)")
-      .eq("os_id", editPeca.os_id).eq("tipo", "saida");
-    setMovsPorOS(prev => ({ ...prev, [editPeca.os_id]: data ?? [] }));
-    setEditPeca(null);
+      .eq("os_id", osId).eq("tipo", "saida");
+    setMovsPorOS(prev => ({ ...prev, [osId]: data ?? [] }));
+  }
+
+  async function salvarQtdMov(mov: { id: string; item_id: string; quantidade: number }, osId: string) {
+    const novaQtd = parseFloat(qtdEditadas[mov.id] ?? String(mov.quantidade));
+    if (!novaQtd || novaQtd <= 0) {
+      toast({ title: "Quantidade inválida", variant: "destructive" }); return;
+    }
+    setSavingMovIds(prev => ({ ...prev, [mov.id]: true }));
+
+    const { data: estoqueData } = await (supabase as any)
+      .from("estoque_manutencao").select("quantidade").eq("id", mov.item_id).single();
+
+    if (!estoqueData) {
+      setSavingMovIds(prev => ({ ...prev, [mov.id]: false }));
+      toast({ title: "Item não encontrado no estoque", variant: "destructive" }); return;
+    }
+
+    const novaQtdEstoque = Math.max(0, estoqueData.quantidade + mov.quantidade - novaQtd);
+
+    const [movErr, estoqueErr] = await Promise.all([
+      (supabase as any).from("estoque_movimentacoes").update({ quantidade: novaQtd }).eq("id", mov.id).then((r: any) => r.error),
+      (supabase as any).from("estoque_manutencao").update({ quantidade: novaQtdEstoque }).eq("id", mov.item_id).then((r: any) => r.error),
+    ]);
+
+    setSavingMovIds(prev => ({ ...prev, [mov.id]: false }));
+    if (movErr || estoqueErr) { toast({ title: "Erro ao salvar", variant: "destructive" }); return; }
+
+    toast({ title: "Quantidade atualizada!" });
+    setQtdEditadas(prev => { const n = { ...prev }; delete n[mov.id]; return n; });
+    await recarregarMovsOS(osId);
+  }
+
+  async function removerMovimentacao(mov: { id: string; item_id: string; quantidade: number }, osId: string) {
+    if (!window.confirm("Remover esta peça da OS?")) return;
+    setSavingMovIds(prev => ({ ...prev, [mov.id]: true }));
+
+    const { data: estoqueData } = await (supabase as any)
+      .from("estoque_manutencao").select("quantidade").eq("id", mov.item_id).single();
+
+    const qtdRestaurada = estoqueData ? estoqueData.quantidade + mov.quantidade : null;
+
+    const ops: Promise<any>[] = [
+      (supabase as any).from("estoque_movimentacoes").delete().eq("id", mov.id),
+    ];
+    if (qtdRestaurada !== null) {
+      ops.push((supabase as any).from("estoque_manutencao").update({ quantidade: qtdRestaurada }).eq("id", mov.item_id));
+    }
+    await Promise.all(ops);
+
+    setSavingMovIds(prev => ({ ...prev, [mov.id]: false }));
+    toast({ title: "Peça removida" });
+    await recarregarMovsOS(osId);
   }
 
   async function concluirOS(os: OS) {
@@ -577,32 +597,55 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   const movs = movsPorOS[os.id] ?? [];
                   if (movs.length === 0) return null;
                   return (
-                    <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-1.5">
+                    <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                         <Package className="h-3 w-3" /> Peças utilizadas
                       </p>
-                      {movs.map(mov => (
-                        <div key={mov.id} className="flex items-center justify-between text-sm">
-                          <span className="text-foreground/80">{mov.estoque_manutencao?.nome ?? mov.item_id}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono tabular-nums text-xs">
-                              {mov.quantidade} {mov.estoque_manutencao?.unidade}
+                      {movs.map(mov => {
+                        const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
+                        const alterada = qtdAtual !== String(mov.quantidade);
+                        const salvando = savingMovIds[mov.id] ?? false;
+                        return (
+                          <div key={mov.id} className="flex items-center gap-2 text-sm">
+                            <span className="flex-1 text-foreground/80 min-w-0 truncate">
+                              {mov.estoque_manutencao?.nome ?? mov.item_id}
                             </span>
-                            {papel === "gestor" && (
-                              <button
-                                title="Editar quantidade"
-                                onClick={() => {
-                                  setEditPeca({ id: mov.id, item_id: mov.item_id, quantidade: mov.quantidade, nome: mov.estoque_manutencao?.nome ?? "", unidade: mov.estoque_manutencao?.unidade ?? "", os_id: os.id });
-                                  setEditPecaNovaQtd(String(mov.quantidade));
-                                }}
-                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
+                            {papel === "gestor" ? (
+                              <>
+                                <input
+                                  type="number" min="0.01" step="0.01"
+                                  value={qtdAtual}
+                                  onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
+                                  className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                                />
+                                <span className="text-xs text-muted-foreground w-6 shrink-0">{mov.estoque_manutencao?.unidade}</span>
+                                {alterada && (
+                                  <button
+                                    onClick={() => salvarQtdMov(mov, os.id)}
+                                    disabled={salvando}
+                                    title="Salvar"
+                                    className="p-1 rounded text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                                  >
+                                    {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => removerMovimentacao(mov, os.id)}
+                                  disabled={salvando}
+                                  title="Remover peça"
+                                  className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </>
+                            ) : (
+                              <span className="font-mono tabular-nums text-xs">
+                                {mov.quantidade} {mov.estoque_manutencao?.unidade}
+                              </span>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })()}
@@ -902,39 +945,6 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             <Button variant="outline" onClick={() => setEditOS(null)}>Cancelar</Button>
             <Button onClick={salvarEdicao} disabled={savingEdit}>
               {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog: Editar quantidade de peça */}
-      <Dialog open={!!editPeca} onOpenChange={(o) => { if (!o) setEditPeca(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Editar quantidade — {editPeca?.nome}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">
-              Quantidade registrada: <span className="font-semibold">{editPeca?.quantidade} {editPeca?.unidade}</span>
-            </p>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Nova quantidade *</label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number" min="0.01" step="0.01"
-                  value={editPecaNovaQtd}
-                  onChange={(e) => setEditPecaNovaQtd(e.target.value)}
-                  className="flex-1"
-                />
-                <span className="text-sm text-muted-foreground shrink-0">{editPeca?.unidade}</span>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditPeca(null)}>Cancelar</Button>
-            <Button onClick={salvarEditPeca} disabled={savingEditPeca}>
-              {savingEditPeca && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar
             </Button>
           </DialogFooter>
