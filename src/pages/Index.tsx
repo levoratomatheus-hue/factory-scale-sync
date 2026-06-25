@@ -434,7 +434,14 @@ export default function Index() {
       <Sidebar collapsible="icon">
         <SidebarHeader className="border-b">
           <div className="flex items-center">
-            <img src="/logo.png" alt="ZanCollor" style={{ filter: "brightness(0) invert(1)", flex: 1, minWidth: 0, maxHeight: "72px", objectFit: "contain", padding: "6px 12px" }} />
+            <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
+              <div className="leading-none font-black tracking-wide" style={{ fontSize: "1rem", letterSpacing: "0.04em" }}>
+                <span style={{ color: "#1f2937" }}>ZAN COLLOR</span>
+              </div>
+              <div className="mt-0.5 tracking-widest uppercase" style={{ fontSize: "0.55rem", color: "#9ca3af", letterSpacing: "0.25em" }}>
+                masterbatches
+              </div>
+            </button>
             <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
               <Home className="h-4 w-4" />
             </button>
