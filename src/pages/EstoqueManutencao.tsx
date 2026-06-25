@@ -22,7 +22,7 @@ interface EstoqueItem {
   nome: string;
   codigo: string | null;
   unidade: string;
-  quantidade_atual: number;
+  quantidade: number;
   quantidade_minima: number;
   localizacao: string | null;
   criado_em: string;
@@ -54,7 +54,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
   const [modalCadastro, setModalCadastro] = useState(false);
   const [cadastroForm, setCadastroForm] = useState({
     nome: "", codigo: "", unidade: "un",
-    quantidade_atual: "", quantidade_minima: "", localizacao: "",
+    quantidade: "", quantidade_minima: "", localizacao: "",
   });
   const [savingCadastro, setSavingCadastro] = useState(false);
 
@@ -91,14 +91,14 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     if (!cadastroForm.nome.trim()) {
       toast({ title: "Nome é obrigatório", variant: "destructive" }); return;
     }
-    const qtdAtual = parseFloat(cadastroForm.quantidade_atual) || 0;
+    const qtdAtual = parseFloat(cadastroForm.quantidade) || 0;
     const qtdMin = parseFloat(cadastroForm.quantidade_minima) || 0;
     setSavingCadastro(true);
     const { error } = await (supabase as any).from("estoque_manutencao").insert({
       nome: cadastroForm.nome.trim(),
       codigo: cadastroForm.codigo.trim() || null,
       unidade: cadastroForm.unidade,
-      quantidade_atual: qtdAtual,
+      quantidade: qtdAtual,
       quantidade_minima: qtdMin,
       localizacao: cadastroForm.localizacao.trim() || null,
     });
@@ -106,7 +106,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     if (error) { toast({ title: "Erro ao cadastrar", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Item cadastrado!" });
     setModalCadastro(false);
-    setCadastroForm({ nome: "", codigo: "", unidade: "un", quantidade_atual: "", quantidade_minima: "", localizacao: "" });
+    setCadastroForm({ nome: "", codigo: "", unidade: "un", quantidade: "", quantidade_minima: "", localizacao: "" });
   }
 
   async function salvarMovimentacao() {
@@ -115,13 +115,13 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     if (!qtd || qtd <= 0) {
       toast({ title: "Informe uma quantidade válida", variant: "destructive" }); return;
     }
-    if (modalMov.tipo === "saida" && qtd > modalMov.item.quantidade_atual) {
+    if (modalMov.tipo === "saida" && qtd > modalMov.item.quantidade) {
       toast({ title: "Quantidade insuficiente em estoque", variant: "destructive" }); return;
     }
     setSavingMov(true);
     const novaQtd = modalMov.tipo === "entrada"
-      ? modalMov.item.quantidade_atual + qtd
-      : modalMov.item.quantidade_atual - qtd;
+      ? modalMov.item.quantidade + qtd
+      : modalMov.item.quantidade - qtd;
 
     const [movErr, updErr] = await Promise.all([
       (supabase as any).from("estoque_movimentacoes").insert({
@@ -131,7 +131,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
         motivo: movMotivo.trim() || null,
         criado_por: perfilNome,
       }).then((r: any) => r.error),
-      (supabase as any).from("estoque_manutencao").update({ quantidade_atual: novaQtd })
+      (supabase as any).from("estoque_manutencao").update({ quantidade: novaQtd })
         .eq("id", modalMov.item.id).then((r: any) => r.error),
     ]);
 
@@ -157,7 +157,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     setLoadingHist(false);
   }
 
-  const abaixoMinimo = items.filter(i => i.quantidade_atual <= i.quantidade_minima && i.quantidade_minima > 0);
+  const abaixoMinimo = items.filter(i => i.quantidade <= i.quantidade_minima && i.quantidade_minima > 0);
 
   if (loading) {
     return (
@@ -221,7 +221,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
             </thead>
             <tbody>
               {items.map((item) => {
-                const critico = item.quantidade_minima > 0 && item.quantidade_atual <= item.quantidade_minima;
+                const critico = item.quantidade_minima > 0 && item.quantidade <= item.quantidade_minima;
                 return (
                   <tr
                     key={item.id}
@@ -238,7 +238,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`font-bold tabular-nums ${critico ? "text-red-700" : ""}`}>
-                        {item.quantidade_atual}
+                        {item.quantidade}
                       </span>
                       <span className="text-xs text-muted-foreground ml-1">{item.unidade}</span>
                     </td>
@@ -321,8 +321,8 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                 <label className="text-xs font-medium text-muted-foreground">Qtd. inicial</label>
                 <Input
                   type="number" min="0"
-                  value={cadastroForm.quantidade_atual}
-                  onChange={(e) => setCadastroForm(f => ({ ...f, quantidade_atual: e.target.value }))}
+                  value={cadastroForm.quantidade}
+                  onChange={(e) => setCadastroForm(f => ({ ...f, quantidade: e.target.value }))}
                   placeholder="0"
                 />
               </div>
@@ -371,7 +371,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
               <p className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">{modalMov.item.nome}</span>
                 {" · "}Estoque atual:{" "}
-                <span className="font-semibold">{modalMov.item.quantidade_atual} {modalMov.item.unidade}</span>
+                <span className="font-semibold">{modalMov.item.quantidade} {modalMov.item.unidade}</span>
               </p>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Quantidade *</label>
