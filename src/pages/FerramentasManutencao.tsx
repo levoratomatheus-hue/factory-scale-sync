@@ -10,7 +10,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Hammer, Pencil, Trash2, Plus, MapPin } from "lucide-react";
+import { Loader2, Hammer, Pencil, Trash2, Plus, MapPin, Search, X } from "lucide-react";
 
 type StatusFerramenta = "disponivel" | "em_uso" | "manutencao";
 
@@ -46,6 +46,7 @@ export default function FerramentasManutencao({ papel }: Props) {
   const [ferramentas, setFerramentas] = useState<Ferramenta[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<StatusFerramenta | "todos">("todos");
+  const [filtroLocalizacao, setFiltroLocalizacao] = useState("");
 
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Ferramenta | null>(null);
@@ -143,9 +144,14 @@ export default function FerramentasManutencao({ papel }: Props) {
     else { toast({ title: "Ferramenta excluída" }); fetchFerramentas(); }
   }
 
-  const listaFiltrada = filtroStatus === "todos"
-    ? ferramentas
-    : ferramentas.filter(f => f.status === filtroStatus);
+  const listaFiltrada = ferramentas.filter(f => {
+    if (filtroStatus !== "todos" && f.status !== filtroStatus) return false;
+    if (filtroLocalizacao.trim()) {
+      const termo = filtroLocalizacao.trim().toLowerCase();
+      if (!f.localizacao?.toLowerCase().includes(termo)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -163,6 +169,26 @@ export default function FerramentasManutencao({ papel }: Props) {
             <Plus className="h-4 w-4" />
             Nova Ferramenta
           </Button>
+        )}
+      </div>
+
+      {/* Filtro de localização */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          value={filtroLocalizacao}
+          onChange={(e) => setFiltroLocalizacao(e.target.value)}
+          placeholder="Filtrar por localização..."
+          className="w-full rounded-md border border-input bg-background pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        {filtroLocalizacao && (
+          <button
+            onClick={() => setFiltroLocalizacao("")}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
 
