@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -67,6 +67,7 @@ interface OS {
   aberta_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
+  observacoes_andamento: string | null;
   equipamentos?: { nome: string; tag: string | null; linha: number | null } | null;
 }
 
@@ -129,6 +130,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "" });
   const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const [andamentoOS, setAndamentoOS] = useState<OS | null>(null);
+  const [andamentoObs, setAndamentoObs] = useState("");
+  const [andamentoPecas, setAndamentoPecas] = useState<{ item_id: string; nome: string; unidade: string; quantidade: string }[]>([]);
+  const [andamentoEstoque, setAndamentoEstoque] = useState<{ id: string; nome: string; unidade: string; quantidade: number }[]>([]);
+  const [savingAndamento, setSavingAndamento] = useState(false);
 
   const [movsPorOS, setMovsPorOS] = useState<Record<string, { id: string; item_id: string; quantidade: number; nome: string; unidade: string }[]>>({});
   const [qtdEditadas, setQtdEditadas] = useState<Record<string, string>>({});
@@ -241,6 +248,74 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     }).eq("id", os.id);
     if (error) toast({ title: "Erro ao iniciar OS", description: error.message, variant: "destructive" });
     else { toast({ title: "OS iniciada!" }); setIniciarConfirmOS(null); }
+  }
+
+  async function abrirAndamento(os: OS) {
+    setAndamentoOS(os);
+    setAndamentoObs(os.observacoes_andamento ?? "");
+    setAndamentoPecas([]);
+    const { data } = await (supabase as any)
+      .from("estoque_manutencao")
+      .select("id, nome, unidade, quantidade")
+      .order("nome", { ascending: true });
+    setAndamentoEstoque(data ?? []);
+  }
+
+  function adicionarAndamentoPeca() {
+    setAndamentoPecas(prev => [...prev, { item_id: "", nome: "", unidade: "", quantidade: "1" }]);
+  }
+
+  function removerAndamentoPeca(idx: number) {
+    setAndamentoPecas(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  function updateAndamentoPeca(idx: number, item_id: string) {
+    const item = andamentoEstoque.find(i => i.id === item_id);
+    if (!item) return;
+    setAndamentoPecas(prev => prev.map((p, i) =>
+      i === idx ? { ...p, item_id, nome: item.nome, unidade: item.unidade } : p
+    ));
+  }
+
+  async function salvarAndamento() {
+    if (!andamentoOS) return;
+    setSavingAndamento(true);
+
+    const { error } = await (supabase as any).from("ordens_servico").update({
+      observacoes_andamento: andamentoObs.trim() || null,
+    }).eq("id", andamentoOS.id);
+
+    if (error) {
+      setSavingAndamento(false);
+      toast({ title: "Erro ao salvar andamento", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const pecasValidas = andamentoPecas.filter(p => p.item_id && parseFloat(p.quantidade) > 0);
+    for (const peca of pecasValidas) {
+      const qtd = parseFloat(peca.quantidade);
+      const item = andamentoEstoque.find(i => i.id === peca.item_id);
+      if (!item) continue;
+      await Promise.all([
+        (supabase as any).from("movimentacoes_estoque").insert({
+          item_id: peca.item_id,
+          tipo: "saida",
+          quantidade: qtd,
+          motivo: `OS andamento: ${andamentoOS.descricao_problema}`,
+          ordem_servico_id: andamentoOS.id,
+          criado_por: perfilNome,
+        }),
+        (supabase as any).from("estoque_manutencao")
+          .update({ quantidade: Math.max(0, item.quantidade - qtd) })
+          .eq("id", peca.item_id),
+      ]);
+    }
+
+    setSavingAndamento(false);
+    toast({ title: "Andamento registrado!" });
+    setAndamentoOS(null);
+    setAndamentoObs("");
+    setAndamentoPecas([]);
   }
 
   async function abrirDialogSolucao(os: OS) {
@@ -617,6 +692,14 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   </div>
                 )}
 
+                {/* Observações de andamento */}
+                {os.observacoes_andamento && (
+                  <div className="rounded-md bg-blue-50/50 border border-blue-100 px-3 py-2 text-sm">
+                    <span className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">Andamento: </span>
+                    {os.observacoes_andamento}
+                  </div>
+                )}
+
                 {/* Peças utilizadas — aguardando_aprovacao e concluida */}
                 {(os.status === "aguardando_aprovacao" || os.status === "concluida") && (
                   <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
@@ -698,6 +781,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     >
                       <Package className="h-3 w-3" />
                       Aguardar Peça
+                    </Button>
+                  )}
+
+                  {/* Técnico: registrar andamento */}
+                  {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 h-7 text-xs text-blue-700 border-blue-300 hover:bg-blue-50"
+                      onClick={() => abrirAndamento(os)}
+                    >
+                      <ClipboardList className="h-3 w-3" />
+                      Registrar Andamento
                     </Button>
                   )}
 
@@ -878,6 +974,82 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             <Button onClick={registrarSolucao} disabled={savingSolucao}>
               {savingSolucao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enviar para Aprovação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Registrar Andamento */}
+      <Dialog open={!!andamentoOS} onOpenChange={(o) => { if (!o) { setAndamentoOS(null); setAndamentoPecas([]); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Registrar Andamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {andamentoOS && (
+              <p className="text-sm text-muted-foreground">
+                {andamentoOS.equipamentos?.nome} — {andamentoOS.descricao_problema}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Observação do andamento</label>
+              <textarea
+                value={andamentoObs}
+                onChange={(e) => setAndamentoObs(e.target.value)}
+                rows={3}
+                placeholder="Descreva o que foi feito até agora..."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+            </div>
+
+            {/* Peças utilizadas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  Peças / Materiais utilizados
+                </label>
+                <button
+                  type="button"
+                  onClick={adicionarAndamentoPeca}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  + Adicionar
+                </button>
+              </div>
+              {andamentoEstoque.length === 0 && andamentoPecas.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhum item cadastrado no estoque de manutenção</p>
+              )}
+              {andamentoPecas.map((peca, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    value={peca.item_id}
+                    onChange={(e) => updateAndamentoPeca(idx, e.target.value)}
+                    className="flex-1 rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Selecione...</option>
+                    {andamentoEstoque.map(i => (
+                      <option key={i.id} value={i.id}>{i.nome} ({i.quantidade} {i.unidade})</option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number" min="0.01" step="0.01"
+                    value={peca.quantidade}
+                    onChange={(e) => setAndamentoPecas(prev => prev.map((p, i) => i === idx ? { ...p, quantidade: e.target.value } : p))}
+                    className="w-20"
+                    placeholder="Qtd"
+                  />
+                  {peca.unidade && <span className="text-xs text-muted-foreground shrink-0 w-6">{peca.unidade}</span>}
+                  <button type="button" onClick={() => removerAndamentoPeca(idx)} className="text-muted-foreground hover:text-destructive text-lg leading-none">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAndamentoOS(null); setAndamentoPecas([]); }}>Cancelar</Button>
+            <Button onClick={salvarAndamento} disabled={savingAndamento} className="gap-2">
+              {savingAndamento && <Loader2 className="h-4 w-4 animate-spin" />}
+              Salvar Andamento
             </Button>
           </DialogFooter>
         </DialogContent>
