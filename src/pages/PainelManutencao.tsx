@@ -610,7 +610,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                             <span className="flex-1 text-foreground/80 min-w-0 truncate">
                               {mov.estoque_manutencao?.nome ?? mov.item_id}
                             </span>
-                            {papel === "gestor" ? (
+                            {(papel === "gestor" || papel === "tecnico") ? (
                               <>
                                 <input
                                   type="number" min="0.01" step="0.01"
