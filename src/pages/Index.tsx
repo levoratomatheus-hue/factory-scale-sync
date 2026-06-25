@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -23,6 +23,7 @@ const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao'));
 const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
 import { useAuth } from '@/hooks/useAuth';
+import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import PaginaInicial from './PaginaInicial';
 import {
@@ -166,6 +167,7 @@ function UserProfile({ nome, papel, email }: { nome: string; papel: string; emai
 
 export default function Index() {
   const { perfil, email, loading, logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabGestorId | null>(null);
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
   const [showWelcome, setShowWelcome] = useState(false);
@@ -362,6 +364,12 @@ export default function Index() {
             <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
             <SidebarMenu>
               <SidebarMenuItem>
+                <SidebarMenuButton tooltip={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} onClick={toggleTheme}>
+                  {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                  <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Sair" onClick={logout}>
                   <LogOut className="h-4 w-4 shrink-0" />
                   <span>Sair</span>
@@ -434,6 +442,12 @@ export default function Index() {
           <SidebarFooter className="border-t">
             <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} onClick={toggleTheme}>
+                  {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                  <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Sair" onClick={logout}>
                   <LogOut className="h-4 w-4 shrink-0" />
@@ -604,6 +618,12 @@ export default function Index() {
         <SidebarFooter className="border-t">
           <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} onClick={toggleTheme}>
+                {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Sair" onClick={logout}>
                 <LogOut className="h-4 w-4 shrink-0" />
