@@ -409,9 +409,12 @@ export default function Index() {
           <SidebarHeader className="border-b">
             <div className="flex items-center">
               <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
-                <span className="text-sm font-semibold tracking-wide text-gray-600 dark:text-gray-400">
-                  Gestão Industrial
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200">
+                    Gestão Industrial
+                  </span>
+                </div>
               </button>
               <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:mx-auto">
                 <Home className="h-4 w-4" />
@@ -479,9 +482,12 @@ export default function Index() {
         <SidebarHeader className="border-b">
           <div className="flex items-center">
             <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
-              <span className="text-sm font-semibold tracking-wide text-gray-600 dark:text-gray-400">
-                Gestão Industrial
-              </span>
+              <div className="flex items-center gap-1.5">
+                <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200">
+                  Gestão Industrial
+                </span>
+              </div>
             </button>
             <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
               <Home className="h-4 w-4" />
