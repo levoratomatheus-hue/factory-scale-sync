@@ -134,9 +134,14 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const fetchOss = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("ordens_servico")
-      .select("id, status, prioridade, descricao_problema, peca_aguardada, previsao_peca, solucao_aplicada, aberta_em, aberta_por, tecnico_nome, concluido_em, equipamentos(nome, tag, linha)")
+      .select("*, equipamentos(nome, tag, linha)")
       .order("aberta_em", { ascending: false });
-    if (!error) setOss(data ?? []);
+    if (error) {
+      console.error("[PainelManutencao] fetchOss error:", error);
+      toast({ title: "Erro ao carregar OS", description: error.message, variant: "destructive" });
+    } else {
+      setOss(data ?? []);
+    }
     setLoading(false);
   }, []);
 
