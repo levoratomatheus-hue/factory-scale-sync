@@ -641,7 +641,14 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             const equip = os.equipamentos;
 
             return (
-              <div key={os.id} className="bg-card rounded-lg border p-4 space-y-3">
+              <div key={os.id} className={`rounded-lg border p-4 space-y-3 ${
+                os.status === "aberta"               ? "bg-blue-50 border-blue-200" :
+                os.status === "em_andamento"         ? "bg-orange-50 border-orange-200" :
+                os.status === "aguardando_peca"      ? "bg-red-50 border-red-200" :
+                os.status === "aguardando_aprovacao" ? "bg-yellow-50 border-yellow-200" :
+                os.status === "concluida"            ? "bg-green-50 border-green-200" :
+                "bg-card border"
+              }`}>
                 {/* Topo */}
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="space-y-0.5 min-w-0">
