@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2 } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -32,17 +32,23 @@ function inicioSemana(d: Date) {
   return seg;
 }
 
-type AtalhoData = "hoje" | "semana" | "mes" | null;
+type AtalhoData = "hoje" | "semana" | "mes" | "mes_passado" | null;
 const ATALHOS: { id: AtalhoData; label: string }[] = [
-  { id: "hoje",   label: "Hoje" },
-  { id: "semana", label: "Esta semana" },
-  { id: "mes",    label: "Este mês" },
+  { id: "hoje",        label: "Hoje" },
+  { id: "semana",      label: "Esta semana" },
+  { id: "mes",         label: "Este mês" },
+  { id: "mes_passado", label: "Mês passado" },
 ];
 function calcAtalho(id: AtalhoData): { inicio: string; fim: string } {
   const d = new Date();
   if (id === "hoje")   return { inicio: toStr(d), fim: toStr(d) };
   if (id === "semana") return { inicio: toStr(inicioSemana(d)), fim: toStr(d) };
   if (id === "mes")    return { inicio: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, fim: toStr(d) };
+  if (id === "mes_passado") {
+    const ultimoDia = new Date(d.getFullYear(), d.getMonth(), 0);
+    const primeiroDia = new Date(ultimoDia.getFullYear(), ultimoDia.getMonth(), 1);
+    return { inicio: toStr(primeiroDia), fim: toStr(ultimoDia) };
+  }
   return { inicio: "", fim: "" };
 }
 
@@ -118,6 +124,11 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [pecaText, setPecaText] = useState("");
   const [previsaoText, setPrevisaoText] = useState("");
   const [savingPeca, setSavingPeca] = useState(false);
+
+  const [editOS, setEditOS] = useState<OS | null>(null);
+  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "" });
+  const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
@@ -294,6 +305,47 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setSolucaoDialogOS(null);
     setSolucaoText("");
     setPecasUtilizadas([]);
+  }
+
+  async function abrirEdicao(os: OS) {
+    setEditForm({
+      equipamento_id: os.equipamento_id ?? "",
+      descricao_problema: os.descricao_problema,
+      prioridade: os.prioridade,
+      tecnico_nome: os.tecnico_nome ?? "",
+    });
+    const { data } = await (supabase as any)
+      .from("equipamentos")
+      .select("id, nome, tag, linha")
+      .eq("status", "ativo")
+      .order("nome", { ascending: true });
+    setEditEquipamentos(data ?? []);
+    setEditOS(os);
+  }
+
+  async function salvarEdicao() {
+    if (!editOS) return;
+    if (!editForm.descricao_problema.trim()) {
+      toast({ title: "Descrição é obrigatória", variant: "destructive" }); return;
+    }
+    setSavingEdit(true);
+    const { error } = await (supabase as any).from("ordens_servico").update({
+      equipamento_id: editForm.equipamento_id || null,
+      descricao_problema: editForm.descricao_problema.trim(),
+      prioridade: editForm.prioridade,
+      tecnico_nome: editForm.tecnico_nome.trim() || null,
+    }).eq("id", editOS.id);
+    setSavingEdit(false);
+    if (error) { toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "OS atualizada!" });
+    setEditOS(null);
+  }
+
+  async function deletarOS(os: OS) {
+    if (!window.confirm(`Excluir a OS "${os.descricao_problema}"? Esta ação não pode ser desfeita.`)) return;
+    const { error } = await (supabase as any).from("ordens_servico").delete().eq("id", os.id);
+    if (error) toast({ title: "Erro ao excluir OS", description: error.message, variant: "destructive" });
+    else { toast({ title: "OS excluída" }); fetchOss(); }
   }
 
   async function concluirOS(os: OS) {
@@ -536,6 +588,26 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       Aprovar e Concluir
                     </Button>
                   )}
+
+                  {/* Gestor: editar e excluir */}
+                  {papel === "gestor" && (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <button
+                        onClick={() => abrirEdicao(os)}
+                        title="Editar"
+                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deletarOS(os)}
+                        title="Excluir"
+                        className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -680,6 +752,69 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog: Editar OS */}
+      <Dialog open={!!editOS} onOpenChange={(o) => { if (!o) setEditOS(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar OS</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Equipamento</label>
+              <select
+                value={editForm.equipamento_id}
+                onChange={(e) => setEditForm(f => ({ ...f, equipamento_id: e.target.value }))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Selecione...</option>
+                {editEquipamentos.map(eq => (
+                  <option key={eq.id} value={eq.id}>
+                    {eq.nome}{eq.tag ? ` — ${eq.tag}` : ""}{eq.linha != null ? ` (L${eq.linha})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Descrição do problema *</label>
+              <textarea
+                value={editForm.descricao_problema}
+                onChange={(e) => setEditForm(f => ({ ...f, descricao_problema: e.target.value }))}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Prioridade</label>
+              <select
+                value={editForm.prioridade}
+                onChange={(e) => setEditForm(f => ({ ...f, prioridade: e.target.value }))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="baixa">Baixa</option>
+                <option value="media">Média</option>
+                <option value="alta">Alta</option>
+                <option value="critica">Crítica</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Técnico responsável</label>
+              <Input
+                value={editForm.tecnico_nome}
+                onChange={(e) => setEditForm(f => ({ ...f, tecnico_nome: e.target.value }))}
+                placeholder="Nome do técnico"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOS(null)}>Cancelar</Button>
+            <Button onClick={salvarEdicao} disabled={savingEdit}>
+              {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* AlertDialog: Concluir OS */}
       <AlertDialog open={!!confirmarConclusaoOS} onOpenChange={(o) => { if (!o) setConfirmarConclusaoOS(null); }}>
