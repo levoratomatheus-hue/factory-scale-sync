@@ -322,7 +322,7 @@ const SortableCard = memo(function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 border-green-300' : ordem.motivo_reprovacao ? 'bg-red-50 border-red-300' : ''} ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700' : ordem.motivo_reprovacao ? 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         onVerDetalhes(ordem);
@@ -339,19 +339,19 @@ const SortableCard = memo(function SortableCard({
 
       {/* Conteúdo */}
       <div className="flex-1 space-y-1 overflow-hidden min-w-0">
-        <p className="text-xs font-semibold leading-tight line-clamp-2">{ordem.produto}</p>
-        <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap leading-snug">
+        <p className="text-xs font-semibold leading-tight line-clamp-2 text-gray-900 dark:text-white">{ordem.produto}</p>
+        <p className="text-xs text-muted-foreground dark:text-gray-300 flex items-center gap-1 flex-wrap leading-snug">
           <span>Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg</span>
           <MarcaBadge marca={ordem.marca} size="sm" />
         </p>
         {ordem.criado_em && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground dark:text-gray-400">
             Criado: {format(new Date(ordem.criado_em), "dd/MM/yyyy")}
           </p>
         )}
         <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
         {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded px-1 py-0 leading-4">
+          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded px-1 py-0 leading-4">
             <Clock className="h-2.5 w-2.5 shrink-0" />
             aguardando registro
           </span>
@@ -363,7 +363,7 @@ const SortableCard = memo(function SortableCard({
           }, 0);
           const exibirTotal = totalKg > 0 ? totalKg : null;
           return (
-            <div className="rounded border border-blue-200 bg-blue-50 text-[10px] font-mono text-blue-700 overflow-hidden">
+            <div className="rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-gray-700 text-[10px] font-mono text-blue-700 dark:text-blue-300 overflow-hidden">
               {registros.map((reg: any, i: number) => {
                 const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
                 const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
@@ -371,20 +371,20 @@ const SortableCard = memo(function SortableCard({
                 const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
                 const dataFmt = reg.data ? format(new Date(reg.data + "T12:00:00"), "dd/MM") : "";
                 return (
-                  <div key={reg.id} className={`flex items-center gap-1 px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200" : ""}`}>
+                  <div key={reg.id} className={`flex items-center gap-1 px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200 dark:border-blue-800" : ""}`}>
                     <span className="w-[30px] shrink-0">{dataFmt}</span>
                     <span className="flex-1 text-right whitespace-nowrap">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
-                    <span className="shrink-0 text-blue-500 whitespace-nowrap">{hi && hf ? `${hi}–${hf}` : ""}</span>
+                    <span className="shrink-0 text-blue-500 dark:text-blue-400 whitespace-nowrap">{hi && hf ? `${hi}–${hf}` : ""}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
-                      className="text-blue-400 hover:text-blue-600 shrink-0"
+                      className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 shrink-0"
                       title="Editar registro"
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onDeletarRegistro(ordem, reg); }}
-                      className="text-blue-300 hover:text-red-500 shrink-0"
+                      className="text-blue-300 hover:text-red-500 dark:text-blue-600 dark:hover:text-red-400 shrink-0"
                       title="Deletar registro"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -393,7 +393,7 @@ const SortableCard = memo(function SortableCard({
                 );
               })}
               {registros.length > 1 && exibirTotal != null && (
-                <div className="flex items-center gap-1 px-1.5 py-0.5 border-t border-blue-300 bg-blue-100 font-semibold text-blue-800">
+                <div className="flex items-center gap-1 px-1.5 py-0.5 border-t border-blue-300 dark:border-blue-700 bg-blue-100 dark:bg-gray-600 font-semibold text-blue-800 dark:text-gray-200">
                   <span className="w-[30px] shrink-0">Total</span>
                   <span className="flex-1 text-right whitespace-nowrap">{exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>
                 </div>
