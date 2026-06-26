@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, ReactNode, lazy, Suspense } from 'react';
+import { useState, useCallback, useMemo, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon } from 'lucide-react';
 import Login from './Login';
@@ -221,15 +221,16 @@ export default function Index() {
     });
   }, []);
 
-  const handleCriarOP = (lote: number) => {
+  const handleCriarOP = useCallback((lote: number) => {
     setPrefillLote(lote);
     goToTab('criar');
-  };
+  }, [goToTab]);
 
-  const activeLabel = activeTab === null
+  const activeLabel = useMemo(() => activeTab === null
     ? ''
     : ([...gruposGestor.flatMap((g) => g.items), ...manutencaoItems, { id: 'comercial' as TabGestorId, label: 'Painel Comercial' }]
-        .find((i) => i.id === activeTab)?.label ?? '');
+        .find((i) => i.id === activeTab)?.label ?? ''),
+  [activeTab]);
 
   if (loading) {
     return (

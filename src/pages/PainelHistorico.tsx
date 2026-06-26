@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useHistorico } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MarcaBadge } from "@/components/MarcaBadge";
@@ -63,6 +63,20 @@ export default function PainelHistorico() {
     }));
   };
 
+  const totalQuantidade = useMemo(
+    () => ordens.reduce((s, o) => s + (o.quantidade || 0), 0),
+    [ordens],
+  );
+
+  const totalReal = useMemo(
+    () => ordens.reduce((s, o) => {
+      const ov = overrides[o.id] ?? {};
+      const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : o.quantidade_real;
+      return s + (qtdReal ?? 0);
+    }, 0),
+    [ordens, overrides],
+  );
+
   const descricaoFiltro =
     modo === "dia"
       ? `em ${format(new Date(dia + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}`
@@ -83,30 +97,30 @@ export default function PainelHistorico() {
       <div className="flex items-center gap-3 flex-wrap">
         <History className="h-6 w-6 text-primary" />
         <div className="flex-1">
-          <h2 className="text-xl font-bold">Histórico de Ordens</h2>
+          <h2 className="text-xl font-bold dark:text-white">Histórico de Ordens</h2>
           <p className="text-sm text-muted-foreground">
             {ordens.length} ordem{ordens.length !== 1 ? "s" : ""} concluída{ordens.length !== 1 ? "s" : ""}
           </p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex rounded-md border border-input overflow-hidden text-sm">
+          <div className="flex rounded-md border border-input dark:border-gray-700 overflow-hidden text-sm">
             <button
               onClick={() => setModo("dia")}
               className={`px-3 py-1.5 transition-colors ${
                 modo === "dia"
                   ? "bg-primary text-primary-foreground font-medium"
-                  : "bg-background text-muted-foreground hover:bg-muted"
+                  : "bg-background dark:bg-gray-800 text-muted-foreground dark:text-gray-400 hover:bg-muted"
               }`}
             >
               Dia específico
             </button>
             <button
               onClick={() => setModo("periodo")}
-              className={`px-3 py-1.5 transition-colors border-l border-input ${
+              className={`px-3 py-1.5 transition-colors border-l border-input dark:border-gray-700 ${
                 modo === "periodo"
                   ? "bg-primary text-primary-foreground font-medium"
-                  : "bg-background text-muted-foreground hover:bg-muted"
+                  : "bg-background dark:bg-gray-800 text-muted-foreground dark:text-gray-400 hover:bg-muted"
               }`}
             >
               Período
@@ -120,7 +134,7 @@ export default function PainelHistorico() {
                 type="date"
                 value={dia}
                 onChange={(e) => setDia(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           ) : (
@@ -131,7 +145,7 @@ export default function PainelHistorico() {
                 value={dataInicio}
                 max={dataFim}
                 onChange={(e) => setDataInicio(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <label className="text-sm font-medium text-muted-foreground">Até:</label>
               <input
@@ -139,27 +153,27 @@ export default function PainelHistorico() {
                 value={dataFim}
                 min={dataInicio}
                 onChange={(e) => setDataFim(e.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           )}
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto">
+      <div className="rounded-lg border dark:border-gray-700 bg-card dark:bg-gray-800 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left font-semibold">#</th>
-              <th className="px-4 py-3 text-left font-semibold">Lote</th>
-              <th className="px-4 py-3 text-left font-semibold">Produto</th>
-              <th className="px-4 py-3 text-left font-semibold">Qtd Prog.</th>
-              <th className="px-4 py-3 text-left font-semibold">Qtd Real</th>
-              <th className="px-4 py-3 text-left font-semibold">Horário</th>
-              <th className="px-4 py-3 text-left font-semibold">Linha</th>
-              <th className="px-4 py-3 text-left font-semibold">Balança</th>
-              <th className="px-4 py-3 text-left font-semibold">Data</th>
-              <th className="px-4 py-3 text-left font-semibold">Status</th>
+            <tr className="border-b dark:border-gray-700 bg-muted/50">
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">#</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Lote</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Produto</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Qtd Prog.</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Qtd Real</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Horário</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Linha</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Balança</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Data</th>
+              <th className="px-4 py-3 text-left font-semibold dark:text-gray-300">Status</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -179,21 +193,21 @@ export default function PainelHistorico() {
               return (
                 <tr
                   key={ordem.id}
-                  className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                  className="border-b dark:border-gray-700 last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
                   onClick={() => setOrdemDetalhe(ordem)}
                 >
-                  <td className="px-4 py-3 font-mono text-muted-foreground">{ordem.id.slice(0, 6)}</td>
-                  <td className="px-4 py-3 font-medium">{ordem.lote}</td>
-                  <td className="px-4 py-3">{ordem.produto}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{ordem.quantidade} kg</td>
+                  <td className="px-4 py-3 font-mono text-muted-foreground dark:text-gray-400">{ordem.id.slice(0, 6)}</td>
+                  <td className="px-4 py-3 font-medium dark:text-gray-300">{ordem.lote}</td>
+                  <td className="px-4 py-3 dark:text-gray-300">{ordem.produto}</td>
+                  <td className="px-4 py-3 text-muted-foreground dark:text-gray-400">{ordem.quantidade} kg</td>
                   <td className="px-4 py-3 font-semibold">
                     {qtdReal != null ? `${qtdReal} kg` : <span className="text-muted-foreground/50">—</span>}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
                     {horaInicio && horaFim ? `${horaInicio} – ${horaFim}` : <span className="text-muted-foreground/50">—</span>}
                   </td>
-                  <td className="px-4 py-3">L{ordem.linha}</td>
-                  <td className="px-4 py-3">B{ordem.balanca}</td>
+                  <td className="px-4 py-3 dark:text-gray-300">L{ordem.linha}</td>
+                  <td className="px-4 py-3 dark:text-gray-300">B{ordem.balanca}</td>
                   <td className="px-4 py-3">
                     {format(new Date(ordem.data_programacao), "dd/MM/yyyy", { locale: ptBR })}
                   </td>
@@ -230,20 +244,13 @@ export default function PainelHistorico() {
           </tbody>
           {ordens.length > 0 && (
             <tfoot>
-              <tr className="border-t-2 bg-muted/70 font-semibold text-sm">
-                <td colSpan={3} className="px-4 py-3 text-right text-muted-foreground">Total</td>
+              <tr className="border-t-2 dark:border-gray-700 bg-muted/70 font-semibold text-sm">
+                <td colSpan={3} className="px-4 py-3 text-right text-muted-foreground dark:text-gray-400">Total</td>
                 <td className="px-4 py-3">
-                  {ordens.reduce((s, o) => s + (o.quantidade || 0), 0).toLocaleString("pt-BR")} kg
+                  {totalQuantidade.toLocaleString("pt-BR")} kg
                 </td>
                 <td className="px-4 py-3">
-                  {(() => {
-                    const total = ordens.reduce((s, o) => {
-                      const ov = overrides[o.id] ?? {};
-                      const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : o.quantidade_real;
-                      return s + (qtdReal ?? 0);
-                    }, 0);
-                    return total > 0 ? `${total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kg` : "—";
-                  })()}
+                  {totalReal > 0 ? `${totalReal.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kg` : "—"}
                 </td>
                 <td colSpan={6} />
               </tr>

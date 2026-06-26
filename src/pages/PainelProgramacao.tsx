@@ -920,7 +920,6 @@ export default function PainelProgramacao() {
 
     if (regsDia && regsDia.length > 0) {
       const ids = regsDia.map((r: any) => r.id);
-      console.log("[DELETE] tabela: registros_diarios | ids:", ids, "| data:", data);
       const { error } = await (supabase as any).from("registros_diarios").delete().in("id", ids);
       if (error) {
         toast({ title: "Erro ao excluir registro do dia", description: error.message, variant: "destructive" });
@@ -943,7 +942,6 @@ export default function PainelProgramacao() {
 
     // 3. Move a data_programacao para o dia mais recente com registro (ou seta null)
     //    para remover o card deste dia sem apagar a OP
-    console.log("[UPDATE] ordens.data_programacao →", novaData, "| id:", ordemParaExcluir.id);
     await supabase.from("ordens").update({ data_programacao: novaData } as any).eq("id", ordemParaExcluir.id);
 
     setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExcluir.id));
@@ -957,7 +955,6 @@ export default function PainelProgramacao() {
   const handleExcluirOP = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
-    console.log("[DELETE] tabela: ordens | id:", ordemParaExcluir.id);
     const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
     setExcluindo(false);
     setOrdemParaExcluir(null);

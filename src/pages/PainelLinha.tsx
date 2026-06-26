@@ -6,7 +6,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, OctagonX, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -94,9 +94,9 @@ interface PainelLinhaProps {
   linha: number;
 }
 
-const today = format(new Date(), 'yyyy-MM-dd');
-
 export default function PainelLinha({ linha }: PainelLinhaProps) {
+  const today = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);

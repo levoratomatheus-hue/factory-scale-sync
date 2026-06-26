@@ -269,7 +269,6 @@ export default function PainelLiberacao() {
   const handleDeleteRegistro = async () => {
     if (!deleteRegistro) return;
     setDeletandoRegistro(true);
-    console.log("[DELETE] tabela: registros_diarios | id:", deleteRegistro.id);
     const { error } = await (supabase as any)
       .from("registros_diarios")
       .delete()
@@ -564,7 +563,7 @@ export default function PainelLiberacao() {
       </div>
 
       {ordens.length === 0 ? (
-        <div className="bg-card rounded-xl border p-10 text-center text-muted-foreground">
+        <div className="bg-card dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-10 text-center text-muted-foreground">
           Nenhuma ordem aguardando liberação
         </div>
       ) : (
@@ -572,7 +571,7 @@ export default function PainelLiberacao() {
           {ordens.map((ordem) => {
             const regs = registrosPorOrdem[ordem.id] ?? [];
             return (
-              <div key={ordem.id} className="bg-card rounded-xl border-2 border-orange-200 p-5 space-y-3">
+              <div key={ordem.id} className="bg-card dark:bg-gray-800 rounded-xl border-2 border-orange-200 dark:border-orange-800 p-5 space-y-3">
                 {/* Cabeçalho */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -604,9 +603,9 @@ export default function PainelLiberacao() {
 
                 {/* Registros diários */}
                 {regs.length > 0 ? (
-                  <div className="rounded-md border border-blue-200 bg-blue-50 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-blue-100/60 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                  <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-blue-100/60 dark:bg-blue-900/30 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
                         Registros Diários
                       </p>
                       <div className="flex items-center gap-2">
@@ -629,7 +628,7 @@ export default function PainelLiberacao() {
                         </Button>
                       </div>
                     </div>
-                    <div className="divide-y divide-blue-100">
+                    <div className="divide-y divide-blue-100 dark:divide-blue-800">
                       {regs.map((r, i) => {
                         const items: any[] | null = Array.isArray(r.registro_producao) ? r.registro_producao : null;
                         const filled = items?.filter((it: any) => it.qty || it.peso) ?? [];
@@ -640,17 +639,17 @@ export default function PainelLiberacao() {
                           <div key={i} className="px-4 py-2.5 space-y-1">
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-blue-900">
+                                <span className="text-sm font-semibold text-blue-900 dark:text-blue-300">
                                   {format(new Date(r.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
                                 </span>
-                                <span className="text-xs font-mono text-blue-600 bg-blue-100 rounded px-1.5 py-0.5">
+                                <span className="text-xs font-mono text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 rounded px-1.5 py-0.5">
                                   {r.hora_inicio.slice(0, 5)} – {r.hora_fim.slice(0, 5)}
                                   {horas > 0 && <span className="ml-1 text-blue-500">({(horas / 60).toFixed(1)}h)</span>}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
                                 {diaTotal > 0 && (
-                                  <span className="text-sm font-bold text-blue-800 font-mono">
+                                  <span className="text-sm font-bold text-blue-800 dark:text-blue-300 font-mono">
                                     {formatKg(diaTotal)} kg
                                   </span>
                                 )}
@@ -666,7 +665,7 @@ export default function PainelLiberacao() {
                               </div>
                             </div>
                             {filled.length > 0 && (
-                              <p className="text-xs text-blue-700 font-mono pl-0.5">
+                              <p className="text-xs text-blue-700 dark:text-blue-400 font-mono pl-0.5">
                                 {filled.map((it: any) => `${it.qty}× ${formatKg(it.peso)}`).join("  +  ")}
                               </p>
                             )}
@@ -681,11 +680,11 @@ export default function PainelLiberacao() {
                       const total = calcQtdFromRegistros(regsParaTotal);
                       if (total === null) return null;
                       return (
-                        <div className="px-4 py-2.5 bg-blue-100/80 border-t border-blue-200 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                        <div className="px-4 py-2.5 bg-blue-100/80 dark:bg-blue-900/40 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
                             Total calculado
                           </span>
-                          <span className="text-base font-extrabold text-blue-900 font-mono">
+                          <span className="text-base font-extrabold text-blue-900 dark:text-blue-300 font-mono">
                             {formatKg(total)} kg
                           </span>
                         </div>
@@ -695,9 +694,9 @@ export default function PainelLiberacao() {
                 ) : (
                   <>
                     {ordem.obs_linha && (
-                      <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 space-y-1">
-                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Registro de Produção</p>
-                        <p className="text-sm text-blue-900 font-mono">
+                      <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 space-y-1">
+                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Registro de Produção</p>
+                        <p className="text-sm text-blue-900 dark:text-blue-300 font-mono">
                           {(() => { const items = parseObsLinhaItems(ordem.obs_linha); return items ? formatObsLinha(items) : ordem.obs_linha; })()}
                         </p>
                       </div>
@@ -721,19 +720,19 @@ export default function PainelLiberacao() {
 
                 {/* Paradas associadas à OP */}
                 {(paradasPorOrdem[ordem.id] ?? []).length > 0 && (
-                  <div className="rounded-md border border-orange-200 bg-orange-50 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-orange-100/60 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Paradas</p>
-                      <span className="text-xs text-orange-600 font-medium">
+                  <div className="rounded-md border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-orange-100/60 dark:bg-orange-900/30 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wide">Paradas</p>
+                      <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">
                         {(paradasPorOrdem[ordem.id] ?? []).length} registro{(paradasPorOrdem[ordem.id] ?? []).length !== 1 ? "s" : ""}
                       </span>
                     </div>
-                    <div className="divide-y divide-orange-100">
+                    <div className="divide-y divide-orange-100 dark:divide-orange-800">
                       {(paradasPorOrdem[ordem.id] ?? []).map((p: any) => (
                         <div key={p.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-sm font-medium text-orange-900">{p.motivo}</p>
-                            <p className="text-xs font-mono text-orange-600">
+                            <p className="text-sm font-medium text-orange-900 dark:text-orange-300">{p.motivo}</p>
+                            <p className="text-xs font-mono text-orange-600 dark:text-orange-400">
                               {String(p.hora_inicio).slice(0, 5)} – {String(p.hora_fim).slice(0, 5)}
                               {" · "}{p.data}
                             </p>
@@ -755,8 +754,8 @@ export default function PainelLiberacao() {
 
                 {/* Campos inline para gestor preencher quando dados estão vazios */}
                 {!ordem.hora_inicio && !ordem.hora_fim && regs.length === 0 && !ordem.obs_linha && (
-                  <div className="rounded-md border border-dashed border-orange-300 bg-orange-50/60 p-3 space-y-3">
-                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
+                  <div className="rounded-md border border-dashed border-orange-300 dark:border-orange-700 bg-orange-50/60 dark:bg-orange-900/10 p-3 space-y-3">
+                    <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wide">
                       Dados de produção (opcional — preencha antes de liberar)
                     </p>
                     <div className="grid grid-cols-2 gap-3">
@@ -766,7 +765,7 @@ export default function PainelLiberacao() {
                           type="time"
                           value={horaInicioEdit[ordem.id] ?? ""}
                           onChange={(e) => setHoraInicioEdit((prev) => ({ ...prev, [ordem.id]: e.target.value }))}
-                          className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
                       <div className="space-y-1">
@@ -775,7 +774,7 @@ export default function PainelLiberacao() {
                           type="time"
                           value={horaFimEdit[ordem.id] ?? ""}
                           onChange={(e) => setHoraFimEdit((prev) => ({ ...prev, [ordem.id]: e.target.value }))}
-                          className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
                     </div>
@@ -832,7 +831,7 @@ export default function PainelLiberacao() {
                       setQtdReal((prev) => ({ ...prev, [ordem.id]: val }));
                     }}
                     placeholder="0,000"
-                    className="w-36 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-36 rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   {regs.length > 0 && (
                     <span className="text-xs text-muted-foreground">calculado automaticamente</span>
@@ -842,25 +841,25 @@ export default function PainelLiberacao() {
                 {ordem.obs && (() => {
                   const items = parseObsItems(ordem.obs);
                   return (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
-                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">⚠ Adições para Mistura</p>
+                    <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 space-y-1">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">⚠ Adições para Mistura</p>
                       {items ? (
                         <ul className="space-y-0.5">
                           {items.map((item, i) => (
-                            <li key={i} className="text-sm text-amber-900 font-mono">{formatObsLine(item)}</li>
+                            <li key={i} className="text-sm text-amber-900 dark:text-amber-300 font-mono">{formatObsLine(item)}</li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-sm text-amber-900 whitespace-pre-wrap">{ordem.obs}</p>
+                        <p className="text-sm text-amber-900 dark:text-amber-300 whitespace-pre-wrap">{ordem.obs}</p>
                       )}
                     </div>
                   );
                 })()}
 
                 {ordem.motivo_reprovacao && (
-                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 space-y-1">
-                    <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">✖ Motivo da Reprovação anterior</p>
-                    <p className="text-sm text-red-900 whitespace-pre-wrap">{ordem.motivo_reprovacao}</p>
+                  <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 space-y-1">
+                    <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">✖ Motivo da Reprovação anterior</p>
+                    <p className="text-sm text-red-900 dark:text-red-300 whitespace-pre-wrap">{ordem.motivo_reprovacao}</p>
                   </div>
                 )}
 
@@ -927,7 +926,7 @@ export default function PainelLiberacao() {
                       type="time"
                       value={editDraft.hora_inicio}
                       onChange={(e) => setEditDraft((d) => d ? { ...d, hora_inicio: e.target.value } : d)}
-                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                   <div className="space-y-1">
@@ -936,7 +935,7 @@ export default function PainelLiberacao() {
                       type="time"
                       value={editDraft.hora_fim}
                       onChange={(e) => setEditDraft((d) => d ? { ...d, hora_fim: e.target.value } : d)}
-                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                 </div>
@@ -954,7 +953,7 @@ export default function PainelLiberacao() {
                     setEditDraft((d) => d ? { ...d, quantidade_real: val } : d);
                   }}
                   placeholder="0,000"
-                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
 
@@ -963,8 +962,8 @@ export default function PainelLiberacao() {
                 <div className="space-y-4">
                   <p className="text-sm font-medium">Registros Diários</p>
                   {editDraft.registros.map((reg, ri) => (
-                    <div key={reg.id} className="rounded-md border border-blue-200 bg-blue-50 p-3 space-y-3">
-                      <p className="text-xs font-semibold text-blue-700">
+                    <div key={reg.id} className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3 space-y-3">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
                         {format(new Date(reg.data + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
                       </p>
                       {/* Horários do registro */}
@@ -982,7 +981,7 @@ export default function PainelLiberacao() {
                                 return { ...d, registros: regs };
                               })
                             }
-                            className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                           />
                         </div>
                         <div className="space-y-1">
@@ -998,7 +997,7 @@ export default function PainelLiberacao() {
                                 return { ...d, registros: regs };
                               })
                             }
-                            className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                           />
                         </div>
                       </div>
@@ -1059,7 +1058,7 @@ export default function PainelLiberacao() {
                                 });
                               }}
                               placeholder="Peso (kg)"
-                              className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              className="flex-1 rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             />
                             {reg.items.length > 1 && (
                               <Button
@@ -1135,7 +1134,7 @@ export default function PainelLiberacao() {
                           });
                         }}
                         placeholder="Peso (kg)"
-                        className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="flex-1 rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                       {editDraft.obs_linha_items.length > 1 && (
                         <Button
@@ -1252,7 +1251,7 @@ export default function PainelLiberacao() {
               readOnly
               value={zplAtivo ?? ""}
               rows={14}
-              className="w-full rounded-md border bg-muted/40 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              className="w-full rounded-md border dark:border-gray-600 bg-muted/40 dark:bg-gray-800 dark:text-gray-300 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               onClick={(e) => (e.target as HTMLTextAreaElement).select()}
             />
           </div>
@@ -1323,7 +1322,7 @@ export default function PainelLiberacao() {
                 type="date"
                 value={novoRegData}
                 onChange={(e) => setNovoRegData(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1333,7 +1332,7 @@ export default function PainelLiberacao() {
                   type="time"
                   value={novoRegHoraInicio}
                   onChange={(e) => setNovoRegHoraInicio(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div className="space-y-1">
@@ -1342,7 +1341,7 @@ export default function PainelLiberacao() {
                   type="time"
                   value={novoRegHoraFim}
                   onChange={(e) => setNovoRegHoraFim(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>
@@ -1382,7 +1381,7 @@ export default function PainelLiberacao() {
                       setNovoRegItems((prev) => prev.map((it, idx) => idx === i ? { ...it, peso: val } : it));
                     }}
                     placeholder="Peso (kg)"
-                    className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="flex-1 rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   {novoRegItems.length > 1 && (
                     <Button
@@ -1428,7 +1427,7 @@ export default function PainelLiberacao() {
               onChange={(e) => setMotivoReprovacao(e.target.value)}
               placeholder="Descreva o motivo..."
               rows={3}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <AlertDialogFooter>
