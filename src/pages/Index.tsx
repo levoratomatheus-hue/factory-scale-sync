@@ -146,8 +146,18 @@ const papelLabel: Record<string, string> = {
   comercial: 'Comercial',
 };
 
+// Abas que ficam no DOM após a primeira visita (keep-alive).
+// Formulários/one-shot ficam de fora e sempre remontam.
+const KEEP_ALIVE_TABS = new Set<TabGestorId>([
+  'gestor', 'programacao', 'programacao_balanca', 'historico', 'liberacao',
+  'analises', 'consulta_formula', 'comercial',
+  'balanca1', 'balanca2', 'mistura',
+  'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
+  'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
+  'estoque_manutencao', 'ferramentas_manutencao',
+]);
+
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
-// Só monta na primeira visita — evita fetches desnecessários antes disso.
 function KeepAlive({ active, children }: { active: boolean; children: ReactNode }) {
   return <div style={{ display: active ? '' : 'none' }}>{children}</div>;
 }
@@ -244,6 +254,16 @@ export default function Index() {
         .find((i) => i.id === activeTab)?.label ?? ''),
   [activeTab]);
 
+  // Acumula as abas visitadas — deve ficar antes dos early returns
+  const [mountedTabs, setMountedTabs] = useState<Set<TabGestorId>>(
+    () => activeTab && KEEP_ALIVE_TABS.has(activeTab) ? new Set([activeTab]) : new Set(),
+  );
+  useEffect(() => {
+    if (activeTab && KEEP_ALIVE_TABS.has(activeTab)) {
+      setMountedTabs((prev) => prev.has(activeTab) ? prev : new Set([...prev, activeTab]));
+    }
+  }, [activeTab]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -257,27 +277,6 @@ export default function Index() {
   if (showWelcome) {
     return <PaginaInicial onEnter={dismissWelcome} fading={welcomeFading} />;
   }
-
-  // Acumula as abas já visitadas para manter keep-alive.
-  // Abas de formulário (criar, importar, abrir_os) ficam de fora — sempre remontam.
-  const KEEP_ALIVE_TABS = new Set<TabGestorId>([
-    'gestor', 'programacao', 'programacao_balanca', 'historico', 'liberacao',
-    'analises', 'consulta_formula', 'comercial',
-    'balanca1', 'balanca2', 'mistura',
-    'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
-    'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
-    'estoque_manutencao', 'ferramentas_manutencao',
-  ]);
-
-  const [mountedTabs, setMountedTabs] = useState<Set<TabGestorId>>(
-    () => activeTab && KEEP_ALIVE_TABS.has(activeTab) ? new Set([activeTab]) : new Set(),
-  );
-
-  useEffect(() => {
-    if (activeTab && KEEP_ALIVE_TABS.has(activeTab)) {
-      setMountedTabs((prev) => prev.has(activeTab) ? prev : new Set([...prev, activeTab]));
-    }
-  }, [activeTab]);
 
   const goHome = () => {
     goToTab(null);
