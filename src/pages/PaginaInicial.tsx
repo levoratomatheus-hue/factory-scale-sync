@@ -13,11 +13,8 @@ interface PaginaInicialProps {
 export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInicialProps) {
   return (
     <div
-      className={`${embedded ? "flex-1 h-full" : "min-h-screen"} flex flex-col items-center justify-center relative overflow-hidden select-none transition-opacity duration-500`}
-      style={{
-        background: "#ffffff",
-        opacity: fading ? 0 : 1,
-      }}
+      className={`${embedded ? "flex-1 h-full" : "min-h-screen"} flex flex-col items-center justify-center relative overflow-hidden select-none transition-opacity duration-500 bg-white dark:bg-gray-900`}
+      style={{ opacity: fading ? 0 : 1 }}
     >
 
       {/* Conteúdo central */}
@@ -26,24 +23,18 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
         {/* Marca */}
         <div className="flex flex-col items-center gap-3">
           <h1
-            className="leading-none select-none tracking-tight"
+            className="leading-none select-none tracking-tight text-gray-900 dark:text-white"
             style={{ fontSize: "4rem", fontFamily: "Bebas Neue, sans-serif", letterSpacing: "0.04em" }}
           >
-            <span style={{ color: "#1f2937" }}>ZAN COLLOR</span>
+            ZAN COLLOR
           </h1>
-          <p
-            className="tracking-[0.45em] uppercase"
-            style={{ fontSize: "clamp(0.65rem, 1.8vw, 0.9rem)", color: "#9ca3af", fontWeight: 400, letterSpacing: "0.45em" }}
-          >
+          <p className="tracking-widest uppercase text-sm text-gray-400 dark:text-gray-500">
             masterbatches
           </p>
         </div>
 
         {/* Divisor */}
-        <div
-          className="w-16 h-px rounded-full"
-          style={{ background: "#e5e7eb" }}
-        />
+        <div className="w-16 h-px rounded-full bg-gray-200 dark:bg-gray-700" />
 
         {/* Botão apenas na versão splash (não embutida) */}
         {!embedded && (
@@ -78,10 +69,7 @@ export default function PaginaInicial({ onEnter, fading, embedded }: PaginaInici
       </main>
 
       {/* Rodapé */}
-      <footer
-        className="absolute bottom-6 text-xs tracking-widest uppercase"
-        style={{ color: "#9ca3af" }}
-      >
+      <footer className="absolute bottom-6 text-xs tracking-widest uppercase text-gray-400 dark:text-gray-600">
         ZanCollor © 2026
       </footer>
     </div>
