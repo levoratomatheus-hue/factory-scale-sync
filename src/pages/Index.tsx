@@ -146,6 +146,18 @@ const papelLabel: Record<string, string> = {
   comercial: 'Comercial',
 };
 
+// Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
+// Só monta na primeira visita — evita fetches desnecessários antes disso.
+function KeepAlive({ active, children }: { active: boolean; children: ReactNode }) {
+  return <div style={{ display: active ? '' : 'none' }}>{children}</div>;
+}
+
+const TAB_LOADING = (
+  <div className="flex items-center justify-center h-64">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+
 function UserProfile({ nome, papel, email }: { nome: string; papel: string; email: string | null }) {
   const inicial = nome?.trim()[0]?.toUpperCase() ?? '?';
   const bg = avatarColor[papel] ?? '#6b7280';
@@ -245,6 +257,27 @@ export default function Index() {
   if (showWelcome) {
     return <PaginaInicial onEnter={dismissWelcome} fading={welcomeFading} />;
   }
+
+  // Acumula as abas já visitadas para manter keep-alive.
+  // Abas de formulário (criar, importar, abrir_os) ficam de fora — sempre remontam.
+  const KEEP_ALIVE_TABS = new Set<TabGestorId>([
+    'gestor', 'programacao', 'programacao_balanca', 'historico', 'liberacao',
+    'analises', 'consulta_formula', 'comercial',
+    'balanca1', 'balanca2', 'mistura',
+    'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
+    'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
+    'estoque_manutencao', 'ferramentas_manutencao',
+  ]);
+
+  const [mountedTabs, setMountedTabs] = useState<Set<TabGestorId>>(
+    () => activeTab && KEEP_ALIVE_TABS.has(activeTab) ? new Set([activeTab]) : new Set(),
+  );
+
+  useEffect(() => {
+    if (activeTab && KEEP_ALIVE_TABS.has(activeTab)) {
+      setMountedTabs((prev) => prev.has(activeTab) ? prev : new Set([...prev, activeTab]));
+    }
+  }, [activeTab]);
 
   const goHome = () => {
     goToTab(null);
@@ -647,32 +680,133 @@ export default function Index() {
         ) : (
           <main className="p-6 overflow-x-hidden">
             <ErrorBoundary>
-            <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-              {activeTab === 'gestor'              && <PainelGestor onCriarOP={handleCriarOP} />}
-              {activeTab === 'programacao'         && <PainelProgramacao />}
-              {activeTab === 'programacao_balanca' && <PainelProgramacaoBalanca />}
-              {activeTab === 'criar'               && <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />}
-              {activeTab === 'balanca1'            && <PainelBalanca balanca={1} />}
-              {activeTab === 'balanca2'            && <PainelBalanca balanca={2} />}
-              {activeTab === 'mistura'             && <PainelMistura />}
-              {activeTab === 'linha1'              && <PainelLinha linha={1} />}
-              {activeTab === 'linha2'              && <PainelLinha linha={2} />}
-              {activeTab === 'linha3'              && <PainelLinha linha={3} />}
-              {activeTab === 'linha4'              && <PainelLinha linha={4} />}
-              {activeTab === 'linha5'              && <PainelLinha linha={5} />}
-              {activeTab === 'liberacao'           && <PainelLiberacao />}
-              {activeTab === 'historico'           && <PainelHistorico />}
-              {activeTab === 'consulta_formula'    && <PainelConsultaFormula />}
-              {activeTab === 'analises'            && <PainelAnalises />}
-              {activeTab === 'importar'            && <ImportarProgramacao />}
-              {activeTab === 'comercial'           && <PainelComercial />}
-              {activeTab === 'painel_manutencao'   && <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
-              {activeTab === 'analise_manutencao'  && <PainelAnaliseManutencao />}
-              {activeTab === 'cadastro_equipamentos' && <CadastroEquipamentos />}
-              {activeTab === 'abrir_os'            && <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />}
-              {activeTab === 'estoque_manutencao'      && <EstoqueManutencao papel={perfil.papel} perfilNome={perfil.nome} />}
-              {activeTab === 'ferramentas_manutencao' && <FerramentasManutencao papel={perfil.papel} />}
-            </Suspense>
+              {/* ── Formulários/one-shot: sempre remontam ao abrir ── */}
+              {activeTab === 'criar' && (
+                <Suspense fallback={TAB_LOADING}>
+                  <CriarOrdem prefillLote={prefillLote} onPrefillConsumed={() => setPrefillLote(undefined)} />
+                </Suspense>
+              )}
+              {activeTab === 'importar' && (
+                <Suspense fallback={TAB_LOADING}><ImportarProgramacao /></Suspense>
+              )}
+              {activeTab === 'abrir_os' && (
+                <Suspense fallback={TAB_LOADING}>
+                  <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
+                </Suspense>
+              )}
+
+              {/* ── Keep-alive: monta na 1ª visita, permanece no DOM depois ── */}
+              {mountedTabs.has('gestor') && (
+                <KeepAlive active={activeTab === 'gestor'}>
+                  <Suspense fallback={TAB_LOADING}><PainelGestor onCriarOP={handleCriarOP} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('programacao') && (
+                <KeepAlive active={activeTab === 'programacao'}>
+                  <Suspense fallback={TAB_LOADING}><PainelProgramacao /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('programacao_balanca') && (
+                <KeepAlive active={activeTab === 'programacao_balanca'}>
+                  <Suspense fallback={TAB_LOADING}><PainelProgramacaoBalanca /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('balanca1') && (
+                <KeepAlive active={activeTab === 'balanca1'}>
+                  <Suspense fallback={TAB_LOADING}><PainelBalanca balanca={1} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('balanca2') && (
+                <KeepAlive active={activeTab === 'balanca2'}>
+                  <Suspense fallback={TAB_LOADING}><PainelBalanca balanca={2} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('mistura') && (
+                <KeepAlive active={activeTab === 'mistura'}>
+                  <Suspense fallback={TAB_LOADING}><PainelMistura /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('linha1') && (
+                <KeepAlive active={activeTab === 'linha1'}>
+                  <Suspense fallback={TAB_LOADING}><PainelLinha linha={1} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('linha2') && (
+                <KeepAlive active={activeTab === 'linha2'}>
+                  <Suspense fallback={TAB_LOADING}><PainelLinha linha={2} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('linha3') && (
+                <KeepAlive active={activeTab === 'linha3'}>
+                  <Suspense fallback={TAB_LOADING}><PainelLinha linha={3} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('linha4') && (
+                <KeepAlive active={activeTab === 'linha4'}>
+                  <Suspense fallback={TAB_LOADING}><PainelLinha linha={4} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('linha5') && (
+                <KeepAlive active={activeTab === 'linha5'}>
+                  <Suspense fallback={TAB_LOADING}><PainelLinha linha={5} /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('liberacao') && (
+                <KeepAlive active={activeTab === 'liberacao'}>
+                  <Suspense fallback={TAB_LOADING}><PainelLiberacao /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('historico') && (
+                <KeepAlive active={activeTab === 'historico'}>
+                  <Suspense fallback={TAB_LOADING}><PainelHistorico /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('consulta_formula') && (
+                <KeepAlive active={activeTab === 'consulta_formula'}>
+                  <Suspense fallback={TAB_LOADING}><PainelConsultaFormula /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('analises') && (
+                <KeepAlive active={activeTab === 'analises'}>
+                  <Suspense fallback={TAB_LOADING}><PainelAnalises /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('comercial') && (
+                <KeepAlive active={activeTab === 'comercial'}>
+                  <Suspense fallback={TAB_LOADING}><PainelComercial /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('painel_manutencao') && (
+                <KeepAlive active={activeTab === 'painel_manutencao'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('analise_manutencao') && (
+                <KeepAlive active={activeTab === 'analise_manutencao'}>
+                  <Suspense fallback={TAB_LOADING}><PainelAnaliseManutencao /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('cadastro_equipamentos') && (
+                <KeepAlive active={activeTab === 'cadastro_equipamentos'}>
+                  <Suspense fallback={TAB_LOADING}><CadastroEquipamentos /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('estoque_manutencao') && (
+                <KeepAlive active={activeTab === 'estoque_manutencao'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <EstoqueManutencao papel={perfil.papel} perfilNome={perfil.nome} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('ferramentas_manutencao') && (
+                <KeepAlive active={activeTab === 'ferramentas_manutencao'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <FerramentasManutencao papel={perfil.papel} />
+                  </Suspense>
+                </KeepAlive>
+              )}
             </ErrorBoundary>
           </main>
         )}
