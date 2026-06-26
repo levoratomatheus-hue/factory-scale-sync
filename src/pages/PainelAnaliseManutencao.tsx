@@ -20,37 +20,50 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// ── Light palette ─────────────────────────────────────────────────────────────
-const D = {
-  page:    "#f8fafc",
-  card:    "#ffffff",
-  cardAlt: "#f1f5f9",
-  border:  "#e2e8f0",
-  text:    "#0f172a",
-  muted:   "#64748b",
-  cyan:    "#0891b2",
-  emerald: "#059669",
-  amber:   "#d97706",
-  red:     "#dc2626",
-  violet:  "#7c3aed",
-  grid:    "#e2e8f0",
-} as const;
+// ── Theme palette (light/dark) ────────────────────────────────────────────────
+function buildPalette(dark: boolean) {
+  return {
+    page:    dark ? "#111827" : "#f8fafc",
+    card:    dark ? "#1f2937" : "#ffffff",
+    cardAlt: dark ? "#374151" : "#f1f5f9",
+    border:  dark ? "#374151" : "#e2e8f0",
+    text:    dark ? "#f1f5f9" : "#0f172a",
+    muted:   dark ? "#94a3b8" : "#64748b",
+    cyan:    "#0891b2",
+    emerald: "#059669",
+    amber:   "#d97706",
+    red:     "#dc2626",
+    violet:  "#7c3aed",
+    grid:    dark ? "#374151" : "#e2e8f0",
+  };
+}
 
-const cardStyle: React.CSSProperties = {
-  background: D.card,
-  border: `1px solid ${D.border}`,
-  borderRadius: "0.75rem",
-  padding: "1.25rem",
-};
+// Placeholder — replaced by reactive value inside component
+let D = buildPalette(false);
 
-const tooltipStyle: React.CSSProperties = {
-  borderRadius: "0.5rem",
-  border: `1px solid ${D.border}`,
-  background: D.cardAlt,
-  color: D.text,
-  fontSize: 12,
-  padding: "8px 12px",
-};
+function makeCardStyle(d: ReturnType<typeof buildPalette>): React.CSSProperties {
+  return {
+    background: d.card,
+    border: `1px solid ${d.border}`,
+    borderRadius: "0.75rem",
+    padding: "1.25rem",
+  };
+}
+
+function makeTooltipStyle(d: ReturnType<typeof buildPalette>): React.CSSProperties {
+  return {
+    borderRadius: "0.5rem",
+    border: `1px solid ${d.border}`,
+    background: d.cardAlt,
+    color: d.text,
+    fontSize: 12,
+    padding: "8px 12px",
+  };
+}
+
+// Legacy aliases — overwritten in component render scope via closure
+let cardStyle = makeCardStyle(D);
+let tooltipStyle = makeTooltipStyle(D);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface OS {
@@ -114,19 +127,23 @@ function fmtDate(iso: string | null) {
   return format(new Date(iso), "dd/MM/yyyy HH:mm", { locale: ptBR });
 }
 
-const PRIORIDADE_CONFIG: Record<string, { label: string; color: string }> = {
-  baixa:   { label: "Baixa",   color: D.muted },
-  media:   { label: "Média",   color: D.cyan },
-  alta:    { label: "Alta",    color: D.amber },
-  critica: { label: "Crítica", color: D.red },
-};
+function getPrioridadeConfig(d: ReturnType<typeof buildPalette>): Record<string, { label: string; color: string }> {
+  return {
+    baixa:   { label: "Baixa",   color: d.muted },
+    media:   { label: "Média",   color: d.cyan },
+    alta:    { label: "Alta",    color: d.amber },
+    critica: { label: "Crítica", color: d.red },
+  };
+}
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  aberta:               { label: "Aberta",           color: D.muted },
-  em_andamento:         { label: "Em Andamento",      color: D.cyan },
-  aguardando_aprovacao: { label: "Aguard. Aprovação", color: D.amber },
-  concluida:            { label: "Concluída",         color: D.emerald },
-};
+function getStatusConfig(d: ReturnType<typeof buildPalette>): Record<string, { label: string; color: string }> {
+  return {
+    aberta:               { label: "Aberta",           color: d.muted },
+    em_andamento:         { label: "Em Andamento",      color: d.cyan },
+    aguardando_aprovacao: { label: "Aguard. Aprovação", color: d.amber },
+    concluida:            { label: "Concluída",         color: d.emerald },
+  };
+}
 
 const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -176,6 +193,20 @@ function Vazio({ mensagem = "Nenhum dado no período" }: { mensagem?: string }) 
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PainelAnaliseManutencao() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  useEffect(() => {
+    const obs = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
+    obs.observe(document.documentElement, { attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
+  D = buildPalette(dark);
+  cardStyle = makeCardStyle(D);
+  tooltipStyle = makeTooltipStyle(D);
+
+  const PRIORIDADE_CONFIG = getPrioridadeConfig(D);
+  const STATUS_CONFIG = getStatusConfig(D);
+
   const [oss, setOss] = useState<OS[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -298,7 +329,7 @@ export default function PainelAnaliseManutencao() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 256, background: D.page }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 256, background: D.page, color: D.text }}>
         <Loader2 style={{ width: 32, height: 32, color: D.cyan }} className="animate-spin" />
       </div>
     );
@@ -369,14 +400,14 @@ export default function PainelAnaliseManutencao() {
               type="date"
               value={dataInicio}
               onChange={(e) => { setDataInicio(e.target.value); setAtalhoAtivo(null); }}
-              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none" }}
+              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none", colorScheme: dark ? "dark" : "light" }}
             />
             <span style={{ color: D.muted, fontSize: "0.75rem" }}>até</span>
             <input
               type="date"
               value={dataFim}
               onChange={(e) => { setDataFim(e.target.value); setAtalhoAtivo(null); }}
-              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none" }}
+              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none", colorScheme: dark ? "dark" : "light" }}
             />
             <select
               value={equipFiltro}
