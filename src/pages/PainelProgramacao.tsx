@@ -602,7 +602,7 @@ const LinhaColumn = memo(function LinhaColumn({
 });
 
 export default function PainelProgramacao() {
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const [data, setData] = useState(todayStr);
   const [ordens, setOrdens] = useState<Ordem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -669,6 +669,11 @@ export default function PainelProgramacao() {
 
   const dataRef = useRef(data);
   dataRef.current = data;
+
+  // Ref para registrosDoDia — permite que handleDeletarRegistro seja estável
+  // sem precisar de [registrosDoDia] como dependência (invalida memo de todas as colunas a cada fetch)
+  const registrosDoDiaRef = useRef<Record<string, any[]>>({});
+  registrosDoDiaRef.current = registrosDoDia;
 
   const fetchOrdens = useCallback(async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -740,9 +745,19 @@ export default function PainelProgramacao() {
   }, [data, fetchOrdens]);
 
   // Subscription única — escuta ordens e registros_diarios
+  // Ignora eventos irrelevantes para o dia atual antes de disparar refetch
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const trigger = () => {
+    const trigger = (payload: any) => {
+      const rec = payload?.new ?? payload?.old;
+      // Se o registro não toca o dia selecionado, descarta sem refetch
+      if (rec) {
+        const relevante =
+          rec.data_programacao === dataRef.current ||
+          rec.data_reprovacao  === dataRef.current ||
+          rec.data             === dataRef.current;
+        if (!relevante) return;
+      }
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => fetchOrdens(dataRef.current, false), 1500);
     };
@@ -790,7 +805,10 @@ export default function PainelProgramacao() {
     setNotas((prev) => prev.filter((n) => n.id !== id));
   };
 
-  const notasVisiveis = notas.filter((n) => !n.data || n.data === data);
+  const notasVisiveis = useMemo(
+    () => notas.filter((n) => !n.data || n.data === data),
+    [notas, data],
+  );
 
   const handleReorder = async (linha: number, reordered: Ordem[]) => {
     const anterior = ordens;
@@ -888,7 +906,7 @@ export default function PainelProgramacao() {
     setNovaDataEmissao("");
   };
 
-  const handleMoverLinha = async (id: string, novaLinha: number) => {
+  const handleMoverLinha = useCallback(async (id: string, novaLinha: number) => {
     const novaPosicao = await getNextPosicao(novaLinha);
 
     const { error } = await supabase
@@ -905,7 +923,7 @@ export default function PainelProgramacao() {
       prev.map((o) => o.id === id ? { ...o, linha: novaLinha, posicao: novaPosicao } : o)
     );
     toast({ title: `Ordem movida para Linha ${novaLinha}` });
-  };
+  }, []);
 
   const handleExcluirDia = async () => {
     if (!ordemParaExcluir) return;
@@ -1120,7 +1138,8 @@ export default function PainelProgramacao() {
       toast({ title: "Erro ao deletar registro", description: error.message, variant: "destructive" });
       return;
     }
-    const restantes = (registrosDoDia[ordem.id] ?? []).filter((r: any) => r.id !== registro.id);
+    // Usa ref em vez de capturar registrosDoDia — evita recriar o callback a cada fetch
+    const restantes = (registrosDoDiaRef.current[ordem.id] ?? []).filter((r: any) => r.id !== registro.id);
     let qtdReal = 0;
     restantes.forEach((r: any) => {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
@@ -1131,7 +1150,7 @@ export default function PainelProgramacao() {
     setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, quantidade_real: qtdReal } : o));
     toast({ title: "Registro deletado" });
     fetchOrdens(dataRef.current, false);
-  }, [registrosDoDia]);
+  }, [fetchOrdens]);
 
   const handleSalvarEditarRegistro = async () => {
     if (!editRegOrdem || !editRegRegistro) return;
