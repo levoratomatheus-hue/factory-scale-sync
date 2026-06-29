@@ -227,7 +227,14 @@ export default function PainelAnaliseManutencao() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchOss(); }, [fetchOss]);
+  useEffect(() => {
+    fetchOss();
+    const channel = supabase
+      .channel("analise-manutencao-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens_servico" }, fetchOss)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchOss]);
 
   function aplicarAtalho(id: Exclude<AtalhoId, null>) {
     const { inicio, fim } = calcAtalho(id);
