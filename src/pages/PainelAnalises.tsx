@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, createContext, useContext } from "react";
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,36 +18,52 @@ import {
   ReferenceLine,
 } from "recharts";
 
-// ── Dark theme palette ────────────────────────────────────────────────────────
-const D = {
-  page:    "#f8fafc",
-  card:    "#ffffff",
-  cardAlt: "#f1f5f9",
-  border:  "#e2e8f0",
-  text:    "#0f172a",
-  muted:   "#64748b",
-  cyan:    "#0891b2",
-  grid:    "#e2e8f0",
-  emerald: "#059669",
-  amber:   "#d97706",
-  red:     "#dc2626",
-} as const;
+// ── Theme palette (light/dark) ────────────────────────────────────────────────
+function buildPalette(dark: boolean) {
+  return {
+    page:    dark ? "#111827" : "#f8fafc",
+    card:    dark ? "#1f2937" : "#ffffff",
+    cardAlt: dark ? "#374151" : "#f1f5f9",
+    border:  dark ? "#374151" : "#e2e8f0",
+    text:    dark ? "#f1f5f9" : "#0f172a",
+    muted:   dark ? "#94a3b8" : "#64748b",
+    cyan:    "#0891b2",
+    grid:    dark ? "#374151" : "#e2e8f0",
+    emerald: "#059669",
+    amber:   "#d97706",
+    red:     "#dc2626",
+  };
+}
 
-const cardStyle = {
-  background: D.card,
-  border: `1px solid ${D.border}`,
-  borderRadius: "0.75rem",
-  padding: "1rem",
-};
+type Palette = ReturnType<typeof buildPalette>;
+const PaletteCtx = createContext<Palette>(buildPalette(false));
 
-const tooltipStyle = {
-  borderRadius: "0.5rem",
-  border: `1px solid ${D.border}`,
-  background: D.cardAlt,
-  color: D.text,
-  fontSize: 12,
-  padding: "8px 12px",
-};
+// Placeholder — will be replaced by reactive value inside component
+let D = buildPalette(false);
+
+function makeCardStyle(d: ReturnType<typeof buildPalette>) {
+  return {
+    background: d.card,
+    border: `1px solid ${d.border}`,
+    borderRadius: "0.75rem",
+    padding: "1rem",
+  };
+}
+
+function makeTooltipStyle(d: ReturnType<typeof buildPalette>) {
+  return {
+    borderRadius: "0.5rem",
+    border: `1px solid ${d.border}`,
+    background: d.cardAlt,
+    color: d.text,
+    fontSize: 12,
+    padding: "8px 12px",
+  };
+}
+
+// Legacy aliases — overwritten in component render scope via closure
+let cardStyle = makeCardStyle(D);
+let tooltipStyle = makeTooltipStyle(D);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -93,6 +109,8 @@ const FAIXAS = [
 // ── Tooltips ──────────────────────────────────────────────────────────────────
 
 function TooltipFaixa({ active, payload }: any) {
+  const D = useContext(PaletteCtx);
+  const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
   const { faixa, media, ops } = payload[0].payload;
   return (
@@ -107,6 +125,8 @@ function TooltipFaixa({ active, payload }: any) {
 }
 
 function TooltipFaixaKg({ active, payload }: any) {
+  const D = useContext(PaletteCtx);
+  const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
   const { faixa, totalKg, ops } = payload[0].payload;
   return (
@@ -121,6 +141,8 @@ function TooltipFaixaKg({ active, payload }: any) {
 }
 
 function TooltipMensal({ active, payload, label }: any) {
+  const D = useContext(PaletteCtx);
+  const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
   return (
     <div style={tooltipStyle}>
@@ -133,6 +155,8 @@ function TooltipMensal({ active, payload, label }: any) {
 }
 
 function TooltipProdutividade({ active, payload, label }: any) {
+  const D = useContext(PaletteCtx);
+  const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
   const val = payload[0].value;
   return (
@@ -163,6 +187,8 @@ const BREAKDOWN_DEFS = [
 ] as const;
 
 function CardHorasLinha(h: HorasLinha) {
+  const D = useContext(PaletteCtx);
+  const cardStyle = makeCardStyle(D);
   const efCor = h.eficiencia >= 80 ? "#10b981" : h.eficiencia >= 60 ? "#f59e0b" : "#ef4444";
   return (
     <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -243,6 +269,7 @@ function calcAtalho(id: Atalho): { inicio: string; fim: string } {
 // ── Section title helper ──────────────────────────────────────────────────────
 
 function SectionTitle({ icon: Icon, children }: { icon: any; children: React.ReactNode }) {
+  const D = useContext(PaletteCtx);
   return (
     <h3 style={{ marginBottom: "1rem", fontSize: "0.9375rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem", color: D.text }}>
       <Icon size={16} style={{ color: D.muted }} />
@@ -254,6 +281,17 @@ function SectionTitle({ icon: Icon, children }: { icon: any; children: React.Rea
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PainelAnalises() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const obs = new MutationObserver(() => setDark(document.documentElement.classList.contains('dark')));
+    obs.observe(document.documentElement, { attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+
+  D = buildPalette(dark);
+  cardStyle = makeCardStyle(D);
+  tooltipStyle = makeTooltipStyle(D);
+
   const { hoje, primeiroDiaMes, hojeStr, inicioAnual } = useMemo(() => {
     const d = new Date();
     return {
@@ -568,6 +606,7 @@ export default function PainelAnalises() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
+    <PaletteCtx.Provider value={D}>
     <div style={{ background: D.page, minHeight: "calc(100vh - 3rem)", padding: "1.5rem", margin: "-1.5rem", width: "calc(100% + 3rem)", display: "flex", flexDirection: "column", gap: "2rem" }}>
 
       {/* Cabeçalho */}
@@ -635,7 +674,7 @@ export default function PainelAnalises() {
                   padding: "0.375rem 0.75rem",
                   fontSize: "0.875rem",
                   outline: "none",
-                  colorScheme: "light",
+                  colorScheme: dark ? "dark" : "light",
                 }}
               />
             </div>
@@ -1115,5 +1154,6 @@ export default function PainelAnalises() {
         </>
       )}
     </div>
+    </PaletteCtx.Provider>
   );
 }
