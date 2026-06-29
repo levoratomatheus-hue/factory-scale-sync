@@ -177,8 +177,14 @@ function UserProfile({ nome, papel, email }: { nome: string; papel: string; emai
         {inicial}
       </div>
       <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
-        <span className="text-sm font-semibold text-foreground truncate leading-tight">{nome}</span>
-        <span className="text-xs text-muted-foreground truncate leading-tight">{email ?? papelLabel[papel] ?? papel}</span>
+        <span className="text-sm font-bold text-foreground truncate leading-tight">{nome}</span>
+        <span
+          className="mt-0.5 self-start truncate rounded-full px-1.5 py-px text-[10px] font-semibold leading-none"
+          style={{ background: `${bg}22`, color: bg }}
+        >
+          {papelLabel[papel] ?? papel}
+        </span>
+        {email && <span className="mt-0.5 text-[11px] text-muted-foreground truncate leading-tight">{email}</span>}
       </div>
     </div>
   );
