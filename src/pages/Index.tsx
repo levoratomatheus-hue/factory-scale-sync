@@ -179,7 +179,7 @@ function UserProfile({ nome, papel, email }: { nome: string; papel: string; emai
       <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
         <span className="text-sm font-bold text-foreground truncate leading-tight">{nome}</span>
         <span
-          className="mt-0.5 self-start truncate rounded-full px-1.5 py-px text-[10px] font-semibold leading-none"
+          className="mt-0.5 self-start truncate rounded-full px-1.5 py-px text-[10px] font-semibold leading-none uppercase tracking-wide"
           style={{ background: `${bg}22`, color: bg }}
         >
           {papelLabel[papel] ?? papel}
