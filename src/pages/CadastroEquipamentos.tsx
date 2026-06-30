@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,9 @@ export default function CadastroEquipamentos() {
   const [editing, setEditing] = useState<Equipamento | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [tagSugestao, setTagSugestao] = useState<string | null>(null);
+  const [loadingTag, setLoadingTag] = useState(false);
+  const tagDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchEquipamentos = useCallback(async () => {
     const { data, error } = await (supabase as any)
@@ -43,14 +46,55 @@ export default function CadastroEquipamentos() {
 
   useEffect(() => { fetchEquipamentos(); }, [fetchEquipamentos]);
 
+  async function buscarProximaTag(sigla: string) {
+    if (!sigla) { setTagSugestao(null); return; }
+    setLoadingTag(true);
+    const prefixo = sigla.toUpperCase().replace(/-$/, "");
+    const { data } = await (supabase as any)
+      .from("equipamentos")
+      .select("tag")
+      .ilike("tag", `${prefixo}-%`);
+    setLoadingTag(false);
+    if (!data || data.length === 0) {
+      setTagSugestao(`${prefixo}-01`);
+      return;
+    }
+    const numeros = (data as { tag: string | null }[])
+      .map((r) => {
+        const partes = (r.tag ?? "").split("-");
+        const num = parseInt(partes[partes.length - 1], 10);
+        return isNaN(num) ? 0 : num;
+      });
+    const proximo = Math.max(...numeros) + 1;
+    setTagSugestao(`${prefixo}-${String(proximo).padStart(2, "0")}`);
+  }
+
+  function handleTagChange(valor: string) {
+    setForm((p) => ({ ...p, tag: valor }));
+    setTagSugestao(null);
+    if (editing) return;
+    if (tagDebounceRef.current) clearTimeout(tagDebounceRef.current);
+    const sigla = valor.trim();
+    if (!sigla) return;
+    tagDebounceRef.current = setTimeout(() => buscarProximaTag(sigla), 400);
+  }
+
+  function aplicarSugestao() {
+    if (!tagSugestao) return;
+    setForm((p) => ({ ...p, tag: tagSugestao }));
+    setTagSugestao(null);
+  }
+
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setTagSugestao(null);
     setDialogOpen(true);
   }
 
   function openEdit(eq: Equipamento) {
     setEditing(eq);
+    setTagSugestao(null);
     setForm({
       nome: eq.nome,
       tag: eq.tag ?? "",
@@ -197,9 +241,23 @@ export default function CadastroEquipamentos() {
                 <label className="text-sm font-medium">Tag</label>
                 <Input
                   value={form.tag}
-                  onChange={(e) => setForm((p) => ({ ...p, tag: e.target.value }))}
+                  onChange={(e) => handleTagChange(e.target.value)}
                   placeholder="EXT-01"
                 />
+                {!editing && loadingTag && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Verificando...
+                  </p>
+                )}
+                {!editing && !loadingTag && tagSugestao && (
+                  <button
+                    type="button"
+                    onClick={aplicarSugestao}
+                    className="text-xs text-primary underline underline-offset-2 hover:opacity-80 text-left"
+                  >
+                    Sugestão: {tagSugestao} — clique para usar
+                  </button>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Linha</label>
