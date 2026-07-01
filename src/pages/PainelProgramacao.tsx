@@ -644,6 +644,15 @@ export default function PainelProgramacao() {
   const [ordemParaParada, setOrdemParaParada] = useState<Ordem | null>(null);
   const [paradaMotivo, setParadaMotivo] = useState("");
 
+  // Modal parada avulsa (gestor)
+  const [modalParadaAvulsaAberto, setModalParadaAvulsaAberto] = useState(false);
+  const [paradaAvulsaLinha, setParadaAvulsaLinha] = useState("1");
+  const [paradaAvulsaMotivo, setParadaAvulsaMotivo] = useState("");
+  const [paradaAvulsaData, setParadaAvulsaData] = useState(todayStr);
+  const [paradaAvulsaHoraInicio, setParadaAvulsaHoraInicio] = useState("");
+  const [paradaAvulsaHoraFim, setParadaAvulsaHoraFim] = useState("");
+  const [salvandoParadaAvulsa, setSalvandoParadaAvulsa] = useState(false);
+
   // Notas
   const [notas, setNotas] = useState<NotaProgramacao[]>([]);
   const [modalNotaAberto, setModalNotaAberto] = useState(false);
@@ -1237,6 +1246,33 @@ export default function PainelProgramacao() {
     setParadaHoraFim("");
   };
 
+  const handleSalvarParadaAvulsa = async () => {
+    if (!paradaAvulsaLinha || !paradaAvulsaMotivo || !paradaAvulsaData || !paradaAvulsaHoraInicio || !paradaAvulsaHoraFim) {
+      toast({ title: "Preencha todos os campos obrigatórios", variant: "destructive" });
+      return;
+    }
+    setSalvandoParadaAvulsa(true);
+    const { error } = await (supabase as any).from("paradas").insert({
+      linha: Number(paradaAvulsaLinha),
+      data: paradaAvulsaData,
+      motivo: paradaAvulsaMotivo,
+      hora_inicio: paradaAvulsaHoraInicio,
+      hora_fim: paradaAvulsaHoraFim,
+    });
+    setSalvandoParadaAvulsa(false);
+    if (error) {
+      toast({ title: "Erro ao salvar parada", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Parada registrada com sucesso" });
+    setModalParadaAvulsaAberto(false);
+    setParadaAvulsaLinha("1");
+    setParadaAvulsaMotivo("");
+    setParadaAvulsaData(todayStr);
+    setParadaAvulsaHoraInicio("");
+    setParadaAvulsaHoraFim("");
+  };
+
   const handleCopiarProgramacao = async () => {
     if (!dataCopiarDestino) return;
     const opsFiltradas = copiarLinha === "todas" ? ordens : ordens.filter((o) => o.linha === Number(copiarLinha));
@@ -1359,6 +1395,15 @@ export default function PainelProgramacao() {
         >
           <CalendarDays className="h-3.5 w-3.5" />
           Copiar para Outro Dia
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
+          onClick={() => { setParadaAvulsaData(data); setModalParadaAvulsaAberto(true); }}
+        >
+          <PauseCircle className="h-3.5 w-3.5" />
+          Adicionar Parada
         </Button>
       </div>
 
@@ -1909,6 +1954,8 @@ export default function PainelProgramacao() {
                   <SelectItem value="sem_material">Sem Material</SelectItem>
                   <SelectItem value="problema_processo">Problema de Processo</SelectItem>
                   <SelectItem value="falta_energia">Falta de Energia</SelectItem>
+                  <SelectItem value="reuniao">Reunião</SelectItem>
+                  <SelectItem value="outros">Outros</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1952,6 +1999,106 @@ export default function PainelProgramacao() {
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {salvandoParada && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <PauseCircle className="mr-1.5 h-4 w-4" />
+              Salvar Parada
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Adicionar Parada Avulsa (Gestor) */}
+      <Dialog
+        open={modalParadaAvulsaAberto}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalParadaAvulsaAberto(false);
+            setParadaAvulsaLinha("1");
+            setParadaAvulsaMotivo("");
+            setParadaAvulsaData(todayStr);
+            setParadaAvulsaHoraInicio("");
+            setParadaAvulsaHoraFim("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Adicionar Parada</DialogTitle>
+            <DialogDescription>
+              Registre uma parada em qualquer linha e data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Linha</label>
+                <Select value={paradaAvulsaLinha} onValueChange={setParadaAvulsaLinha}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Linha" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((l) => (
+                      <SelectItem key={l} value={String(l)}>Linha {l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Data</label>
+                <input
+                  type="date"
+                  value={paradaAvulsaData}
+                  onChange={(e) => setParadaAvulsaData(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Motivo</label>
+              <Select value={paradaAvulsaMotivo} onValueChange={setParadaAvulsaMotivo}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione o motivo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manutencao">Manutenção</SelectItem>
+                  <SelectItem value="sem_material">Sem Material</SelectItem>
+                  <SelectItem value="problema_processo">Problema de Processo</SelectItem>
+                  <SelectItem value="falta_energia">Falta de Energia</SelectItem>
+                  <SelectItem value="reuniao">Reunião</SelectItem>
+                  <SelectItem value="outros">Outros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="time"
+                  value={paradaAvulsaHoraInicio}
+                  onChange={(e) => setParadaAvulsaHoraInicio(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Fim</label>
+                <input
+                  type="time"
+                  value={paradaAvulsaHoraFim}
+                  onChange={(e) => setParadaAvulsaHoraFim(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setModalParadaAvulsaAberto(false)} disabled={salvandoParadaAvulsa}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSalvarParadaAvulsa}
+              disabled={salvandoParadaAvulsa || !paradaAvulsaMotivo || !paradaAvulsaData || !paradaAvulsaHoraInicio || !paradaAvulsaHoraFim}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {salvandoParadaAvulsa && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <PauseCircle className="mr-1.5 h-4 w-4" />
               Salvar Parada
             </Button>

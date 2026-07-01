@@ -88,6 +88,8 @@ const MOTIVOS: Record<string, string> = {
   sem_material: "Sem Material",
   problema_processo: "Problemas de Processo",
   falta_energia: "Falta de Energia",
+  reuniao: "Reunião",
+  outros: "Outros",
 };
 
 interface PainelLinhaProps {

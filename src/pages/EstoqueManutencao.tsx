@@ -183,7 +183,15 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
             <RefreshCw className="h-3.5 w-3.5" /> Atualizar
           </Button>
           {papel === "gestor" && (
-            <Button size="sm" onClick={() => setModalCadastro(true)} className="gap-1.5">
+            <Button size="sm" onClick={() => {
+              const maxCodigo = items.reduce((max, item) => {
+                const n = parseInt(item.codigo ?? "0", 10);
+                return isNaN(n) ? max : Math.max(max, n);
+              }, 0);
+              const proximoCodigo = String(maxCodigo + 1).padStart(4, "0");
+              setCadastroForm(f => ({ ...f, codigo: proximoCodigo }));
+              setModalCadastro(true);
+            }} className="gap-1.5">
               <Plus className="h-4 w-4" /> Cadastrar Item
             </Button>
           )}
@@ -282,7 +290,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       )}
 
       {/* Modal: Cadastrar Item */}
-      <Dialog open={modalCadastro} onOpenChange={(o) => { if (!o) setModalCadastro(false); }}>
+      <Dialog open={modalCadastro} onOpenChange={(o) => { if (!o) { setModalCadastro(false); setCadastroForm({ nome: "", codigo: "", unidade: "un", quantidade: "", quantidade_minima: "", localizacao: "" }); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Cadastrar Item no Estoque</DialogTitle>

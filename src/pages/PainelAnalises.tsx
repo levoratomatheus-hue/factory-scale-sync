@@ -174,6 +174,7 @@ function TooltipProdutividade({ active, payload, label }: any) {
 type HorasLinha = {
   linha: number; diasComOP: number; capacidade: number; horasTrabalhadas: number;
   manutencao: number; sem_material: number; problema_processo: number; falta_energia: number;
+  reuniao: number; outros: number;
   horasLimpeza: number; eficiencia: number;
 };
 
@@ -183,6 +184,8 @@ const BREAKDOWN_DEFS = [
   { key: "sem_material",     emoji: "📦", label: "Sem Material",   color: "#eab308" },
   { key: "problema_processo",emoji: "⚙️", label: "Prob. Processo", color: "#ef4444" },
   { key: "falta_energia",    emoji: "⚡", label: "Falta Energia",  color: "#b91c1c" },
+  { key: "reuniao",          emoji: "👥", label: "Reunião",        color: "#8b5cf6" },
+  { key: "outros",           emoji: "📋", label: "Outros",         color: "#6b7280" },
   { key: "horasLimpeza",     emoji: "🧹", label: "Limpeza",        color: "#3b82f6" },
 ] as const;
 
@@ -572,7 +575,7 @@ export default function PainelAnalises() {
     const topRepetidas = [...linhasAgrupadas].sort((a, b) => b.ops - a.ops).slice(0, 20);
 
     const TURNO_H = 9;
-    const MOTIVOS_PARADA = ["manutencao", "sem_material", "problema_processo", "falta_energia"] as const;
+    const MOTIVOS_PARADA = ["manutencao", "sem_material", "problema_processo", "falta_energia", "reuniao", "outros"] as const;
     const horasPorLinha = [1, 2, 3, 4, 5].map((linha) => {
       const diasComOP = diasLinhaMap[linha]?.size ?? 0;
       const toH = (t: string | null) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
