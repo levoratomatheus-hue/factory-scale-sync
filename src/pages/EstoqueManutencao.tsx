@@ -73,7 +73,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     const { data, error } = await (supabase as any)
       .from("estoque_manutencao")
       .select("*")
-      .order("nome", { ascending: true });
+      .order("codigo", { ascending: true, nullsFirst: false });
     if (!error) setItems(data ?? []);
     setLoading(false);
   }, []);
