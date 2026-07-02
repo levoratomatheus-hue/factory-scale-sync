@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Pencil, Settings, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
+import { Loader2, Plus, Pencil, Settings, ToggleLeft, ToggleRight, Trash2, Search } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +47,8 @@ export default function CadastroEquipamentos() {
   const tagDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Equipamento | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [setorFiltro, setSetorFiltro] = useState("todos");
 
   const fetchEquipamentos = useCallback(async () => {
     const { data, error } = await (supabase as any)
@@ -180,6 +183,21 @@ export default function CadastroEquipamentos() {
     else fetchEquipamentos();
   }
 
+  const setoresDistintos = useMemo(() =>
+    [...new Set(equipamentos.map((e) => e.setor).filter(Boolean) as string[])].sort(),
+  [equipamentos]);
+
+  const equipamentosFiltrados = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
+    return equipamentos.filter((e) => {
+      const matchBusca = !termo ||
+        e.nome.toLowerCase().includes(termo) ||
+        (e.tag ?? "").toLowerCase().includes(termo);
+      const matchSetor = setorFiltro === "todos" || e.setor === setorFiltro;
+      return matchBusca && matchSetor;
+    });
+  }, [equipamentos, busca, setorFiltro]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -195,13 +213,39 @@ export default function CadastroEquipamentos() {
           <Settings className="h-6 w-6 text-primary" />
           <div>
             <h2 className="text-xl font-bold">Equipamentos</h2>
-            <p className="text-sm text-muted-foreground">{equipamentos.length} cadastrado{equipamentos.length !== 1 ? "s" : ""}</p>
+            <p className="text-sm text-muted-foreground">
+              {equipamentosFiltrados.length} de {equipamentos.length} equipamento{equipamentos.length !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
         <Button onClick={openNew} className="gap-2">
           <Plus className="h-4 w-4" />
           Novo Equipamento
         </Button>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou TAG..."
+            className="pl-8"
+          />
+        </div>
+        <Select value={setorFiltro} onValueChange={setSetorFiltro}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Setor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os setores</SelectItem>
+            {setoresDistintos.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-lg border bg-card overflow-x-auto">
@@ -217,14 +261,14 @@ export default function CadastroEquipamentos() {
             </tr>
           </thead>
           <tbody>
-            {equipamentos.length === 0 && (
+            {equipamentosFiltrados.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Nenhum equipamento cadastrado.
+                  {equipamentos.length === 0 ? "Nenhum equipamento cadastrado." : "Nenhum equipamento encontrado para os filtros aplicados."}
                 </td>
               </tr>
             )}
-            {equipamentos.map((eq) => (
+            {equipamentosFiltrados.map((eq) => (
               <tr key={eq.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3 font-medium">{eq.nome}</td>
                 <td className="px-4 py-3 font-mono text-muted-foreground">{eq.tag ?? "—"}</td>
