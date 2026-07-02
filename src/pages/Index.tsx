@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -22,6 +22,7 @@ const AbrirOS                 = lazy(() => import('./AbrirOS'));
 const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao'));
 const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
+const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -51,7 +52,8 @@ type TabGestorId =
   | 'analises'
   | 'consulta_formula'
   | 'comercial'
-  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao';
+  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
+  | 'historico_paradas';
 
 const gruposGestor = [
   {
@@ -97,6 +99,7 @@ const gruposGestor = [
     icon: BarChart2,
     items: [
       { id: 'analises' as TabGestorId, label: 'Análises da Produção', icon: BarChart2 },
+      { id: 'historico_paradas' as TabGestorId, label: 'Histórico de Paradas', icon: PauseCircle },
     ],
   },
   {
@@ -152,6 +155,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
   'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
   'estoque_manutencao', 'ferramentas_manutencao',
+  'historico_paradas',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -778,6 +782,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'ferramentas_manutencao'}>
                   <Suspense fallback={TAB_LOADING}>
                     <FerramentasManutencao papel={perfil.papel} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('historico_paradas') && (
+                <KeepAlive active={activeTab === 'historico_paradas'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <HistoricoParadas papel={perfil.papel} />
                   </Suspense>
                 </KeepAlive>
               )}
