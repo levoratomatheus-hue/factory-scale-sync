@@ -68,7 +68,7 @@ export default function CadastroEquipamentos() {
       .ilike("tag", `${prefixo}-%`);
     setLoadingTag(false);
     if (!data || data.length === 0) {
-      setTagSugestao(`${prefixo}-01`);
+      setTagSugestao(`${prefixo}-001`);
       return;
     }
     const numeros = (data as { tag: string | null }[])
@@ -78,7 +78,7 @@ export default function CadastroEquipamentos() {
         return isNaN(num) ? 0 : num;
       });
     const proximo = Math.max(...numeros) + 1;
-    setTagSugestao(`${prefixo}-${String(proximo).padStart(2, "0")}`);
+    setTagSugestao(`${prefixo}-${String(proximo).padStart(3, "0")}`);
   }
 
   function handleTagChange(valor: string) {
