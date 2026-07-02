@@ -439,10 +439,10 @@ const SortableCard = memo(function SortableCard({
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
-          className="text-muted-foreground/50 hover:text-primary"
+          className="text-muted-foreground/50 hover:text-orange-500"
           title="Reprogramar"
         >
-          <CalendarDays className="h-3.5 w-3.5" />
+          <ArrowRightLeft className="h-3.5 w-3.5" />
         </button>
         {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
           <button
