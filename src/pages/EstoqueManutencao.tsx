@@ -460,6 +460,18 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                   </div>
                 </div>
               ))}
+              {/* Registro de cadastro do item */}
+              {modalHist && (
+                <div className="rounded-lg border border-dashed px-3 py-2 text-sm flex items-start gap-3 opacity-60">
+                  <Package className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-muted-foreground">Cadastrado no sistema</p>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">
+                      {format(new Date(modalHist.criado_em), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
