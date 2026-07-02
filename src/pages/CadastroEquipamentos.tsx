@@ -10,7 +10,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Pencil, Settings, ToggleLeft, ToggleRight } from "lucide-react";
+import { Loader2, Plus, Pencil, Settings, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Equipamento {
   id: string;
@@ -34,6 +44,8 @@ export default function CadastroEquipamentos() {
   const [tagSugestao, setTagSugestao] = useState<string | null>(null);
   const [loadingTag, setLoadingTag] = useState(false);
   const tagDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Equipamento | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchEquipamentos = useCallback(async () => {
     const { data, error } = await (supabase as any)
@@ -131,6 +143,33 @@ export default function CadastroEquipamentos() {
     fetchEquipamentos();
   }
 
+  async function excluirEquipamento() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    const { error } = await (supabase as any)
+      .from("equipamentos")
+      .delete()
+      .eq("id", confirmDelete.id);
+    setDeleting(false);
+    if (error) {
+      // FK violation — equipamento tem OS vinculada
+      if (error.code === "23503") {
+        toast({
+          title: "Não é possível excluir",
+          description: "Este equipamento possui Ordens de Serviço vinculadas. Exclua as OS antes de remover o equipamento.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+      }
+      setConfirmDelete(null);
+      return;
+    }
+    toast({ title: "Equipamento excluído" });
+    setConfirmDelete(null);
+    setEquipamentos((prev) => prev.filter((e) => e.id !== confirmDelete.id));
+  }
+
   async function toggleStatus(eq: Equipamento) {
     const novoStatus = eq.status === "ativo" ? "inativo" : "ativo";
     const { error } = await (supabase as any)
@@ -214,6 +253,14 @@ export default function CadastroEquipamentos() {
                         ? <ToggleRight className="h-4 w-4" />
                         : <ToggleLeft className="h-4 w-4" />}
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmDelete(eq)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </td>
               </tr>
@@ -221,6 +268,29 @@ export default function CadastroEquipamentos() {
           </tbody>
         </table>
       </div>
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir equipamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <span className="font-semibold text-foreground">{confirmDelete?.nome}</span>
+              {confirmDelete?.tag && <> ({confirmDelete.tag})</>}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={excluirEquipamento}
+              disabled={deleting}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
