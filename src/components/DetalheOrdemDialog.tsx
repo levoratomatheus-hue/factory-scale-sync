@@ -58,6 +58,7 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   const [loading, setLoading] = useState(false);
   const [editingParada, setEditingParada] = useState<any | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [infLabFixa, setInfLabFixa] = useState<string | null>(null);
 
   const fetchParadas = useCallback(async (datas: string[]) => {
     if (!ordem || datas.length === 0) return;
@@ -99,7 +100,15 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
   useEffect(() => {
     if (!ordem) return;
     setLoading(true);
-    setHist([]); setRegistros([]); setParadas([]); setFormulaItens([]);
+    setHist([]); setRegistros([]); setParadas([]); setFormulaItens([]); setInfLabFixa(null);
+    if (ordem.formula_id) {
+      (supabase as any)
+        .from("inf_lab_fixa")
+        .select("texto")
+        .eq("formula_id", ordem.formula_id)
+        .maybeSingle()
+        .then(({ data }: { data: { texto: string } | null }) => setInfLabFixa(data?.texto ?? null));
+    }
 
     Promise.all([
       supabase
@@ -290,16 +299,29 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
               </section>
             )}
 
-            {/* 5. Observações do Laboratório */}
-            {ordem.obs_laboratorio && (
+            {/* 5. Inf Lab */}
+            {(ordem.obs_laboratorio || infLabFixa) && (
               <section className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                   <FlaskConical className="h-3.5 w-3.5 text-violet-500" />
-                  Observações do Laboratório
+                  Informações de Laboratório
                 </h3>
-                <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 whitespace-pre-wrap">
-                  {ordem.obs_laboratorio}
-                </div>
+                {ordem.obs_laboratorio && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Inf Lab OP</p>
+                    <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 whitespace-pre-wrap">
+                      {ordem.obs_laboratorio}
+                    </div>
+                  </div>
+                )}
+                {infLabFixa && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Inf Lab Fixa <span className="text-violet-600 font-medium">({ordem.formula_id})</span></p>
+                    <div className="rounded-md border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-900 whitespace-pre-wrap">
+                      {infLabFixa}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 

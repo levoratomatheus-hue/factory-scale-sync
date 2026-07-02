@@ -222,17 +222,45 @@ const LabObsDialog = memo(function LabObsDialog({
   onClose: () => void;
   onSalvo: (id: string, obs: string) => void;
 }) {
-  const [texto, setTexto] = useState(ordem.obs_laboratorio ?? "");
+  const [textoOP, setTextoOP] = useState(ordem.obs_laboratorio ?? "");
+  const [textoFixo, setTextoFixo] = useState("");
+  const [loadingFixo, setLoadingFixo] = useState(false);
   const [salvando, setSalvando] = useState(false);
+
+  // Carrega Inf Lab Fixa pelo formula_id
+  useEffect(() => {
+    if (!ordem.formula_id) return;
+    setLoadingFixo(true);
+    (supabase as any)
+      .from("inf_lab_fixa")
+      .select("texto")
+      .eq("formula_id", ordem.formula_id)
+      .maybeSingle()
+      .then(({ data }: { data: { texto: string } | null }) => {
+        setTextoFixo(data?.texto ?? "");
+        setLoadingFixo(false);
+      });
+  }, [ordem.formula_id]);
 
   const handleSalvar = async () => {
     setSalvando(true);
-    const { error } = await supabase.from("ordens").update({ obs_laboratorio: texto } as any).eq("id", ordem.id);
+    const promessas: Promise<any>[] = [
+      supabase.from("ordens").update({ obs_laboratorio: textoOP } as any).eq("id", ordem.id),
+    ];
+    if (ordem.formula_id) {
+      promessas.push(
+        (supabase as any).from("inf_lab_fixa").upsert(
+          { formula_id: ordem.formula_id, texto: textoFixo, atualizado_em: new Date().toISOString() },
+          { onConflict: "formula_id" }
+        )
+      );
+    }
+    const resultados = await Promise.all(promessas);
     setSalvando(false);
-    if (error) {
+    if (resultados.some((r) => r.error)) {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     } else {
-      onSalvo(ordem.id, texto);
+      onSalvo(ordem.id, textoOP);
       onClose();
     }
   };
@@ -243,18 +271,41 @@ const LabObsDialog = memo(function LabObsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 text-violet-500" />
-            Obs. Laboratório
+            Informações de Laboratório
           </DialogTitle>
           <DialogDescription className="text-xs">{ordem.produto} · Lote {ordem.lote}</DialogDescription>
         </DialogHeader>
-        <textarea
-          className="w-full rounded-md border bg-muted/30 p-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-          rows={5}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Anotações do laboratório..."
-          autoFocus
-        />
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Inf Lab OP</label>
+            <p className="text-xs text-muted-foreground">Exclusiva desta OP.</p>
+            <textarea
+              className="w-full rounded-md border bg-muted/30 p-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              rows={3}
+              value={textoOP}
+              onChange={(e) => setTextoOP(e.target.value)}
+              placeholder="Anotações específicas desta OP..."
+              autoFocus
+            />
+          </div>
+          {ordem.formula_id && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Inf Lab Fixa</label>
+              <p className="text-xs text-muted-foreground">Vale para todas as OPs com fórmula <span className="font-medium text-foreground">{ordem.formula_id}</span>.</p>
+              {loadingFixo ? (
+                <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+              ) : (
+                <textarea
+                  className="w-full rounded-md border border-violet-200 bg-violet-50/50 p-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  rows={3}
+                  value={textoFixo}
+                  onChange={(e) => setTextoFixo(e.target.value)}
+                  placeholder="Informação fixa para esta fórmula..."
+                />
+              )}
+            </div>
+          )}
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={handleSalvar} disabled={salvando}>
@@ -483,7 +534,7 @@ const SortableCard = memo(function SortableCard({
         <button
           onClick={(e) => { e.stopPropagation(); onLab(ordem); }}
           className={`${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`}
-          title="Obs. Laboratório"
+          title="Inf Lab OP / Inf Lab Fixa"
         >
           <FlaskConical className="h-3.5 w-3.5" />
         </button>
