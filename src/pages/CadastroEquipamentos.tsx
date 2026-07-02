@@ -51,7 +51,7 @@ export default function CadastroEquipamentos() {
     const { data, error } = await (supabase as any)
       .from("equipamentos")
       .select("id, nome, tag, linha, setor, status, criado_em")
-      .order("nome", { ascending: true });
+      .order("tag", { ascending: true, nullsFirst: false });
     if (!error) setEquipamentos(data ?? []);
     setLoading(false);
   }, []);
