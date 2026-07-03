@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Loader2, Package, Plus, AlertTriangle, ArrowDownCircle,
-  ArrowUpCircle, History, RefreshCw, Trash2,
+  ArrowUpCircle, History, RefreshCw, Trash2, Pencil,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -71,6 +71,11 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
   // Excluir item
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<EstoqueItem | null>(null);
   const [deletingItem, setDeletingItem] = useState(false);
+
+  // Editar item
+  const [editandoItem, setEditandoItem] = useState<EstoqueItem | null>(null);
+  const [editForm, setEditForm] = useState({ nome: "", codigo: "", unidade: "un", quantidade_minima: "", localizacao: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Modal movimentação
   const [modalMov, setModalMov] = useState<{ item: EstoqueItem; tipo: "entrada" | "saida" } | null>(null);
@@ -169,6 +174,37 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       .order("criado_em", { ascending: false });
     setHist(data ?? []);
     setLoadingHist(false);
+  }
+
+  function abrirEdicao(item: EstoqueItem) {
+    setEditandoItem(item);
+    setEditForm({
+      nome: item.nome,
+      codigo: item.codigo ?? "",
+      unidade: item.unidade,
+      quantidade_minima: String(item.quantidade_minima),
+      localizacao: item.localizacao ?? "",
+    });
+  }
+
+  async function salvarEdicao() {
+    if (!editandoItem) return;
+    if (!editForm.nome.trim()) {
+      toast({ title: "Nome é obrigatório", variant: "destructive" }); return;
+    }
+    setSavingEdit(true);
+    const { error } = await (supabase as any).from("estoque_manutencao").update({
+      nome: editForm.nome.trim(),
+      codigo: editForm.codigo.trim() || null,
+      unidade: editForm.unidade,
+      quantidade_minima: parseFloat(editForm.quantidade_minima) || 0,
+      localizacao: editForm.localizacao.trim() || null,
+    }).eq("id", editandoItem.id);
+    setSavingEdit(false);
+    if (error) { toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Item atualizado!" });
+    setEditandoItem(null);
+    fetchItems();
   }
 
   async function excluirItem() {
@@ -320,13 +356,22 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                           <History className="h-4 w-4" />
                         </button>
                         {papel === "gestor" && (
-                          <button
-                            onClick={() => setConfirmDeleteItem(item)}
-                            title="Excluir item"
-                            className="p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => abrirEdicao(item)}
+                              title="Editar item"
+                              className="p-1 rounded text-muted-foreground/40 hover:text-primary hover:bg-primary/10 transition-colors"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteItem(item)}
+                              title="Excluir item"
+                              className="p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -337,6 +382,54 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
           </table>
         </div>
       )}
+
+      {/* Modal: Editar Item */}
+      <Dialog open={!!editandoItem} onOpenChange={(o) => { if (!o) setEditandoItem(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Nome *</label>
+              <Input value={editForm.nome} onChange={(e) => setEditForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome do item" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Código</label>
+                <Input value={editForm.codigo} onChange={(e) => setEditForm(f => ({ ...f, codigo: e.target.value }))} placeholder="Ex: 0001" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Unidade</label>
+                <select
+                  value={editForm.unidade}
+                  onChange={(e) => setEditForm(f => ({ ...f, unidade: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Qtd. Mínima</label>
+                <Input type="number" min={0} value={editForm.quantidade_minima} onChange={(e) => setEditForm(f => ({ ...f, quantidade_minima: e.target.value }))} placeholder="0" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Localização</label>
+                <Input value={editForm.localizacao} onChange={(e) => setEditForm(f => ({ ...f, localizacao: e.target.value }))} placeholder="Ex: Prateleira A1" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditandoItem(null)}>Cancelar</Button>
+            <Button onClick={salvarEdicao} disabled={savingEdit}>
+              {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!confirmDeleteItem} onOpenChange={(o) => { if (!o) setConfirmDeleteItem(null); }}>
         <AlertDialogContent>
