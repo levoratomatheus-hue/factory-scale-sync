@@ -14,8 +14,18 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Loader2, Package, Plus, AlertTriangle, ArrowDownCircle,
-  ArrowUpCircle, History, RefreshCw,
+  ArrowUpCircle, History, RefreshCw, Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface EstoqueItem {
   id: string;
@@ -57,6 +67,10 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     quantidade: "", quantidade_minima: "", localizacao: "",
   });
   const [savingCadastro, setSavingCadastro] = useState(false);
+
+  // Excluir item
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<EstoqueItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState(false);
 
   // Modal movimentação
   const [modalMov, setModalMov] = useState<{ item: EstoqueItem; tipo: "entrada" | "saida" } | null>(null);
@@ -155,6 +169,32 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       .order("criado_em", { ascending: false });
     setHist(data ?? []);
     setLoadingHist(false);
+  }
+
+  async function excluirItem() {
+    if (!confirmDeleteItem) return;
+    setDeletingItem(true);
+    const { error } = await (supabase as any)
+      .from("estoque_manutencao")
+      .delete()
+      .eq("id", confirmDeleteItem.id);
+    setDeletingItem(false);
+    if (error) {
+      if (error.code === "23503") {
+        toast({
+          title: "Não é possível excluir",
+          description: "Este item possui histórico de movimentações vinculadas. Remova as movimentações antes de excluir o item.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+      }
+      setConfirmDeleteItem(null);
+      return;
+    }
+    toast({ title: "Item excluído" });
+    setItems((prev) => prev.filter((i) => i.id !== confirmDeleteItem.id));
+    setConfirmDeleteItem(null);
   }
 
   const abaixoMinimo = items.filter(i => i.quantidade <= i.quantidade_minima && i.quantidade_minima > 0);
@@ -279,6 +319,15 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                         >
                           <History className="h-4 w-4" />
                         </button>
+                        {papel === "gestor" && (
+                          <button
+                            onClick={() => setConfirmDeleteItem(item)}
+                            title="Excluir item"
+                            className="p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -288,6 +337,29 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
           </table>
         </div>
       )}
+
+      <AlertDialog open={!!confirmDeleteItem} onOpenChange={(o) => { if (!o) setConfirmDeleteItem(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir item do estoque?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <span className="font-semibold text-foreground">{confirmDeleteItem?.nome}</span>
+              {confirmDeleteItem?.codigo && <> (cód. {confirmDeleteItem.codigo})</>}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingItem}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={excluirItem}
+              disabled={deletingItem}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {deletingItem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal: Cadastrar Item */}
       <Dialog open={modalCadastro} onOpenChange={(o) => { if (!o) { setModalCadastro(false); setCadastroForm({ nome: "", codigo: "", unidade: "un", quantidade: "", quantidade_minima: "", localizacao: "" }); } }}>
