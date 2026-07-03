@@ -1,15 +1,117 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useHistorico } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MarcaBadge } from "@/components/MarcaBadge";
-import { Loader2, History, Pencil, Eye, RotateCcw } from "lucide-react";
+import { Loader2, History, Pencil, Eye, RotateCcw, FlaskConical, Search } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
 import { EditarRegistrosDiariosModal } from "@/components/EditarRegistrosDiariosModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+
+function LabDialog({ ordem, onClose, onSalvo }: {
+  ordem: any;
+  onClose: () => void;
+  onSalvo: (id: string, obsOp: string) => void;
+}) {
+  const [textoOP, setTextoOP] = useState(ordem.obs_laboratorio ?? "");
+  const [textoFixo, setTextoFixo] = useState("");
+  const [loadingFixo, setLoadingFixo] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    if (!ordem.formula_id) return;
+    setLoadingFixo(true);
+    (supabase as any)
+      .from("inf_lab_fixa")
+      .select("texto")
+      .eq("formula_id", ordem.formula_id)
+      .maybeSingle()
+      .then(({ data }: { data: { texto: string } | null }) => {
+        setTextoFixo(data?.texto ?? "");
+        setLoadingFixo(false);
+      });
+  }, [ordem.formula_id]);
+
+  async function salvar() {
+    setSalvando(true);
+    const ops: Promise<any>[] = [
+      supabase.from("ordens").update({ obs_laboratorio: textoOP } as any).eq("id", ordem.id),
+    ];
+    if (ordem.formula_id) {
+      ops.push(
+        (supabase as any).from("inf_lab_fixa").upsert(
+          { formula_id: ordem.formula_id, texto: textoFixo, atualizado_em: new Date().toISOString() },
+          { onConflict: "formula_id" }
+        )
+      );
+    }
+    const results = await Promise.all(ops);
+    setSalvando(false);
+    if (results.some((r) => r.error)) {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+      return;
+    }
+    onSalvo(ordem.id, textoOP);
+    onClose();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-violet-500" />
+            Informações de Laboratório
+          </DialogTitle>
+          <DialogDescription className="text-xs">{ordem.produto} · Lote {ordem.lote}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Inf Lab OP</label>
+            <p className="text-xs text-muted-foreground">Exclusiva desta OP.</p>
+            <textarea
+              className="w-full rounded-md border bg-muted/30 p-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              rows={3}
+              value={textoOP}
+              onChange={(e) => setTextoOP(e.target.value)}
+              placeholder="Anotações específicas desta OP..."
+              autoFocus
+            />
+          </div>
+          {ordem.formula_id && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Inf Lab Fixa</label>
+              <p className="text-xs text-muted-foreground">
+                Vale para todas as OPs com fórmula <span className="font-medium text-foreground">{ordem.formula_id}</span>.
+              </p>
+              {loadingFixo ? (
+                <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+              ) : (
+                <textarea
+                  className="w-full rounded-md border border-violet-200 bg-violet-50/50 p-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  rows={3}
+                  value={textoFixo}
+                  onChange={(e) => setTextoFixo(e.target.value)}
+                  placeholder="Informação fixa para esta fórmula..."
+                />
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={salvar} disabled={salvando}>
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 type Modo = "dia" | "periodo";
 
@@ -32,6 +134,10 @@ export default function PainelHistorico() {
   const [editandoRegistrosOrdem, setEditandoRegistrosOrdem] = useState<any | null>(null);
 
   const [reabrindo, setReabrindo] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
+  const [ordemLab, setOrdemLab] = useState<any | null>(null);
+  // Atualiza obs_laboratorio localmente após salvar no dialog de lab
+  const [labOverrides, setLabOverrides] = useState<Record<string, string>>({});
 
   async function handleReabrir(ordem: any, e: React.MouseEvent) {
     e.stopPropagation();
@@ -63,18 +169,27 @@ export default function PainelHistorico() {
     }));
   };
 
+  const ordensFiltradas = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
+    if (!termo) return ordens;
+    return ordens.filter((o) =>
+      o.produto.toLowerCase().includes(termo) ||
+      o.lote.toLowerCase().includes(termo)
+    );
+  }, [ordens, busca]);
+
   const totalQuantidade = useMemo(
-    () => ordens.reduce((s, o) => s + (o.quantidade || 0), 0),
-    [ordens],
+    () => ordensFiltradas.reduce((s, o) => s + (o.quantidade || 0), 0),
+    [ordensFiltradas],
   );
 
   const totalReal = useMemo(
-    () => ordens.reduce((s, o) => {
+    () => ordensFiltradas.reduce((s, o) => {
       const ov = overrides[o.id] ?? {};
       const qtdReal = "quantidade_real" in ov ? ov.quantidade_real : o.quantidade_real;
       return s + (qtdReal ?? 0);
     }, 0),
-    [ordens, overrides],
+    [ordensFiltradas, overrides],
   );
 
   const descricaoFiltro =
@@ -99,7 +214,7 @@ export default function PainelHistorico() {
         <div className="flex-1">
           <h2 className="text-xl font-bold dark:text-white">Histórico de Ordens</h2>
           <p className="text-sm text-muted-foreground">
-            {ordens.length} ordem{ordens.length !== 1 ? "s" : ""} concluída{ordens.length !== 1 ? "s" : ""}
+            {ordensFiltradas.length}{busca ? ` de ${ordens.length}` : ""} ordem{ordens.length !== 1 ? "s" : ""} concluída{ordens.length !== 1 ? "s" : ""}
           </p>
         </div>
 
@@ -160,6 +275,17 @@ export default function PainelHistorico() {
         </div>
       </div>
 
+      <div className="relative max-w-sm">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por código ou nome do material..."
+          className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+      </div>
+
       <div className="rounded-lg border dark:border-gray-700 bg-card dark:bg-gray-800 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -178,14 +304,16 @@ export default function PainelHistorico() {
             </tr>
           </thead>
           <tbody>
-            {ordens.length === 0 && (
+            {ordensFiltradas.length === 0 && (
               <tr>
                 <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
-                  Nenhuma ordem concluída {descricaoFiltro}
+                  {ordens.length === 0
+                    ? `Nenhuma ordem concluída ${descricaoFiltro}`
+                    : "Nenhuma ordem encontrada para a busca aplicada."}
                 </td>
               </tr>
             )}
-            {ordens.map((ordem) => {
+            {ordensFiltradas.map((ordem) => {
               const ov = overrides[ordem.id] ?? {};
               const horaInicio = ordem.hora_inicio?.slice(0, 5) ?? null;
               const horaFim = ordem.hora_fim?.slice(0, 5) ?? null;
@@ -221,6 +349,15 @@ export default function PainelHistorico() {
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setEditandoRegistrosOrdem(ordem); }}>
                         <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`h-7 w-7 p-0 ${(labOverrides[ordem.id] ?? ordem.obs_laboratorio) ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/40 hover:text-violet-500"}`}
+                        title="Inf Lab OP / Inf Lab Fixa"
+                        onClick={(e) => { e.stopPropagation(); setOrdemLab({ ...ordem, obs_laboratorio: labOverrides[ordem.id] ?? ordem.obs_laboratorio }); }}
+                      >
+                        <FlaskConical className="h-3.5 w-3.5" />
                       </Button>
                       {ordem.status === "concluido" && (
                         <Button
@@ -260,6 +397,17 @@ export default function PainelHistorico() {
       </div>
 
       <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
+
+      {ordemLab && (
+        <LabDialog
+          ordem={ordemLab}
+          onClose={() => setOrdemLab(null)}
+          onSalvo={(id, obsOp) => {
+            setLabOverrides((prev) => ({ ...prev, [id]: obsOp }));
+            setOrdemLab(null);
+          }}
+        />
+      )}
 
       <EditarRegistrosDiariosModal
         ordem={editandoRegistrosOrdem}
