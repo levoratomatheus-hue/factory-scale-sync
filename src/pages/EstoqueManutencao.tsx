@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Loader2, Package, Plus, AlertTriangle, ArrowDownCircle,
-  ArrowUpCircle, History, RefreshCw, Trash2, Pencil,
+  ArrowUpCircle, History, RefreshCw, Trash2, Pencil, Search,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -233,6 +233,14 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     setConfirmDeleteItem(null);
   }
 
+  const [busca, setBusca] = useState("");
+
+  const itensFiltrados = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
+    if (!termo) return items;
+    return items.filter((i) => i.nome.toLowerCase().includes(termo));
+  }, [items, busca]);
+
   const abaixoMinimo = items.filter(i => i.quantidade <= i.quantidade_minima && i.quantidade_minima > 0);
 
   if (loading) {
@@ -274,6 +282,17 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
         </div>
       </div>
 
+      {/* Busca */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <Input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por nome..."
+          className="pl-8"
+        />
+      </div>
+
       {/* Alerta de itens críticos */}
       {abaixoMinimo.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2">
@@ -304,7 +323,14 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
+              {itensFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    Nenhum item encontrado para "{busca}"
+                  </td>
+                </tr>
+              )}
+              {itensFiltrados.map((item) => {
                 const critico = item.quantidade_minima > 0 && item.quantidade <= item.quantidade_minima;
                 return (
                   <tr
