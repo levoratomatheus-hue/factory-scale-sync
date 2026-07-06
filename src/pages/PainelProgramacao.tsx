@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -355,6 +355,7 @@ const SortableCard = memo(function SortableCard({
   onToggleConfirmado: (ordem: Ordem) => void;
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
+  onToggleDestino: (ordem: Ordem) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
@@ -458,11 +459,20 @@ const SortableCard = memo(function SortableCard({
             {du - 7} {du - 7 === 1 ? 'dia' : 'dias'} em atraso
           </span>
         )}
-        {ordem.tipo_op === 'estoque' && (
-          <span className="inline-flex items-center text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded px-1 py-0 leading-4">
-            Estoque
-          </span>
-        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }}
+          title="Clique para alternar entre Venda e Estoque"
+          className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1 py-0 leading-4 border transition-colors ${
+            ordem.tipo_op === 'estoque'
+              ? 'text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100'
+              : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
+          }`}
+        >
+          {ordem.tipo_op === 'estoque'
+            ? <><Package className="h-2.5 w-2.5 shrink-0" /> Estoque</>
+            : <><ShoppingCart className="h-2.5 w-2.5 shrink-0" /> Venda</>
+          }
+        </button>
       </div>
 
       {/* Coluna de ações vertical */}
@@ -532,6 +542,13 @@ const SortableCard = memo(function SortableCard({
           </button>
         )}
         <button
+          onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }}
+          className={`${ordem.tipo_op === 'estoque' ? 'text-purple-500 hover:text-purple-600' : 'text-blue-400 hover:text-blue-600'}`}
+          title={ordem.tipo_op === 'estoque' ? 'Destino: Estoque — clique para Venda' : 'Destino: Venda — clique para Estoque'}
+        >
+          {ordem.tipo_op === 'estoque' ? <Package className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+        </button>
+        <button
           onClick={(e) => { e.stopPropagation(); onLab(ordem); }}
           className={`${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`}
           title="Inf Lab OP / Inf Lab Fixa"
@@ -576,6 +593,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onDeletarRegistro,
   onEditarEmissao,
   onAddParada,
+  onToggleDestino,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -595,6 +613,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onDeletarRegistro: (ordem: Ordem, registro: any) => void;
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
+  onToggleDestino: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -635,7 +654,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} />
             ))
           )}
         </div>
@@ -919,6 +938,19 @@ export default function PainelProgramacao() {
     if (error) {
       setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, programacao_confirmada: ordem.programacao_confirmada } : o));
       toast({ title: "Erro ao atualizar confirmação", description: error.message, variant: "destructive" });
+    }
+  }, []);
+
+  const handleToggleDestino = useCallback(async (ordem: Ordem) => {
+    const novoValor = ordem.tipo_op === 'estoque' ? 'venda' : 'estoque';
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, tipo_op: novoValor } : o));
+    const { error } = await supabase
+      .from("ordens")
+      .update({ tipo_op: novoValor } as any)
+      .eq("id", ordem.id);
+    if (error) {
+      setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, tipo_op: ordem.tipo_op } : o));
+      toast({ title: "Erro ao alterar destino", description: error.message, variant: "destructive" });
     }
   }, []);
 
@@ -1366,7 +1398,7 @@ export default function PainelProgramacao() {
       // Preserva referência se IDs e statuses iguais — evita re-render das colunas não afetadas
       map[l] = (prev &&
         prev.length === next.length &&
-        next.every((o, i) => o.id === prev[i].id && o.status === prev[i].status && o.posicao === prev[i].posicao && o.programacao_confirmada === prev[i].programacao_confirmada)
+        next.every((o, i) => o.id === prev[i].id && o.status === prev[i].status && o.posicao === prev[i].posicao && o.programacao_confirmada === prev[i].programacao_confirmada && o.tipo_op === prev[i].tipo_op)
       ) ? prev : next;
     }
     prevOrdensPerLinhaRef.current = map;
@@ -1618,6 +1650,7 @@ export default function PainelProgramacao() {
                 onDeletarRegistro={handleDeletarRegistro}
                 onEditarEmissao={handleEditarEmissaoClick}
                 onAddParada={setOrdemParaParada}
+                onToggleDestino={handleToggleDestino}
               />
             ))}
           </div>
@@ -1704,6 +1737,27 @@ export default function PainelProgramacao() {
 
       <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} onMoverLinha={handleMoverLinha} />
       <DetalheOrdemDialog ordem={ordemDetalhe} onClose={() => setOrdemDetalhe(null)} />
+      <EditarOrdemDialog
+        ordem={ordemEditando ? {
+          id: ordemEditando.id,
+          produto: ordemEditando.produto,
+          lote: ordemEditando.lote,
+          quantidade: ordemEditando.quantidade,
+          status: ordemEditando.status,
+          linha: ordemEditando.linha,
+          balanca: ordemEditando.balanca,
+          formula_id: ordemEditando.formula_id,
+          tamanho_batelada: ordemEditando.tamanho_batelada,
+          obs: ordemEditando.obs,
+          marca: ordemEditando.marca,
+          requer_mistura: ordemEditando.requer_mistura,
+          data_programacao: ordemEditando.data_programacao,
+          data_emissao: ordemEditando.data_emissao,
+          tipo_op: ordemEditando.tipo_op,
+        } : null}
+        onClose={() => setOrdemEditando(null)}
+        onSalvar={handleEditar}
+      />
       {ordemLab && (
         <LabObsDialog
           ordem={ordemLab}

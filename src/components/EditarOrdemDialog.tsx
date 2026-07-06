@@ -34,6 +34,7 @@ export interface OrdemEditavel {
   requer_mistura: boolean | null;
   data_programacao: string;
   data_emissao: string | null;
+  tipo_op: string | null;
 }
 
 interface FormulaItem {
@@ -76,6 +77,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
   const [marca, setMarca] = useState("");
   const [formulaId, setFormulaId] = useState("");
   const [obsItems, setObsItems] = useState(Array.from({ length: 4 }, () => ({ qty: "", mp: "" })));
+  const [tipoOp, setTipoOp] = useState("");
 
   const [formulaItens, setFormulaItens] = useState<FormulaItem[]>([]);
   const [loadingFormula, setLoadingFormula] = useState(false);
@@ -95,6 +97,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
     setMarca(ordem.marca ?? "");
     setFormulaId(ordem.formula_id ?? "");
     setObsItems(parseObsItems(ordem.obs));
+    setTipoOp(ordem.tipo_op ?? "venda");
 
     // Carrega ingredientes
     setFormulaItens([]);
@@ -190,6 +193,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
       marca: marca || null,
       formula_id: formulaId.trim() || null,
       obs: obsJson,
+      tipo_op: tipoOp || null,
     };
 
     if (formulaItens.length > 0) {
@@ -311,6 +315,19 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
               <SelectContent>
                 <SelectItem value="Pigma">Pigma</SelectItem>
                 <SelectItem value="Zan Collor">Zan Collor</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Destino</label>
+            <Select value={tipoOp} onValueChange={setTipoOp}>
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="Selecione o destino" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="venda">Venda</SelectItem>
+                <SelectItem value="estoque">Estoque</SelectItem>
               </SelectContent>
             </Select>
           </div>
