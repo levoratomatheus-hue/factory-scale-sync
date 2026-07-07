@@ -310,7 +310,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
           Nenhum item cadastrado no estoque
         </div>
       ) : (
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-lg border overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/50 text-muted-foreground text-xs border-b">

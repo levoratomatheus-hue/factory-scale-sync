@@ -402,7 +402,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 {erroFormula && <p className="text-xs text-destructive">{erroFormula}</p>}
 
                 {itens.length > 0 && (
-                  <div className="rounded-md border overflow-hidden">
+                  <div className="rounded-md border overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-muted text-muted-foreground">
                         <tr>
@@ -518,6 +518,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 {buscaLote ? 'Nenhum lote encontrado.' : 'Nenhum lote pendente.'}
               </p>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="text-muted-foreground border-b sticky top-0 bg-card">
                   <tr>
@@ -543,6 +544,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>

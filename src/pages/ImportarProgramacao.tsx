@@ -294,7 +294,7 @@ export default function ImportarProgramacao() {
                     {resultado.semEmissao.length} lote{resultado.semEmissao.length !== 1 ? 's' : ''} sem data de emissão — verifique no TI Soft
                   </p>
                 </div>
-                <div className="max-h-48 overflow-y-auto">
+                <div className="max-h-48 overflow-y-auto overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="text-amber-700 border-b border-amber-200 bg-amber-50 sticky top-0">
                       <tr>

@@ -398,7 +398,7 @@ export default function Index() {
             </span>
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
-          <main className="p-6 overflow-x-hidden">
+          <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
                 {activeTab === 'abrir_os'
@@ -475,7 +475,7 @@ export default function Index() {
             <span className="font-semibold text-sm">Painel Comercial</span>
             <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
           </header>
-          <main className="p-6 overflow-x-hidden">
+          <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
                 <PainelComercial />
@@ -656,7 +656,7 @@ export default function Index() {
         {activeTab === null ? (
           <PaginaInicial embedded />
         ) : (
-          <main className="p-6 overflow-x-hidden">
+          <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               {/* ── Formulários/one-shot: sempre remontam ao abrir ── */}
               {activeTab === 'criar' && (
@@ -846,7 +846,7 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
           <span className="font-semibold text-sm">{titulo}</span>
           <span className="text-xs text-muted-foreground">— {nome}</span>
         </header>
-        <main className="p-6">
+        <main className="p-3 sm:p-6">
           {children}
         </main>
       </SidebarInset>

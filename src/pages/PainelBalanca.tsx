@@ -164,7 +164,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             </Button>
           </div>
 
-          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-weighing/40 p-6 space-y-4">
+          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-weighing/40 p-3 sm:p-6 space-y-4">
             <div className="flex items-baseline gap-3 flex-wrap">
               <div className="text-xl font-bold leading-tight">{emPesagem.produto}</div>
               <MarcaBadge marca={emPesagem.marca} />
@@ -238,7 +238,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
           {!isLoadingFormula && displayItens.length > 0 && (
             <div className="space-y-2">
-              <div className="rounded-md border overflow-hidden">
+              <div className="rounded-md border overflow-x-auto">
                 <table className="w-full text-base">
                   <thead className="bg-muted text-muted-foreground text-sm">
                     <tr>

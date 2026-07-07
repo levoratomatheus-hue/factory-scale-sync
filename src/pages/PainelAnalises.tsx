@@ -1084,7 +1084,7 @@ export default function PainelAnalises() {
               <div>
                 <SectionTitle icon={TrendingUp}>Top 25 por kg</SectionTitle>
                 <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
-                  <div style={{ overflowY: "auto", maxHeight: 420 }}>
+                  <div style={{ overflowY: "auto", overflowX: "auto", maxHeight: 420 }}>
                     <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ borderBottom: `1px solid ${D.border}`, background: D.cardAlt, position: "sticky", top: 0, zIndex: 10 }}>
@@ -1120,7 +1120,7 @@ export default function PainelAnalises() {
               <div>
                 <SectionTitle icon={TrendingUp}>Top 20 OPs Repetidas</SectionTitle>
                 <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
-                  <div style={{ overflowY: "auto", maxHeight: 420 }}>
+                  <div style={{ overflowY: "auto", overflowX: "auto", maxHeight: 420 }}>
                     <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ borderBottom: `1px solid ${D.border}`, background: D.cardAlt, position: "sticky", top: 0, zIndex: 10 }}>

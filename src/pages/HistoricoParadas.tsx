@@ -197,7 +197,7 @@ export default function HistoricoParadas({ papel }: Props) {
           Nenhuma parada registrada no período
         </div>
       ) : (
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-lg border overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/50 text-muted-foreground text-xs border-b">

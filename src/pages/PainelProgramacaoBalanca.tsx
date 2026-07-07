@@ -113,7 +113,7 @@ const FormulaDialog = memo(function FormulaDialog({
         ) : itens.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">Fórmula sem itens cadastrados</p>
         ) : (
-          <div className="overflow-y-auto flex-1 rounded-md border">
+          <div className="overflow-y-auto overflow-x-auto flex-1 rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted text-muted-foreground sticky top-0">
                 <tr>

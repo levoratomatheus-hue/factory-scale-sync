@@ -467,7 +467,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             </div>
           </div>
 
-          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-line/40 p-6 space-y-4">
+          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-line/40 p-3 sm:p-6 space-y-4">
             <div className="flex items-baseline gap-3 flex-wrap">
               <div className="text-xl font-bold leading-tight">{emLinha.produto}</div>
               <MarcaBadge marca={emLinha.marca} />
@@ -532,7 +532,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
           {itens.length > 0 && (
             <div className="space-y-2">
-              <div className="rounded-md border overflow-hidden">
+              <div className="rounded-md border overflow-x-auto">
                 <table className="w-full text-base">
                   <thead className="bg-muted text-muted-foreground text-sm">
                     <tr>
