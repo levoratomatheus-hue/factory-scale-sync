@@ -264,10 +264,10 @@ export default function PainelMistura() {
                     <tbody>
                       {displayItens.map((item, idx) => (
                         <tr key={idx} className="border-t">
-                          <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
-                          <td className={`px-3 py-2 font-medium${item.quantidade_kg === 0 ? " line-through text-muted-foreground/50" : ""}`}>{item.materia_prima}</td>
-                          {!hasCustom && <td className="px-3 py-2 text-muted-foreground">{item.unidade ?? '-'}</td>}
-                          <td className={`px-3 py-2 text-right font-bold text-lg${item.quantidade_kg === 0 ? " line-through text-muted-foreground/50" : ""}`}>{formatKg(item.quantidade_kg)}</td>
+                          <td className="px-3 py-3 sm:py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
+                          <td className={`px-3 py-3 sm:py-2 font-medium${item.quantidade_kg === 0 ? " line-through text-muted-foreground/50" : ""}`}>{item.materia_prima}</td>
+                          {!hasCustom && <td className="px-3 py-3 sm:py-2 text-muted-foreground">{item.unidade ?? '-'}</td>}
+                          <td className={`px-3 py-3 sm:py-2 text-right font-bold text-lg${item.quantidade_kg === 0 ? " line-through text-muted-foreground/50" : ""}`}>{formatKg(item.quantidade_kg)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -287,11 +287,10 @@ export default function PainelMistura() {
             {!isLoadingFormula && (
               <div className="flex justify-end">
                 <Button
-                  size="sm"
-                  className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
+                  className="bg-status-done hover:bg-status-done/90 text-primary-foreground w-full sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm"
                   onClick={() => concluirMistura(emMistura)}
                 >
-                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  <CheckCircle2 className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />
                   Concluir → Linha {emMistura.linha}
                 </Button>
               </div>
@@ -324,8 +323,12 @@ export default function PainelMistura() {
                   </div>
                 </div>
                 {!emMistura && (
-                  <Button size="sm" variant="outline" onClick={() => iniciarMistura(ordem)}>
-                    <Play className="h-3 w-3 mr-1" />
+                  <Button
+                    variant="outline"
+                    onClick={() => iniciarMistura(ordem)}
+                    className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
+                  >
+                    <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
                     Iniciar
                   </Button>
                 )}

@@ -453,13 +453,15 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             </div>
             <span className="text-sm text-muted-foreground shrink-0">Lote {emLinha.lote}</span>
             <div className="flex items-center gap-1.5 shrink-0">
-              <Button size="sm" variant="outline" onClick={() => setParadaOpen(true)} className="h-7 px-2 text-xs gap-1">
-                <PauseCircle className="h-3.5 w-3.5" />
-                Nova Parada
+              <Button variant="outline" onClick={() => setParadaOpen(true)} className="min-h-[44px] sm:min-h-0 sm:h-7 px-2.5 sm:px-2 text-xs gap-1">
+                <PauseCircle className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden xs:inline">Nova Parada</span>
+                <span className="xs:hidden">Parada</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setParadasListOpen(true)} className="h-7 px-2 text-xs gap-1">
-                <ClipboardList className="h-3.5 w-3.5" />
-                Paradas do Dia
+              <Button variant="outline" onClick={() => setParadasListOpen(true)} className="min-h-[44px] sm:min-h-0 sm:h-7 px-2.5 sm:px-2 text-xs gap-1">
+                <ClipboardList className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden xs:inline">Paradas do Dia</span>
+                <span className="xs:hidden">Paradas</span>
                 {paradas.length > 0 && (
                   <span className="ml-0.5 bg-orange-100 text-orange-700 rounded-full px-1.5 text-[10px] font-semibold">{paradas.length}</span>
                 )}
@@ -605,13 +607,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   type="time"
                   value={horaInicioInput}
                   onChange={(e) => setHoraInicioInput(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <Button
-                size="sm"
                 disabled={!horaInicioInput || savingInicio}
                 onClick={salvarInicio}
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 sm:h-8 text-sm"
               >
                 {savingInicio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar Início
@@ -635,12 +637,12 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   type="time"
                   value={horaFim}
                   onChange={(e) => setHoraFim(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
 
               {/* Registro de produção */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="text-sm font-medium">Registro de Produção</label>
                 {prodItems.map((row, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -653,9 +655,9 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                         setProdItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r));
                       }}
                       placeholder="0"
-                      className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-16 sm:w-14 rounded-md border border-input bg-background px-2 py-2.5 sm:py-1.5 text-base sm:text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
                     />
-                    <span className="text-sm font-semibold text-muted-foreground shrink-0">×</span>
+                    <span className="text-base font-semibold text-muted-foreground shrink-0">×</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -665,7 +667,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                         setProdItems((prev) => prev.map((r, j) => j === i ? { ...r, peso: val } : r));
                       }}
                       placeholder="0,000 kg"
-                      className="w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="flex-1 sm:flex-none sm:w-32 rounded-md border border-input bg-background px-2 py-2.5 sm:py-1.5 text-base sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                 ))}
@@ -683,24 +685,23 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                 />
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                 <Button
-                  size="sm"
                   variant="outline"
                   disabled={savingDia}
                   onClick={salvarDia}
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 sm:h-8 text-sm"
                 >
                   {savingDia
-                    ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    : <CalendarCheck2 className="mr-1 h-4 w-4" />}
+                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    : <CalendarCheck2 className="mr-2 h-4 w-4" />}
                   Salvar Dia
                 </Button>
                 <Button
-                  size="sm"
-                  className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
+                  className="bg-status-done hover:bg-status-done/90 text-primary-foreground w-full sm:w-auto min-h-[44px] sm:min-h-0 sm:h-8 text-sm"
                   onClick={() => setConfirmOpen(true)}
                 >
-                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
                   Concluir
                 </Button>
               </div>
@@ -780,12 +781,12 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               Linha {linha}
             </span>
             <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" onClick={() => setParadaOpen(true)} className="h-7 px-2 text-xs gap-1">
-                <PauseCircle className="h-3.5 w-3.5" />
+              <Button variant="outline" onClick={() => setParadaOpen(true)} className="min-h-[44px] sm:min-h-0 sm:h-7 px-2.5 sm:px-2 text-xs gap-1">
+                <PauseCircle className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                 Nova Parada
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setParadasListOpen(true)} className="h-7 px-2 text-xs gap-1">
-                <ClipboardList className="h-3.5 w-3.5" />
+              <Button variant="outline" onClick={() => setParadasListOpen(true)} className="min-h-[44px] sm:min-h-0 sm:h-7 px-2.5 sm:px-2 text-xs gap-1">
+                <ClipboardList className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                 Paradas do Dia
                 {paradas.length > 0 && (
                   <span className="ml-0.5 bg-orange-100 text-orange-700 rounded-full px-1.5 text-[10px] font-semibold">{paradas.length}</span>
@@ -827,8 +828,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   )}
                 </div>
                 {!emLinha && (
-                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); iniciarOrdem(ordem); }} className="shrink-0">
-                    <Play className="mr-1 h-3 w-3" />
+                  <Button variant="outline" onClick={(e) => { e.stopPropagation(); iniciarOrdem(ordem); }} className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm">
+                    <Play className="mr-1.5 h-4 w-4 sm:h-3 sm:w-3" />
                     Iniciar
                   </Button>
                 )}

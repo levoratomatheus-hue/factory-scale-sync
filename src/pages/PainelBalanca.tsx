@@ -185,7 +185,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 </div>
                 <div className="flex items-center gap-3 bg-muted/60 border rounded-lg px-4 py-2">
                   <button
-                    className="flex items-center justify-center h-7 w-7 rounded-full border border-primary/40 hover:bg-background transition-colors disabled:opacity-30"
+                    className="flex items-center justify-center h-11 w-11 sm:h-7 sm:w-7 rounded-full border border-primary/40 hover:bg-background active:bg-background transition-colors disabled:opacity-30"
                     disabled={bateladaAtual <= 1}
                     onClick={() => {
                       const now = Date.now();
@@ -198,13 +198,13 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                       }
                     }}
                   >
-                    <Minus className="h-4 w-4 text-primary" />
+                    <Minus className="h-5 w-5 sm:h-4 sm:w-4 text-primary" />
                   </button>
-                  <span className="text-lg font-extrabold text-primary tabular-nums w-7 text-center">
+                  <span className="text-2xl sm:text-lg font-extrabold text-primary tabular-nums w-8 sm:w-7 text-center">
                     {bateladaAtual}
                   </span>
                   <button
-                    className="flex items-center justify-center h-7 w-7 rounded-full border border-primary/40 hover:bg-background transition-colors"
+                    className="flex items-center justify-center h-11 w-11 sm:h-7 sm:w-7 rounded-full border border-primary/40 hover:bg-background active:bg-background transition-colors"
                     onClick={() => {
                       const now = Date.now();
                       const last = lastBateladaPress.current;
@@ -216,7 +216,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                       }
                     }}
                   >
-                    <Plus className="h-4 w-4 text-primary" />
+                    <Plus className="h-5 w-5 sm:h-4 sm:w-4 text-primary" />
                   </button>
                 </div>
               </div>
@@ -262,16 +262,16 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                           })
                         }
                       >
-                        <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
-                        <td className={cn("px-3 py-2 font-medium", checkedItens.has(idx) && "line-through text-muted-foreground", item.quantidade_kg === 0 && "line-through text-muted-foreground/50")}>{item.materia_prima}</td>
-                        {!hasCustom && <td className="px-3 py-2 text-muted-foreground">{(item as any).unidade ?? '-'}</td>}
-                        <td className={cn("px-3 py-2 text-right font-bold text-lg", item.quantidade_kg === 0 && "line-through text-muted-foreground/50")}>{formatKg(item.quantidade_kg)}</td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-3 py-3 sm:py-2 text-muted-foreground">{item.sequencia ?? '-'}</td>
+                        <td className={cn("px-3 py-3 sm:py-2 font-medium", checkedItens.has(idx) && "line-through text-muted-foreground", item.quantidade_kg === 0 && "line-through text-muted-foreground/50")}>{item.materia_prima}</td>
+                        {!hasCustom && <td className="px-3 py-3 sm:py-2 text-muted-foreground">{(item as any).unidade ?? '-'}</td>}
+                        <td className={cn("px-3 py-3 sm:py-2 text-right font-bold text-lg", item.quantidade_kg === 0 && "line-through text-muted-foreground/50")}>{formatKg(item.quantidade_kg)}</td>
+                        <td className="px-3 py-3 sm:py-2 text-center">
                           <input
                             type="checkbox"
                             readOnly
                             checked={checkedItens.has(idx)}
-                            className="h-5 w-5 accent-green-600 cursor-pointer"
+                            className="h-6 w-6 sm:h-5 sm:w-5 accent-green-600 cursor-pointer"
                             onClick={(e) => e.stopPropagation()}
                             onChange={() =>
                               setCheckedItens((prev) => {
@@ -302,11 +302,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
           {(displayItens.length === 0 || checkedItens.size === displayItens.length) && !isLoadingFormula && (
             <div className="flex justify-end">
               <Button
-                size="sm"
-                className="bg-status-done hover:bg-status-done/90 text-primary-foreground"
+                className="bg-status-done hover:bg-status-done/90 text-primary-foreground w-full sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm"
                 onClick={() => setConfirmOpen(true)}
               >
-                <CheckCircle2 className="mr-1 h-4 w-4" />
+                <CheckCircle2 className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />
                 Concluir pesagem
               </Button>
             </div>
@@ -412,8 +411,12 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   </div>
                 </div>
                 {!emPesagem && (
-                  <Button size="sm" variant="outline" onClick={() => iniciarPesagem(ordem)}>
-                    <Play className="h-3 w-3 mr-1" />
+                  <Button
+                    variant="outline"
+                    onClick={() => iniciarPesagem(ordem)}
+                    className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
+                  >
+                    <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
                     Iniciar Pesagem
                   </Button>
                 )}

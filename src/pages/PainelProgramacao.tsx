@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -337,6 +338,8 @@ const SortableCard = memo(function SortableCard({
   onDeletarRegistro,
   onEditarEmissao,
   onAddParada,
+  onToggleDestino,
+  isMobile,
 }: {
   ordem: Ordem;
   registros?: any[];
@@ -356,7 +359,9 @@ const SortableCard = memo(function SortableCard({
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
   onToggleDestino: (ordem: Ordem) => void;
+  isMobile?: boolean;
 }) {
+  const [acoesAbertas, setAcoesAbertas] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
 
@@ -374,12 +379,14 @@ const SortableCard = memo(function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-2.5 flex items-stretch gap-2 select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700' : ordem.motivo_reprovacao ? 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700' : ''} ${atrasado ? 'border-red-500' : ''}`}
+      className={`bg-card dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-2.5 flex flex-col select-none cursor-pointer ${ordem.status === 'concluido' ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700' : ordem.motivo_reprovacao ? 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700' : ''} ${atrasado ? 'border-red-500' : ''}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         onVerDetalhes(ordem);
       }}
     >
+      {/* Linha principal: grip + conteúdo + ações/menu */}
+      <div className="flex items-stretch gap-2">
       {/* Grip */}
       <button
         {...attributes}
@@ -475,102 +482,87 @@ const SortableCard = memo(function SortableCard({
         </button>
       </div>
 
-      {/* Coluna de ações vertical */}
-      <div className="flex flex-col items-center gap-1 shrink-0 border-l pl-1.5">
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }}
-          className={`${ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"}`}
-          title={ordem.programacao_confirmada ? "Confirmado — clique para desconfirmar" : "Não confirmado — clique para confirmar"}
-        >
-          {ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
-          className="text-muted-foreground/50 hover:text-primary"
-          title="Editar"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEditarEmissao(ordem); }}
-          className={`${ordem.data_emissao ? "text-muted-foreground/70 hover:text-amber-500" : "text-muted-foreground/50 hover:text-amber-500"}`}
-          title="Editar data de emissão"
-        >
-          <CalendarRange className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
-          className="text-muted-foreground/50 hover:text-orange-500"
-          title="Reprogramar"
-        >
-          <ArrowRightLeft className="h-3.5 w-3.5" />
-        </button>
-        {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }}
-            className="text-muted-foreground/50 hover:text-blue-600"
-            title="Registrar Dia"
-          >
-            <CalendarCheck2 className="h-3.5 w-3.5" />
+      {/* Coluna de ações vertical — desktop */}
+      {!isMobile && (
+        <div className="flex flex-col items-center gap-1 shrink-0 border-l pl-1.5">
+          <button onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }} className={`${ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"}`} title={ordem.programacao_confirmada ? "Confirmado" : "Não confirmado"}>
+            {ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
           </button>
-        )}
-        {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }}
-            className="text-muted-foreground/50 hover:text-green-600"
-            title="Forçar Conclusão"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
+          <button onClick={(e) => { e.stopPropagation(); onEditar(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onEditarEmissao(ordem); }} className={`${ordem.data_emissao ? "text-muted-foreground/70 hover:text-amber-500" : "text-muted-foreground/50 hover:text-amber-500"}`} title="Editar data de emissão"><CalendarRange className="h-3.5 w-3.5" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }} className="text-muted-foreground/50 hover:text-orange-500" title="Reprogramar"><ArrowRightLeft className="h-3.5 w-3.5" /></button>
+          {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+            <button onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }} className="text-muted-foreground/50 hover:text-blue-600" title="Registrar Dia"><CalendarCheck2 className="h-3.5 w-3.5" /></button>
+          )}
+          {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+            <button onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }} className="text-muted-foreground/50 hover:text-green-600" title="Forçar Conclusão"><CheckCircle2 className="h-3.5 w-3.5" /></button>
+          )}
+          {ordem.status === "em_linha" && (
+            <button onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Voltar para Fila"><Undo2 className="h-3.5 w-3.5" /></button>
+          )}
+          {ordem.formula_id && (
+            <button onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver fórmula"><BookOpen className="h-3.5 w-3.5" /></button>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }} className={`${ordem.tipo_op === 'estoque' ? 'text-purple-500 hover:text-purple-600' : 'text-blue-400 hover:text-blue-600'}`} title={ordem.tipo_op === 'estoque' ? 'Destino: Estoque' : 'Destino: Venda'}>
+            {ordem.tipo_op === 'estoque' ? <Package className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
           </button>
-        )}
-        {ordem.status === "em_linha" && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }}
-            className="text-muted-foreground/50 hover:text-amber-600"
-            title="Voltar para Fila"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-        {ordem.formula_id && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }}
-            className="text-muted-foreground/50 hover:text-primary"
-            title="Ver fórmula"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-          </button>
-        )}
+          <button onClick={(e) => { e.stopPropagation(); onLab(ordem); }} className={`${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`} title="Inf Lab"><FlaskConical className="h-3.5 w-3.5" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onAddParada(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Registrar Parada"><PauseCircle className="h-3.5 w-3.5" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }} className="text-muted-foreground/50 hover:text-destructive" title="Excluir"><Trash2 className="h-3.5 w-3.5" /></button>
+        </div>
+      )}
+
+      {/* Botão ⋮ — mobile */}
+      {isMobile && (
         <button
-          onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }}
-          className={`${ordem.tipo_op === 'estoque' ? 'text-purple-500 hover:text-purple-600' : 'text-blue-400 hover:text-blue-600'}`}
-          title={ordem.tipo_op === 'estoque' ? 'Destino: Estoque — clique para Venda' : 'Destino: Venda — clique para Estoque'}
+          onClick={(e) => { e.stopPropagation(); setAcoesAbertas((v) => !v); }}
+          className="shrink-0 self-start p-1.5 -mr-1 text-muted-foreground/60 active:text-foreground"
+          title="Ações"
         >
-          {ordem.tipo_op === 'estoque' ? <Package className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+          <MoreVertical className="h-4 w-4" />
         </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onLab(ordem); }}
-          className={`${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`}
-          title="Inf Lab OP / Inf Lab Fixa"
-        >
-          <FlaskConical className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onAddParada(ordem); }}
-          className="text-muted-foreground/50 hover:text-amber-600"
-          title="Registrar Parada"
-        >
-          <PauseCircle className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
-          className="text-muted-foreground/50 hover:text-destructive"
-          title="Excluir"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      )}
     </div>
+
+    {/* Tray de ações — mobile */}
+    {isMobile && acoesAbertas && (
+      <div
+        className="mt-1 pt-2 border-t flex flex-wrap gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Botão auxiliar reutilizável inline */}
+        {[
+          { icon: ordem.programacao_confirmada ? Lock : LockOpen, label: ordem.programacao_confirmada ? 'Desconfirmar' : 'Confirmar', color: ordem.programacao_confirmada ? 'text-green-600' : 'text-orange-500', action: () => { onToggleConfirmado(ordem); setAcoesAbertas(false); } },
+          { icon: Pencil,        label: 'Editar',        color: 'text-foreground',     action: () => { onEditar(ordem); setAcoesAbertas(false); } },
+          { icon: CalendarRange, label: 'Emissão',       color: 'text-amber-600',      action: () => { onEditarEmissao(ordem); setAcoesAbertas(false); } },
+          { icon: ArrowRightLeft,label: 'Reprogramar',   color: 'text-orange-500',     action: () => { onReprogramarClick(ordem); setAcoesAbertas(false); } },
+          ...(ordem.status === "em_linha" || ordem.status === "aguardando_linha" ? [
+            { icon: CalendarCheck2, label: 'Reg. Dia',   color: 'text-blue-600',       action: () => { onRegistrarDia(ordem); setAcoesAbertas(false); } },
+            { icon: CheckCircle2,   label: 'Concluir',   color: 'text-green-600',      action: () => { onForcarConclusao(ordem); setAcoesAbertas(false); } },
+          ] : []),
+          ...(ordem.status === "em_linha" ? [
+            { icon: Undo2, label: 'Voltar Fila', color: 'text-amber-600', action: () => { onVoltarFila(ordem); setAcoesAbertas(false); } },
+          ] : []),
+          ...(ordem.formula_id ? [
+            { icon: BookOpen, label: 'Fórmula', color: 'text-primary', action: () => { onDblClick(ordem); setAcoesAbertas(false); } },
+          ] : []),
+          { icon: ordem.tipo_op === 'estoque' ? Package : ShoppingCart, label: ordem.tipo_op === 'estoque' ? 'Estoque' : 'Venda', color: ordem.tipo_op === 'estoque' ? 'text-purple-600' : 'text-blue-600', action: () => { onToggleDestino(ordem); setAcoesAbertas(false); } },
+          { icon: FlaskConical,  label: 'Lab',          color: ordem.obs_laboratorio ? 'text-violet-600' : 'text-muted-foreground', action: () => { onLab(ordem); setAcoesAbertas(false); } },
+          { icon: PauseCircle,   label: 'Parada',       color: 'text-amber-600',      action: () => { onAddParada(ordem); setAcoesAbertas(false); } },
+          { icon: Trash2,        label: 'Excluir',      color: 'text-destructive',    action: () => { onExcluir(ordem); setAcoesAbertas(false); } },
+        ].map(({ icon: Icon, label, color, action }) => (
+          <button
+            key={label}
+            onClick={action}
+            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-muted active:bg-muted/70 text-xs font-medium min-h-[44px] ${color}`}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            {label}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
   );
 });
 
@@ -594,6 +586,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onEditarEmissao,
   onAddParada,
   onToggleDestino,
+  isMobile,
 }: {
   linha: number;
   ordens: Ordem[];
@@ -614,6 +607,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
   onToggleDestino: (ordem: Ordem) => void;
+  isMobile?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
 
@@ -632,7 +626,7 @@ const LinhaColumn = memo(function LinhaColumn({
   );
 
   return (
-    <div className="flex flex-col min-w-[260px] w-[260px]">
+    <div className={`flex flex-col ${isMobile ? "w-full" : "min-w-[260px] w-[260px]"}`}>
       <div className="mb-2">
         <div className="bg-muted rounded-md py-1.5 px-2 flex items-center justify-between">
           <span className="text-xs font-bold">Linha {linha}</span>
@@ -654,7 +648,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} isMobile={isMobile} />
             ))
           )}
         </div>
@@ -673,6 +667,8 @@ const LinhaColumn = memo(function LinhaColumn({
 
 export default function PainelProgramacao() {
   const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const isMobile = useIsMobile();
+  const [linhaAtivaMobile, setLinhaAtivaMobile] = useState(1);
   const [data, setData] = useState(todayStr);
   const [ordens, setOrdens] = useState<Ordem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1627,34 +1623,61 @@ export default function PainelProgramacao() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 w-full overflow-x-auto pb-4">
-            {[1, 2, 3, 4, 5].map((l) => (
-              <LinhaColumn
-                key={l}
-                linha={l}
-                ordens={ordensPerLinha[l]}
-                registrosDoDia={registrosPorLinha[l]}
-                dataSelecionada={data}
-                onReprogramarClick={handleReprogramarClick}
-                onDblClick={setOrdemFormula}
-                onEditar={setOrdemEditando}
-                onExcluir={setOrdemParaExcluir}
-                onVoltarFila={setOrdemParaVoltar}
-                onForcarConclusao={setOrdemParaForcar}
-                onRegistrarDia={handleRegistrarDiaClick}
-                onVerDetalhes={setOrdemDetalhe}
-                onLab={setOrdemLab}
-                onToggleConfirmado={handleToggleConfirmado}
-                onEditarRegistro={handleEditarRegistro}
-                onDeletarRegistro={handleDeletarRegistro}
-                onEditarEmissao={handleEditarEmissaoClick}
-                onAddParada={setOrdemParaParada}
-                onToggleDestino={handleToggleDestino}
-              />
-            ))}
-          </div>
-        </DndContext>
+        <>
+          {/* Seletor de linha — mobile apenas */}
+          {isMobile && (
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {[1, 2, 3, 4, 5].map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLinhaAtivaMobile(l)}
+                  className={`shrink-0 flex items-center justify-between gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold min-h-[44px] border transition-colors ${
+                    linhaAtivaMobile === l
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card text-muted-foreground border-border hover:bg-muted"
+                  }`}
+                >
+                  <span>L{l}</span>
+                  <span className={`text-xs font-normal ${linhaAtivaMobile === l ? "text-primary-foreground/70" : "text-muted-foreground/60"}`}>
+                    {ordensPerLinha[l]?.length ?? 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+            <div className={isMobile ? "w-full" : "flex gap-3 w-full overflow-x-auto pb-4"}>
+              {[1, 2, 3, 4, 5].map((l) => {
+                if (isMobile && l !== linhaAtivaMobile) return null;
+                return (
+                  <LinhaColumn
+                    key={l}
+                    linha={l}
+                    ordens={ordensPerLinha[l]}
+                    registrosDoDia={registrosPorLinha[l]}
+                    dataSelecionada={data}
+                    onReprogramarClick={handleReprogramarClick}
+                    onDblClick={setOrdemFormula}
+                    onEditar={setOrdemEditando}
+                    onExcluir={setOrdemParaExcluir}
+                    onVoltarFila={setOrdemParaVoltar}
+                    onForcarConclusao={setOrdemParaForcar}
+                    onRegistrarDia={handleRegistrarDiaClick}
+                    onVerDetalhes={setOrdemDetalhe}
+                    onLab={setOrdemLab}
+                    onToggleConfirmado={handleToggleConfirmado}
+                    onEditarRegistro={handleEditarRegistro}
+                    onDeletarRegistro={handleDeletarRegistro}
+                    onEditarEmissao={handleEditarEmissaoClick}
+                    onAddParada={setOrdemParaParada}
+                    onToggleDestino={handleToggleDestino}
+                    isMobile={isMobile}
+                  />
+                );
+              })}
+            </div>
+          </DndContext>
+        </>
       )}
 
       <Dialog
