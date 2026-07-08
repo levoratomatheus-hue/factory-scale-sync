@@ -101,9 +101,33 @@ const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
   concluida:            { label: "Concluída",           class: "bg-green-100 text-green-700" },
 };
 
-function fmtDate(iso: string | null) {
+function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  return format(new Date(iso), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// Converte ISO → "YYYY-MM-DDTHH:mm" no fuso Sao Paulo (para input datetime-local)
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso)
+    .toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" })
+    .replace(" ", "T")
+    .substring(0, 16);
+}
+
+// Interpreta valor de datetime-local (sem fuso) como horário de Sao Paulo e retorna ISO UTC
+function spLocalToISO(datetimeLocal: string): string {
+  if (!datetimeLocal) return new Date().toISOString();
+  // Sao Paulo é UTC-3 sem horário de verão desde 2019
+  const asUTC = new Date(datetimeLocal + ":00Z");
+  return new Date(asUTC.getTime() + 3 * 60 * 60 * 1000).toISOString();
 }
 
 export default function PainelManutencao({ papel, perfilId, perfilNome }: PainelManutencaoProps) {
@@ -129,7 +153,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [savingPeca, setSavingPeca] = useState(false);
 
   const [editOS, setEditOS] = useState<OS | null>(null);
-  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "" });
+  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "", aberta_em: "" });
   const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -407,6 +431,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       descricao_problema: os.descricao_problema,
       prioridade: os.prioridade,
       tecnico_nome: os.tecnico_nome ?? "",
+      aberta_em: toDatetimeLocal(os.aberta_em),
     });
     const { data } = await (supabase as any)
       .from("equipamentos")
@@ -423,12 +448,16 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       toast({ title: "Descrição é obrigatória", variant: "destructive" }); return;
     }
     setSavingEdit(true);
-    const { error } = await (supabase as any).from("ordens_servico").update({
+    const updatePayload: Record<string, any> = {
       equipamento_id: editForm.equipamento_id || null,
       descricao_problema: editForm.descricao_problema.trim(),
       prioridade: editForm.prioridade,
       tecnico_nome: editForm.tecnico_nome.trim() || null,
-    }).eq("id", editOS.id);
+    };
+    if (papel === "gestor" && editForm.aberta_em) {
+      updatePayload.aberta_em = spLocalToISO(editForm.aberta_em);
+    }
+    const { error } = await (supabase as any).from("ordens_servico").update(updatePayload).eq("id", editOS.id);
     setSavingEdit(false);
     if (error) { toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" }); return; }
     toast({ title: "OS atualizada!" });
@@ -1339,6 +1368,18 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 placeholder="Nome do técnico"
               />
             </div>
+            {papel === "gestor" && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Data/hora de abertura</label>
+                <input
+                  type="datetime-local"
+                  value={editForm.aberta_em}
+                  onChange={(e) => setEditForm(f => ({ ...f, aberta_em: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">Horário de Brasília (UTC-3)</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOS(null)}>Cancelar</Button>

@@ -123,9 +123,16 @@ function fmtHoras(h: number): string {
   return mm > 0 ? `${hh}h ${mm}min` : `${hh}h`;
 }
 
-function fmtDate(iso: string | null) {
+function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  return format(new Date(iso), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function getPrioridadeConfig(d: ReturnType<typeof buildPalette>): Record<string, { label: string; color: string }> {
