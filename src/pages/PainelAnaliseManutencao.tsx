@@ -70,6 +70,7 @@ interface OS {
   id: string;
   descricao_problema: string;
   prioridade: string;
+  tipo: string;
   status: string;
   aberta_por: string | null;
   tecnico_nome: string | null;
@@ -324,6 +325,14 @@ export default function PainelAnaliseManutencao() {
     return tempos.reduce((a, b) => a + b, 0) / tempos.length;
   }, [ossFiltered]);
 
+  const tipoProporção = useMemo(() => {
+    const total = ossFiltered.length;
+    const preventiva = ossFiltered.filter((o) => (o.tipo ?? "corretiva") === "preventiva").length;
+    const corretiva = total - preventiva;
+    const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
+    return { total, preventiva, corretiva, pctPreventiva: pct(preventiva), pctCorretiva: pct(corretiva) };
+  }, [ossFiltered]);
+
   const osPorDiaSemana = useMemo(() => {
     const counts = [0, 0, 0, 0, 0, 0, 0];
     ossFiltered.forEach((o) => {
@@ -438,6 +447,52 @@ export default function PainelAnaliseManutencao() {
           </div>
         </div>
       </div>
+
+      {/* ── Proporção Preventiva × Corretiva ── */}
+      {tipoProporção.total > 0 && (
+        <div style={{ ...cardStyle, marginBottom: "1.75rem" }}>
+          <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Proporção Preventiva × Corretiva
+          </p>
+          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "0.875rem" }}>
+            {/* Corretiva */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: D.red, flexShrink: 0 }} />
+              <div>
+                <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: D.red, lineHeight: 1 }}>
+                  {tipoProporção.corretiva}
+                  <span style={{ fontSize: "0.85rem", fontWeight: 500, color: D.muted, marginLeft: "0.25rem" }}>
+                    ({tipoProporção.pctCorretiva}%)
+                  </span>
+                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "0.72rem", color: D.muted }}>Corretiva</p>
+              </div>
+            </div>
+            {/* Preventiva */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: D.emerald, flexShrink: 0 }} />
+              <div>
+                <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: D.emerald, lineHeight: 1 }}>
+                  {tipoProporção.preventiva}
+                  <span style={{ fontSize: "0.85rem", fontWeight: 500, color: D.muted, marginLeft: "0.25rem" }}>
+                    ({tipoProporção.pctPreventiva}%)
+                  </span>
+                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "0.72rem", color: D.muted }}>Preventiva</p>
+              </div>
+            </div>
+          </div>
+          {/* Barra de proporção */}
+          <div style={{ height: 10, borderRadius: 999, overflow: "hidden", background: D.border, display: "flex" }}>
+            {tipoProporção.pctCorretiva > 0 && (
+              <div style={{ width: `${tipoProporção.pctCorretiva}%`, background: D.red, transition: "width 0.4s" }} />
+            )}
+            {tipoProporção.pctPreventiva > 0 && (
+              <div style={{ width: `${tipoProporção.pctPreventiva}%`, background: D.emerald, transition: "width 0.4s" }} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Seção 1: Por Equipamento ── */}
       <SectionTitle icon={<Wrench style={{ width: 15, height: 15, color: D.cyan }} />} title="Por Equipamento" />

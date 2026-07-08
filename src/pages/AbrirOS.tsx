@@ -29,6 +29,7 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
   const [equipamentoId, setEquipamentoId] = useState("");
   const [descricao, setDescricao] = useState("");
   const [prioridade, setPrioridade] = useState("media");
+  const [tipo, setTipo] = useState<"corretiva" | "preventiva">("corretiva");
   const [saving, setSaving] = useState(false);
 
   const fetchEquipamentos = useCallback(async () => {
@@ -58,6 +59,7 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
       equipamento_id: equipamentoId,
       descricao_problema: descricao.trim(),
       prioridade,
+      tipo,
       status: "aberta",
       aberta_por: perfilNome,
       aberta_em: new Date().toISOString(),
@@ -71,6 +73,7 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
     setEquipamentoId("");
     setDescricao("");
     setPrioridade("media");
+    setTipo("corretiva");
     onSuccess?.();
   }
 
@@ -124,6 +127,35 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
             placeholder="Descreva o problema de forma clara: o que acontece, quando acontece, sintomas observados..."
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
+        </div>
+
+        {/* Tipo */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Tipo</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTipo("corretiva")}
+              className={`px-3 py-1.5 rounded-md border text-sm font-medium transition-all ${
+                tipo === "corretiva"
+                  ? "bg-red-100 text-red-700 border-red-200 ring-2 ring-offset-1 ring-red-400"
+                  : "bg-background border-input text-muted-foreground hover:border-foreground/30"
+              }`}
+            >
+              Corretiva
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipo("preventiva")}
+              className={`px-3 py-1.5 rounded-md border text-sm font-medium transition-all ${
+                tipo === "preventiva"
+                  ? "bg-green-100 text-green-700 border-green-200 ring-2 ring-offset-1 ring-green-400"
+                  : "bg-background border-input text-muted-foreground hover:border-foreground/30"
+              }`}
+            >
+              Preventiva
+            </button>
+          </div>
         </div>
 
         {/* Prioridade */}
