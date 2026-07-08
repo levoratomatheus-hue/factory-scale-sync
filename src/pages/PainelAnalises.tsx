@@ -106,6 +106,13 @@ const FAIXAS = [
   { label: "> 200 kg",     min: 200, max: Infinity },
 ];
 
+function getClasse(formula_id: string | null | undefined): string {
+  if (!formula_id) return "Sem classe";
+  const s = String(formula_id);
+  const idx = s.indexOf("-");
+  return idx > 0 ? s.slice(0, idx) : s;
+}
+
 // ── Tooltips ──────────────────────────────────────────────────────────────────
 
 function TooltipFaixa({ active, payload }: any) {
@@ -309,6 +316,7 @@ export default function PainelAnalises() {
   const [dataFim, setDataFim] = useState(hojeStr);
   const [atalhoAtivo, setAtalhoAtivo] = useState<Atalho>("mes");
   const [linhaFiltro, setLinhaFiltro] = useState<number>(0);
+  const [classeFiltro, setClasseFiltro] = useState<string>("todas");
   const [materialFiltro, setMaterialFiltro] = useState("");
   const [materialInput, setMaterialInput] = useState("");
   const [sugestoes, setSugestoes] = useState<{ produto: string; formula_id: string | null }[]>([]);
@@ -355,15 +363,28 @@ export default function PainelAnalises() {
   };
 
   const ordens = useMemo(
-    () => ordensRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o)),
-    [ordensRaw, linhaFiltro, materialFiltro],
+    () => ordensRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.formula_id) === classeFiltro)),
+    [ordensRaw, linhaFiltro, materialFiltro, classeFiltro],
   );
   const ordensAnuais = useMemo(
-    () => ordensAnuaisRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o)),
-    [ordensAnuaisRaw, linhaFiltro, materialFiltro],
+    () => ordensAnuaisRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.formula_id) === classeFiltro)),
+    [ordensAnuaisRaw, linhaFiltro, materialFiltro, classeFiltro],
   );
 
   const ordensAnuaisIds = useMemo(() => new Set(ordensAnuais.map((o) => o.id)), [ordensAnuais]);
+
+  // Version without class filter — used for "Por Classe" comparison section
+  const ordensAnuaisNoClasse = useMemo(
+    () => ordensAnuaisRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o)),
+    [ordensAnuaisRaw, linhaFiltro, materialFiltro],
+  );
+  const ordensAnuaisIdsNoClasse = useMemo(() => new Set(ordensAnuaisNoClasse.map((o: any) => o.id)), [ordensAnuaisNoClasse]);
+
+  const classesDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    ordensAnuaisNoClasse.forEach((o: any) => set.add(getClasse(o.formula_id)));
+    return [...set].filter(Boolean).sort();
+  }, [ordensAnuaisNoClasse]);
 
   const paradasIdx = useMemo(() => {
     const idx = new Map<string, any[]>();
@@ -454,7 +475,7 @@ export default function PainelAnalises() {
     });
     const regsAnuaisFiltrados = registrosDiariosAnuaisRaw.filter((r: any) => {
       if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return false;
-      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return false;
+      if ((materialFiltro || classeFiltro !== "todas") && !ordensAnuaisIds.has(r.ordem_id)) return false;
       return true;
     });
     // Iteração única sobre registros anuais
@@ -479,14 +500,14 @@ export default function PainelAnalises() {
       return { mes: label, kgH };
     });
     return { dadosMensais, dadosProdutividadeMensal };
-  }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
+  }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, classeFiltro, ordensAnuaisIds]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {
     // kg por registro diário — mesmo filtro do gráfico
     const kgPorOrdem: Record<string, number> = {};
     registrosDiariosRaw.forEach((r: any) => {
       if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
-      if (materialFiltro && !ordensAnuaisIds.has(r.ordem_id)) return;
+      if ((materialFiltro || classeFiltro !== "todas") && !ordensAnuaisIds.has(r.ordem_id)) return;
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
       kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
@@ -517,7 +538,7 @@ export default function PainelAnalises() {
 
     const porLinha = [1, 2, 3, 4, 5].map((linha) => {
       const regsLinha = (regsPorLinha.get(linha) ?? []).filter((r: any) =>
-        (!materialFiltro || ordensAnuaisIds.has(r.ordem_id))
+        (!(materialFiltro || classeFiltro !== "todas") || ordensAnuaisIds.has(r.ordem_id))
       );
       const totalKg = regsLinha.reduce((s: number, r: any) => {
         const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
@@ -580,7 +601,7 @@ export default function PainelAnalises() {
       const diasComOP = diasLinhaMap[linha]?.size ?? 0;
       const toH = (t: string | null) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
       const horasTrabalhadas = (regsPorLinha.get(linha) ?? [])
-        .filter((r: any) => (!materialFiltro || ordensAnuaisIds.has(r.ordem_id)))
+        .filter((r: any) => (!(materialFiltro || classeFiltro !== "todas") || ordensAnuaisIds.has(r.ordem_id)))
         .reduce((s: number, r: any) => {
           const h = parseHoras(r.hora_inicio, r.hora_fim);
           if (h === null) return s;
@@ -604,7 +625,41 @@ export default function PainelAnalises() {
     });
 
     return { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha };
-  }, [ordens, paradas, horasMap, diasLinhaMap, registrosDiariosRaw, linhaFiltro, materialFiltro, ordensAnuaisIds]);
+  }, [ordens, paradas, horasMap, diasLinhaMap, registrosDiariosRaw, linhaFiltro, materialFiltro, classeFiltro, ordensAnuaisIds]);
+
+  const dadosPorClasse = useMemo(() => {
+    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
+    const kgPorOrdem: Record<string, number> = {};
+    const ordemClasseMap = new Map<string, string>();
+    const linhaOrdemMap: Record<string, number> = {};
+
+    registrosDiariosRaw.forEach((r: any) => {
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
+      if (materialFiltro && !ordensAnuaisIdsNoClasse.has(r.ordem_id)) return;
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
+      if (!ordemClasseMap.has(r.ordem_id)) ordemClasseMap.set(r.ordem_id, getClasse(r.ordens?.formula_id));
+      if (!linhaOrdemMap[r.ordem_id]) linhaOrdemMap[r.ordem_id] = Number(r.ordens?.linha);
+    });
+
+    const mapa: Record<string, { kg: number; kgComH: number; h: number; ops: Set<string> }> = {};
+    for (const [ordemId, kg] of Object.entries(kgPorOrdem)) {
+      const classe = ordemClasseMap.get(ordemId) ?? "Sem classe";
+      if (!mapa[classe]) mapa[classe] = { kg: 0, kgComH: 0, h: 0, ops: new Set() };
+      mapa[classe].kg += kg;
+      mapa[classe].ops.add(ordemId);
+      const h = horasMap[ordemId];
+      if (h != null && linhaOrdemMap[ordemId] !== 5) {
+        mapa[classe].kgComH += kg;
+        mapa[classe].h += h;
+      }
+    }
+
+    return Object.entries(mapa)
+      .map(([classe, v]) => ({ classe, kg: v.kg, media: v.h > 0 ? v.kgComH / v.h : 0, ops: v.ops.size }))
+      .sort((a, b) => b.kg - a.kg);
+  }, [registrosDiariosRaw, linhaFiltro, materialFiltro, ordensAnuaisIdsNoClasse, horasMap]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -623,6 +678,7 @@ export default function PainelAnalises() {
             {ordens.length} OPs concluídas · {descPeriodo}
             {linhaFiltro !== 0 && <span style={{ marginLeft: "0.25rem", fontWeight: 600, color: D.cyan }}> · Linha {linhaFiltro}</span>}
             {materialFiltro && <span style={{ marginLeft: "0.25rem", fontWeight: 600, color: D.amber }}> · {materialFiltro}</span>}
+            {classeFiltro !== "todas" && <span style={{ marginLeft: "0.25rem", fontWeight: 600, color: D.cyan }}> · {classeFiltro}</span>}
           </p>
         </div>
       </div>
@@ -703,6 +759,31 @@ export default function PainelAnalises() {
                 </button>
               ))}
             </div>
+          {classesDisponiveis.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ fontSize: 12, color: D.muted, fontWeight: 500, whiteSpace: "nowrap" }}>Classe</span>
+              <select
+                value={classeFiltro}
+                onChange={(e) => setClasseFiltro(e.target.value)}
+                style={{
+                  borderRadius: "0.375rem",
+                  border: `1px solid ${classeFiltro !== "todas" ? D.cyan : D.border}`,
+                  background: D.cardAlt,
+                  color: classeFiltro !== "todas" ? D.cyan : D.text,
+                  padding: "0.375rem 0.625rem",
+                  fontSize: 12,
+                  fontWeight: classeFiltro !== "todas" ? 600 : 400,
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="todas">Todas</option>
+                {classesDisponiveis.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          )}
           </div>
         </div>
 
@@ -953,6 +1034,81 @@ export default function PainelAnalises() {
               })()
             )}
           </div>
+
+          {/* Por Classe */}
+          {dadosPorClasse.length > 1 && (
+            <div>
+              <SectionTitle icon={BarChart2}>Por Classe de Material</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
+                {dadosPorClasse.map(({ classe, kg, media, ops }) => (
+                  <button
+                    key={classe}
+                    onClick={() => setClasseFiltro(classeFiltro === classe ? "todas" : classe)}
+                    style={{
+                      ...cardStyle,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.625rem",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      border: `1px solid ${classeFiltro === classe ? D.cyan : D.border}`,
+                      outline: "none",
+                      transition: "border-color 0.15s",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{
+                        display: "inline-block",
+                        padding: "0.125rem 0.5rem",
+                        borderRadius: 9999,
+                        background: classeFiltro === classe ? D.cyan : `${D.cyan}20`,
+                        color: classeFiltro === classe ? "#000" : D.cyan,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        fontFamily: "monospace",
+                      }}>{classe}</span>
+                      <span style={{ fontSize: 10, color: D.muted }}>{ops} OP{ops !== 1 ? "s" : ""}</span>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: "1.25rem", fontWeight: 700, color: D.text, margin: 0, lineHeight: 1.2 }}>{fmt(kg, 0)}</p>
+                      <p style={{ fontSize: 10, color: D.muted, margin: 0 }}>kg produzidos</p>
+                    </div>
+                    <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: "0.375rem" }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: D.cyan, margin: 0 }}>{fmt(media)} <span style={{ fontSize: 10, color: D.muted, fontWeight: 400 }}>kg/h</span></p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ ...cardStyle }}>
+                <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Total kg por classe · período selecionado</p>
+                <ResponsiveContainer width="100%" height={Math.max(140, dadosPorClasse.length * 36)}>
+                  <BarChart data={dadosPorClasse} layout="vertical" margin={{ top: 4, right: 48, left: 8, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={D.grid} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false}
+                      tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                    <YAxis type="category" dataKey="classe" tick={{ fontSize: 11, fill: D.text, fontWeight: 600, fontFamily: "monospace" }} tickLine={false} axisLine={false} width={52} />
+                    <Tooltip
+                      content={({ active, payload }: any) => {
+                        if (!active || !payload?.length) return null;
+                        const { classe, kg, media, ops } = payload[0].payload;
+                        return (
+                          <div style={{ ...makeTooltipStyle(D) }}>
+                            <p style={{ fontWeight: 700, margin: 0, fontFamily: "monospace" }}>{classe}</p>
+                            <p style={{ margin: "4px 0 0", color: D.emerald }}>{kg.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kg</p>
+                            <p style={{ margin: "2px 0 0", color: D.cyan }}>{media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg/h</p>
+                            <p style={{ margin: "2px 0 0", color: D.muted }}>{ops} OP{ops !== 1 ? "s" : ""}</p>
+                          </div>
+                        );
+                      }}
+                      cursor={{ fill: "#ffffff08" }}
+                    />
+                    <Bar dataKey="kg" fill={D.emerald} radius={[0, 4, 4, 0]} maxBarSize={28}
+                      label={{ position: "right", fontSize: 10, fill: D.muted, formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v)) }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
           {/* Gráficos + Tabelas */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
