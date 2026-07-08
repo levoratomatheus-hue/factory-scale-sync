@@ -106,11 +106,11 @@ const FAIXAS = [
   { label: "> 200 kg",     min: 200, max: Infinity },
 ];
 
-function getClasse(formula_id: string | null | undefined): string {
-  if (!formula_id) return "Sem classe";
-  const s = String(formula_id);
-  const idx = s.indexOf("-");
-  return idx > 0 ? s.slice(0, idx) : s;
+// Extrai a classe do nome do produto: texto antes do primeiro hífen
+// Ex: "MBG-10-1869 AZUL-A" → "MBG", "PTA-01-2002 VERMELHO" → "PTA"
+function getClasse(produto: string | null | undefined): string {
+  if (!produto) return "Sem classe";
+  return String(produto).split("-")[0].trim();
 }
 
 // ── Tooltips ──────────────────────────────────────────────────────────────────
@@ -363,11 +363,11 @@ export default function PainelAnalises() {
   };
 
   const ordens = useMemo(
-    () => ordensRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.formula_id) === classeFiltro)),
+    () => ordensRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.produto) === classeFiltro)),
     [ordensRaw, linhaFiltro, materialFiltro, classeFiltro],
   );
   const ordensAnuais = useMemo(
-    () => ordensAnuaisRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.formula_id) === classeFiltro)),
+    () => ordensAnuaisRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.produto) === classeFiltro)),
     [ordensAnuaisRaw, linhaFiltro, materialFiltro, classeFiltro],
   );
 
@@ -380,11 +380,17 @@ export default function PainelAnalises() {
   );
   const ordensAnuaisIdsNoClasse = useMemo(() => new Set(ordensAnuaisNoClasse.map((o: any) => o.id)), [ordensAnuaisNoClasse]);
 
+  // Classes distintas do período selecionado (sem filtro de classe, sem "Sem classe")
   const classesDisponiveis = useMemo(() => {
     const set = new Set<string>();
-    ordensAnuaisNoClasse.forEach((o: any) => set.add(getClasse(o.formula_id)));
-    return [...set].filter(Boolean).sort();
-  }, [ordensAnuaisNoClasse]);
+    ordensRaw
+      .filter((o: any) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o))
+      .forEach((o: any) => {
+        const c = getClasse(o.produto);
+        if (c !== "Sem classe") set.add(c);
+      });
+    return [...set].sort();
+  }, [ordensRaw, linhaFiltro, materialFiltro]);
 
   const paradasIdx = useMemo(() => {
     const idx = new Map<string, any[]>();
@@ -639,7 +645,7 @@ export default function PainelAnalises() {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
       kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
-      if (!ordemClasseMap.has(r.ordem_id)) ordemClasseMap.set(r.ordem_id, getClasse(r.ordens?.formula_id));
+      if (!ordemClasseMap.has(r.ordem_id)) ordemClasseMap.set(r.ordem_id, getClasse(r.ordens?.produto));
       if (!linhaOrdemMap[r.ordem_id]) linhaOrdemMap[r.ordem_id] = Number(r.ordens?.linha);
     });
 
