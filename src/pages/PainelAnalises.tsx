@@ -221,15 +221,15 @@ function CardHorasLinha(h: HorasLinha) {
           const val = h[key as keyof HorasLinha] as number;
           const pct = (!semPct && h.capacidade > 0) ? (val / h.capacidade) * 100 : null;
           return (
-            <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.25rem" }}>
-              <span style={{ fontSize: 11, color: D.muted, flexShrink: 0 }}>{emoji} {label}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: "monospace", color: val === 0 ? D.muted : color, textAlign: "right" }}>
+            <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr auto 60px", alignItems: "center", gap: "0 0.25rem" }}>
+              <span style={{ fontSize: 11, color: D.muted }}>{emoji} {label}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: "monospace", fontVariantNumeric: "tabular-nums", color: val === 0 ? D.muted : color, textAlign: "right" }}>
                 {fmtHHMM(val)}
+              </span>
+              <span style={{ fontSize: 11, fontFamily: "monospace", fontVariantNumeric: "tabular-nums", color: D.muted, textAlign: "right" }}>
                 {pct !== null && val > 0
-                  ? <span style={{ fontWeight: 400, color: D.muted, marginLeft: "0.25rem" }}>({key === "horasTrabalhadas" ? "" : "−"}{pct.toFixed(1)}%)</span>
-                  : semPct && val > 0
-                  ? <span style={{ fontWeight: 400, color: D.muted, marginLeft: "0.25rem" }}>—</span>
-                  : null}
+                  ? `(${key === "horasTrabalhadas" ? "" : "−"}${pct.toFixed(1)}%)`
+                  : semPct && val > 0 ? "—" : ""}
               </span>
             </div>
           );
