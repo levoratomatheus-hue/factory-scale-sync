@@ -111,9 +111,15 @@ const _spFmt = new Intl.DateTimeFormat("pt-BR", {
   hour12: false,
 });
 
+// Garante que a string ISO seja tratada como UTC mesmo se vier sem sufixo de timezone
+// (ocorre quando a coluna no banco é TIMESTAMP sem timezone)
+function toUtc(iso: string): Date {
+  return new Date(/[Z+]/.test(iso) ? iso : iso + "Z");
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  const parts = _spFmt.formatToParts(new Date(iso));
+  const parts = _spFmt.formatToParts(toUtc(iso));
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
   return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
 }
@@ -121,7 +127,7 @@ function fmtDate(iso: string | null): string {
 // Converte ISO → "YYYY-MM-DDTHH:mm" no fuso Sao Paulo (para input datetime-local)
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso)
+  return toUtc(iso)
     .toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" })
     .replace(" ", "T")
     .substring(0, 16);

@@ -111,7 +111,7 @@ function calcAtalho(id: AtalhoId): { inicio: string; fim: string } {
 
 function diffHours(start: string | null, end: string | null): number | null {
   if (!start || !end) return null;
-  const diff = new Date(end).getTime() - new Date(start).getTime();
+  const diff = toUtc(end).getTime() - toUtc(start).getTime();
   if (diff <= 0) return null;
   return diff / (1000 * 60 * 60);
 }
@@ -133,9 +133,13 @@ const _spFmt = new Intl.DateTimeFormat("pt-BR", {
   hour12: false,
 });
 
+function toUtc(iso: string): Date {
+  return new Date(/[Z+]/.test(iso) ? iso : iso + "Z");
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  const parts = _spFmt.formatToParts(new Date(iso));
+  const parts = _spFmt.formatToParts(toUtc(iso));
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
   return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
 }
@@ -349,7 +353,7 @@ export default function PainelAnaliseManutencao() {
     const counts = [0, 0, 0, 0, 0, 0, 0];
     ossFiltered.forEach((o) => {
       if (!o.aberta_em) return;
-      counts[new Date(o.aberta_em).getDay()]++;
+      counts[toUtc(o.aberta_em).getDay()]++;
     });
     const max = Math.max(...counts);
     return DIAS_SEMANA.map((label, i) => ({ label, count: counts[i], isMax: counts[i] === max && max > 0 }));
