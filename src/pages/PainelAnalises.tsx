@@ -1065,7 +1065,10 @@ export default function PainelAnalises() {
             <div>
               <SectionTitle icon={BarChart2}>Por Classe de Material</SectionTitle>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
-                {dadosPorClasse.map(({ classe, kg, media, ops }) => (
+                {(() => {
+                  const kgTotal = dadosPorClasse.reduce((s, c) => s + c.kg, 0);
+                  return dadosPorClasse.map(({ classe, kg, media, ops }) => {
+                  const pct = kgTotal > 0 ? (kg / kgTotal) * 100 : 0;
                   <button
                     key={classe}
                     onClick={() => setClasseFiltro(classeFiltro === classe ? "todas" : classe)}
@@ -1096,13 +1099,17 @@ export default function PainelAnalises() {
                     </div>
                     <div>
                       <p style={{ fontSize: "1.25rem", fontWeight: 700, color: D.text, margin: 0, lineHeight: 1.2 }}>{fmt(kg, 0)}</p>
-                      <p style={{ fontSize: 10, color: D.muted, margin: 0 }}>kg produzidos</p>
+                      <p style={{ fontSize: 10, color: D.muted, margin: 0 }}>
+                        kg · {pct.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do total
+                      </p>
                     </div>
                     <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: "0.375rem" }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: D.cyan, margin: 0 }}>{fmt(media)} <span style={{ fontSize: 10, color: D.muted, fontWeight: 400 }}>kg/h</span></p>
                     </div>
                   </button>
-                ))}
+                  );
+                });
+                })()}
               </div>
             </div>
           )}
