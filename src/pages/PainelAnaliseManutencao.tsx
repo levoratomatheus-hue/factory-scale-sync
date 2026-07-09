@@ -289,20 +289,22 @@ export default function PainelAnaliseManutencao() {
   // ── Seção 1: Por Equipamento (usa ossPeriodo para sempre mostrar ranking completo) ──
   const rankingEquipamentos = useMemo(() => {
     const source = equipFiltro ? ossFiltered : ossPeriodo;
-    const map = new Map<string, { nome: string; count: number; tempos: number[] }>();
+    const map = new Map<string, { nome: string; tag: string | null; count: number; tempos: number[] }>();
     source.forEach((o) => {
       const id   = o.equipamentos?.id   ?? "__unknown";
       const nome = o.equipamentos?.nome ?? "Equipamento removido";
-      if (!map.has(id)) map.set(id, { nome, count: 0, tempos: [] });
+      const tag  = o.equipamentos?.tag  ?? null;
+      if (!map.has(id)) map.set(id, { nome, tag, count: 0, tempos: [] });
       const entry = map.get(id)!;
       entry.count++;
       const h = diffHours(o.aberta_em, o.concluido_em);
       if (h !== null && o.status === "concluida") entry.tempos.push(h);
     });
     return Array.from(map.entries())
-      .map(([id, { nome, count, tempos }]) => ({
+      .map(([id, { nome, tag, count, tempos }]) => ({
         id,
         nome,
+        tag,
         count,
         mediaReparo: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null,
         qtdConcluidas: tempos.length,
@@ -522,35 +524,37 @@ export default function PainelAnaliseManutencao() {
           </p>
           {rankingTop10.length === 0 ? <Vazio /> : (
             <>
-              <ResponsiveContainer width="100%" height={Math.min(400, Math.max(180, rankingTop10.length * 42))}>
-                <BarChart
-                  data={rankingTop10}
-                  layout="vertical"
-                  margin={{ top: 0, right: 28, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid horizontal={false} stroke={D.grid} />
-                  <XAxis type="number" tick={{ fill: D.muted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <YAxis
-                    type="category"
-                    dataKey="nome"
-                    tick={{ fill: D.text, fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={130}
-                  />
-                  <Tooltip content={<TooltipContagem />} cursor={{ fill: D.grid }} />
-                  <Bar
-                    dataKey="count"
-                    radius={[0, 4, 4, 0]}
-                    onClick={(d) => setModalEquip({ id: d.id, nome: d.nome })}
-                    style={{ cursor: "pointer" }}
-                  >
-                    {rankingTop10.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? D.cyan : `${D.cyan}99`} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
+                <div style={{ overflowY: "auto", maxHeight: 420 }}>
+                  <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${D.border}`, background: D.cardAlt, position: "sticky", top: 0, zIndex: 10 }}>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11, width: 32 }}>#</th>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Equipamento</th>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>OS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rankingTop10.map(({ id, nome, tag, count }, i) => (
+                        <tr
+                          key={id}
+                          style={{ borderBottom: `1px solid ${D.border}`, cursor: "pointer" }}
+                          onClick={() => setModalEquip({ id, nome })}
+                        >
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>
+                            {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}º`}
+                          </td>
+                          <td style={{ padding: "0.5rem 0.75rem" }}>
+                            <p style={{ fontWeight: 500, fontSize: 11, color: D.text, margin: 0 }}>{nome}</p>
+                            {tag && <p style={{ fontSize: 11, color: D.muted, fontFamily: "monospace", margin: 0 }}>{tag}</p>}
+                          </td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, fontSize: 11, color: D.cyan }}>{count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
               <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: D.muted }}>
                 Clique em um equipamento para ver o histórico completo
               </p>
