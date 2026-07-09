@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,12 @@ interface Equipamento {
 
 const emptyForm = { nome: "", tag: "", linha: "", setor: "", status: "ativo" };
 
+const SETORES = ["Produção", "Laboratório"] as const;
+const SETOR_PREFIXO: Record<string, string> = {
+  "Produção": "EQP",
+  "Laboratório": "EQL",
+};
+
 export default function CadastroEquipamentos() {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +48,7 @@ export default function CadastroEquipamentos() {
   const [editing, setEditing] = useState<Equipamento | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [tagSugestao, setTagSugestao] = useState<string | null>(null);
   const [loadingTag, setLoadingTag] = useState(false);
-  const tagDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Equipamento | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busca, setBusca] = useState("");
@@ -61,55 +65,49 @@ export default function CadastroEquipamentos() {
 
   useEffect(() => { fetchEquipamentos(); }, [fetchEquipamentos]);
 
-  async function buscarProximaTag(sigla: string) {
-    if (!sigla) { setTagSugestao(null); return; }
+  async function buscarProximaTag(prefixo: string) {
     setLoadingTag(true);
-    const prefixo = sigla.toUpperCase().replace(/-$/, "");
     const { data } = await (supabase as any)
       .from("equipamentos")
       .select("tag")
       .ilike("tag", `${prefixo}-%`);
     setLoadingTag(false);
+    let proximaTag: string;
     if (!data || data.length === 0) {
-      setTagSugestao(`${prefixo}-001`);
-      return;
+      proximaTag = `${prefixo}-001`;
+    } else {
+      const numeros = (data as { tag: string | null }[])
+        .map((r) => {
+          const partes = (r.tag ?? "").split("-");
+          const num = parseInt(partes[partes.length - 1], 10);
+          return isNaN(num) ? 0 : num;
+        });
+      const proximo = Math.max(...numeros) + 1;
+      proximaTag = `${prefixo}-${String(proximo).padStart(3, "0")}`;
     }
-    const numeros = (data as { tag: string | null }[])
-      .map((r) => {
-        const partes = (r.tag ?? "").split("-");
-        const num = parseInt(partes[partes.length - 1], 10);
-        return isNaN(num) ? 0 : num;
-      });
-    const proximo = Math.max(...numeros) + 1;
-    setTagSugestao(`${prefixo}-${String(proximo).padStart(3, "0")}`);
+    setForm((p) => ({ ...p, tag: proximaTag }));
+  }
+
+  function handleSetorChange(setor: string) {
+    setForm((p) => ({ ...p, setor, tag: "" }));
+    if (!editing) {
+      const prefixo = SETOR_PREFIXO[setor];
+      if (prefixo) buscarProximaTag(prefixo);
+    }
   }
 
   function handleTagChange(valor: string) {
     setForm((p) => ({ ...p, tag: valor }));
-    setTagSugestao(null);
-    if (editing) return;
-    if (tagDebounceRef.current) clearTimeout(tagDebounceRef.current);
-    const sigla = valor.trim();
-    if (!sigla) return;
-    tagDebounceRef.current = setTimeout(() => buscarProximaTag(sigla), 400);
-  }
-
-  function aplicarSugestao() {
-    if (!tagSugestao) return;
-    setForm((p) => ({ ...p, tag: tagSugestao }));
-    setTagSugestao(null);
   }
 
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
-    setTagSugestao(null);
     setDialogOpen(true);
   }
 
   function openEdit(eq: Equipamento) {
     setEditing(eq);
-    setTagSugestao(null);
     setForm({
       nome: eq.nome,
       tag: eq.tag ?? "",
@@ -350,28 +348,32 @@ export default function CadastroEquipamentos() {
                 placeholder="Ex: Extrusora Linha 1"
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Setor</label>
+              <Select value={form.setor} onValueChange={handleSetorChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o setor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {SETORES.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tag</label>
-                <Input
-                  value={form.tag}
-                  onChange={(e) => handleTagChange(e.target.value)}
-                  placeholder="EXT-01"
-                />
-                {!editing && loadingTag && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Verificando...
-                  </p>
-                )}
-                {!editing && !loadingTag && tagSugestao && (
-                  <button
-                    type="button"
-                    onClick={aplicarSugestao}
-                    className="text-xs text-primary underline underline-offset-2 hover:opacity-80 text-left"
-                  >
-                    Sugestão: {tagSugestao} — clique para usar
-                  </button>
-                )}
+                <div className="relative">
+                  <Input
+                    value={form.tag}
+                    onChange={(e) => handleTagChange(e.target.value)}
+                    placeholder="EQP-001"
+                  />
+                  {!editing && loadingTag && (
+                    <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Linha</label>
@@ -384,14 +386,6 @@ export default function CadastroEquipamentos() {
                   max={10}
                 />
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Setor</label>
-              <Input
-                value={form.setor}
-                onChange={(e) => setForm((p) => ({ ...p, setor: e.target.value }))}
-                placeholder="Ex: Produção, Mistura, Utilidades..."
-              />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Status</label>
