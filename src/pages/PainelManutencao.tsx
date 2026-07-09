@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -69,6 +69,8 @@ interface OS {
   iniciado_em: string | null;
   concluido_em: string | null;
   observacoes_andamento: string | null;
+  motivo_reprovacao: string | null;
+  reprovada_em: string | null;
   equipamentos?: { nome: string; tag: string | null; linha: number | null } | null;
 }
 
@@ -155,6 +157,10 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   const [confirmarConclusaoOS, setConfirmarConclusaoOS] = useState<OS | null>(null);
   const [savingConclusao, setSavingConclusao] = useState(false);
+
+  const [reprovarDialogOS, setReprovarDialogOS] = useState<OS | null>(null);
+  const [motivoReprovacao, setMotivoReprovacao] = useState("");
+  const [savingReprovacao, setSavingReprovacao] = useState(false);
 
   const [iniciarConfirmOS, setIniciarConfirmOS] = useState<OS | null>(null);
 
@@ -617,6 +623,29 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     else { toast({ title: "OS concluída!" }); setConfirmarConclusaoOS(null); }
   }
 
+  async function reprovarOS() {
+    if (!reprovarDialogOS) return;
+    const motivo = motivoReprovacao.trim();
+    if (!motivo) {
+      toast({ title: "Informe o motivo da reprovação", variant: "destructive" });
+      return;
+    }
+    setSavingReprovacao(true);
+    const { error } = await (supabase as any).from("ordens_servico").update({
+      status: "em_andamento",
+      motivo_reprovacao: motivo,
+      reprovada_em: new Date().toISOString(),
+    }).eq("id", reprovarDialogOS.id);
+    setSavingReprovacao(false);
+    if (error) {
+      toast({ title: "Erro ao reprovar OS", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "OS reprovada — técnico será notificado ao retomar" });
+      setReprovarDialogOS(null);
+      setMotivoReprovacao("");
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1000,6 +1029,17 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   </div>
                 )}
 
+                {/* Banner de reprovação */}
+                {os.motivo_reprovacao && os.status === "em_andamento" && (
+                  <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-red-500" />
+                    <div>
+                      <p className="font-semibold mb-0.5">Reprovada pelo gestor{os.reprovada_em ? ` em ${fmtDate(os.reprovada_em)}` : ""}:</p>
+                      <p>{os.motivo_reprovacao}</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Metadados */}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1">
@@ -1075,16 +1115,27 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     </Button>
                   )}
 
-                  {/* Gestor: aprovar/concluir */}
+                  {/* Gestor: aprovar/concluir + reprovar */}
                   {papel === "gestor" && os.status === "aguardando_aprovacao" && (
-                    <Button
-                      size="sm"
-                      className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => setConfirmarConclusaoOS(os)}
-                    >
-                      <CheckCircle2 className="h-3 w-3" />
-                      Aprovar e Concluir
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => setConfirmarConclusaoOS(os)}
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        Aprovar e Concluir
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 h-7 text-xs border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        onClick={() => { setReprovarDialogOS(os); setMotivoReprovacao(""); }}
+                      >
+                        <XCircle className="h-3 w-3" />
+                        Reprovar
+                      </Button>
+                    </>
                   )}
 
                   {/* Gestor: editar e excluir */}
@@ -1397,6 +1448,46 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             <Button onClick={salvarEdicao} disabled={savingEdit}>
               {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Reprovar OS */}
+      <Dialog open={!!reprovarDialogOS} onOpenChange={(o) => { if (!o) { setReprovarDialogOS(null); setMotivoReprovacao(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="h-4 w-4" />
+              Reprovar OS
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              A OS voltará para <span className="font-semibold text-foreground">Em Andamento</span> e o técnico verá o motivo ao retomá-la.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Motivo da reprovação *</label>
+              <textarea
+                value={motivoReprovacao}
+                onChange={(e) => setMotivoReprovacao(e.target.value)}
+                placeholder="Descreva o que precisa ser corrigido..."
+                rows={4}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReprovarDialogOS(null); setMotivoReprovacao(""); }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={reprovarOS}
+              disabled={savingReprovacao || !motivoReprovacao.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {savingReprovacao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar Reprovação
             </Button>
           </DialogFooter>
         </DialogContent>
