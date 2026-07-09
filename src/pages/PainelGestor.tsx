@@ -157,7 +157,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Painel do Gestor</h1>
+          <h1 className="text-2xl font-bold dark:text-white">Painel do Gestor</h1>
           {isPassado && <p className="text-sm text-muted-foreground mt-0.5">Visualizando dia passado</p>}
           {isFuturo && <p className="text-sm text-muted-foreground mt-0.5">Visualizando programação futura</p>}
         </div>
@@ -181,10 +181,10 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
       {/* Pendentes de dias anteriores */}
       {pendentesAnteriores.length > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3">
           <div className="flex items-center gap-2 min-w-0">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="text-sm font-medium text-amber-800">
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
               <span className="font-bold">{pendentesAnteriores.length}</span> OP{pendentesAnteriores.length !== 1 ? "s" : ""} de dias anteriores precisam ser reprogramadas
             </span>
           </div>
@@ -209,7 +209,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           </DialogHeader>
           <div className="space-y-3 py-2">
             {pendentesAnteriores.map((op) => (
-              <div key={op.id} className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div key={op.id} className="rounded-lg border dark:border-gray-700 bg-muted/30 dark:bg-gray-700/30 p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div className="space-y-0.5 min-w-0">
                     <p className="text-sm font-semibold leading-tight">{op.produto}</p>
@@ -243,7 +243,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                       value={novaData[op.id] ?? ""}
                       min={todayStr}
                       onChange={(e) => setNovaData((prev) => ({ ...prev, [op.id]: e.target.value }))}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                     <Button
                       size="sm"
@@ -268,13 +268,13 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
       {/* OPs atrasadas */}
       {opsAtrasadas.length > 0 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
-          <h3 className="text-sm font-bold text-red-700 flex items-center gap-2">
+        <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 space-y-2">
+          <h3 className="text-sm font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             {opsAtrasadas.length} OP{opsAtrasadas.length > 1 ? 's' : ''} em atraso
           </h3>
           {opsAtrasadas.map(op => (
-            <div key={op.id} className="text-xs text-red-800 flex items-center justify-between">
+            <div key={op.id} className="text-xs text-red-800 dark:text-red-300 flex items-center justify-between">
               <span>{op.produto} — Lote {op.lote}</span>
               <span className="font-semibold">
                 {diasUteis(op.data_emissao, op.data_programacao) - 7} dias em atraso
@@ -286,11 +286,11 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
       {/* Lotes sem OP */}
       {(loadingLotesSemOP || lotesSeOP.length > 0) && (
-        <div className="bg-card rounded-lg border overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+        <div className="bg-card dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b dark:border-gray-700 bg-muted/40">
             <div className="flex items-center gap-2">
               <PackageSearch className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold text-sm">Lotes Pendentes de Programação</h3>
+              <h3 className="font-semibold text-sm dark:text-white">Lotes Pendentes de Programação</h3>
             </div>
             {!loadingLotesSemOP && (
               <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2 py-0.5">
@@ -306,7 +306,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground border-b">
+                <thead className="text-xs text-muted-foreground border-b dark:border-gray-700">
                   <tr>
                     <th className="text-left px-4 py-2 font-medium">Lote</th>
                     <th className="text-left px-4 py-2 font-medium">Produto</th>
@@ -317,10 +317,10 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                 </thead>
                 <tbody>
                   {lotesSeOP.map((l) => (
-                    <tr key={l.lote} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-2 font-mono font-medium">{l.lote}</td>
-                      <td className="px-4 py-2 max-w-xs truncate">{l.produto}</td>
-                      <td className="px-4 py-2 text-right">{l.quantidade.toLocaleString('pt-BR')}</td>
+                    <tr key={l.lote} className="border-b dark:border-gray-700 last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2 font-mono font-medium dark:text-gray-300">{l.lote}</td>
+                      <td className="px-4 py-2 max-w-xs truncate dark:text-gray-300">{l.produto}</td>
+                      <td className="px-4 py-2 text-right dark:text-gray-300">{l.quantidade.toLocaleString('pt-BR')}</td>
                       <td className="px-4 py-2 text-muted-foreground">{l.classe || '—'}</td>
                       <td className="px-4 py-2 text-right">
                         <Button
@@ -351,11 +351,11 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       )}
 
       {/* Ordens Programadas */}
-      <div className="bg-card rounded-lg border overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40 gap-3 flex-wrap">
+      <div className="bg-card dark:bg-gray-800 rounded-lg border dark:border-gray-700 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b dark:border-gray-700 bg-muted/40 gap-3 flex-wrap">
           <div className="flex items-center gap-2 shrink-0">
             <ListOrdered className="h-4 w-4 text-primary" />
-            <h3 className="font-semibold text-sm">Ordens Programadas</h3>
+            <h3 className="font-semibold text-sm dark:text-white">Ordens Programadas</h3>
           </div>
           <div className="relative flex-1 min-w-[160px] max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -364,7 +364,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
               placeholder="Filtrar por material..."
               value={filterMaterial}
               onChange={(e) => setFilterMaterial(e.target.value)}
-              className="w-full rounded-md border border-input bg-background pl-8 pr-7 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white pl-8 pr-7 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             />
             {filterMaterial && (
               <button
@@ -386,7 +386,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs text-muted-foreground border-b">
+              <thead className="text-xs text-muted-foreground border-b dark:border-gray-700">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium">Produto</th>
                   <th className="text-left px-4 py-2 font-medium">Lote</th>
@@ -399,12 +399,12 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
               </thead>
               <tbody>
                 {ordensFiltradas.map((op) => (
-                  <tr key={op.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-2 max-w-xs truncate">{op.produto}</td>
-                    <td className="px-4 py-2 font-mono">{op.lote}</td>
-                    <td className="px-4 py-2 text-right">{op.quantidade?.toLocaleString("pt-BR") ?? "—"}</td>
-                    <td className="px-4 py-2">{op.linha ?? "—"}</td>
-                    <td className="px-4 py-2">{op.balanca ?? "—"}</td>
+                  <tr key={op.id} className="border-b dark:border-gray-700 last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2 max-w-xs truncate dark:text-gray-300">{op.produto}</td>
+                    <td className="px-4 py-2 font-mono dark:text-gray-300">{op.lote}</td>
+                    <td className="px-4 py-2 text-right dark:text-gray-300">{op.quantidade?.toLocaleString("pt-BR") ?? "—"}</td>
+                    <td className="px-4 py-2 dark:text-gray-300">{op.linha ?? "—"}</td>
+                    <td className="px-4 py-2 dark:text-gray-300">{op.balanca ?? "—"}</td>
                     <td className="px-4 py-2"><StatusBadge status={op.status} /></td>
                     <td className="px-4 py-2 font-mono text-muted-foreground">
                       {op.data_programacao

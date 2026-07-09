@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useFormula } from "@/hooks/useFormula";
 import { formatKg, sortOrdens } from "@/lib/utils";
 import { diasUteis, proximoDiaUtil } from "@/lib/diasUteis";
-import { getNextPosicao } from "@/lib/recalcularPosicoes";
+import { avancarOPNaFrenteDoDia, getNextPosicao } from "@/lib/recalcularPosicoes";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { EditarOrdemDialog } from "@/components/EditarOrdemDialog";
 import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
@@ -1180,13 +1180,19 @@ export default function PainelProgramacao() {
       return;
     }
     const proximaData = proximoDiaUtil(dataRegistro);
-    const proximaPosicao = await getNextPosicao(ordemParaRegistrar.linha);
-    const { error: errUpdate } = await supabase.from("ordens").update({ data_programacao: proximaData, posicao: proximaPosicao } as any).eq("id", ordemParaRegistrar.id);
-    if (errUpdate) {
+    try {
+      await avancarOPNaFrenteDoDia(
+        ordemParaRegistrar.id,
+        ordemParaRegistrar.linha,
+        proximaData,
+        ordemParaRegistrar.posicao
+      );
+    } catch (errUpdate: any) {
       setRegistrando(false);
-      toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate.message, variant: "destructive" });
+      toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate?.message ?? "Erro desconhecido", variant: "destructive" });
       return;
     }
+    const proximaPosicao = ordemParaRegistrar.posicao ?? 9_999;
     setOrdens((prev) => prev.map((o) => o.id === ordemParaRegistrar!.id ? { ...o, data_programacao: proximaData, posicao: proximaPosicao } : o));
     setRegistrando(false);
     const dataFmt = format(new Date(dataRegistro + "T12:00:00"), "dd/MM/yyyy");
@@ -1274,11 +1280,18 @@ export default function PainelProgramacao() {
     const dataAnterior = editRegDataOriginal.current;
     const dataAlterada = !!novaDataRegistro && novaDataRegistro !== dataAnterior;
 
-    const ordemUpdate: Record<string, any> = { quantidade_real: qtdReal };
+    await (supabase as any).from("ordens").update({ quantidade_real: qtdReal } as any).eq("id", editRegOrdem.id);
+
+    let proximaData: string | null = null;
     if (dataAlterada && editRegOrdem.status !== "concluido") {
-      ordemUpdate.data_programacao = proximoDiaUtil(novaDataRegistro);
+      proximaData = proximoDiaUtil(novaDataRegistro);
+      await avancarOPNaFrenteDoDia(
+        editRegOrdem.id,
+        editRegOrdem.linha,
+        proximaData,
+        editRegOrdem.posicao
+      );
     }
-    await (supabase as any).from("ordens").update(ordemUpdate as any).eq("id", editRegOrdem.id);
 
     setEditandoRegistro(false);
     setRegistrosDoDia((prev) => {
@@ -1291,7 +1304,13 @@ export default function PainelProgramacao() {
     });
     setOrdens((prev) => prev.map((o) =>
       o.id === editRegOrdem.id
-        ? { ...o, quantidade_real: qtdReal, ...(dataAlterada && o.status !== "concluido" ? { data_programacao: proximoDiaUtil(novaDataRegistro) } : {}) }
+        ? {
+            ...o,
+            quantidade_real: qtdReal,
+            ...(proximaData && o.status !== "concluido"
+              ? { data_programacao: proximaData, posicao: editRegOrdem.posicao ?? 9_999 }
+              : {}),
+          }
         : o
     ));
     toast({ title: "Registro atualizado" });

@@ -4,6 +4,8 @@ import { useFormula } from "@/hooks/useFormula";
 import { useParadasLinha, useRegistrosDiariosOrdem } from "@/hooks/useOrdens";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg, parseHoras } from "@/lib/utils";
+import { proximoDiaUtil } from "@/lib/diasUteis";
+import { avancarOPNaFrenteDoDia } from "@/lib/recalcularPosicoes";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
@@ -310,8 +312,20 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       return;
     }
 
-    // Reseta hora_inicio para o próximo dia
+    const proximaData = proximoDiaUtil(today);
+    try {
+      await avancarOPNaFrenteDoDia(emLinha.id, linha, proximaData, emLinha.posicao ?? null);
+    } catch (errUpdate: any) {
+      setSavingDia(false);
+      toast({ title: "Registro salvo, mas erro ao avançar data", description: errUpdate?.message ?? "Erro desconhecido", variant: "destructive" });
+      return;
+    }
     await supabase.from("ordens").update({ hora_inicio: null } as any).eq("id", emLinha.id);
+
+    setOrdens((prev) => prev.map((o) => o.id === emLinha.id
+      ? { ...o, hora_inicio: null, data_programacao: proximaData, posicao: emLinha.posicao ?? 9_999 }
+      : o
+    ));
 
     setSavingDia(false);
     setHoraFim("");

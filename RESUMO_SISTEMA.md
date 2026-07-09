@@ -1,12 +1,12 @@
 # ZanCollor Produção — Resumo Completo do Sistema
 
-> Gerado em 05/05/2026. Descreve todas as funcionalidades, fluxos, regras de negócio e estrutura técnica do sistema de gestão de produção da ZanCollor.
+> Atualizado em 26/06/2026. Descreve todas as funcionalidades, fluxos, regras de negócio, estrutura técnica e otimizações realizadas.
 
 ---
 
 ## 1. Visão Geral
 
-O sistema **ZanCollor Produção** é uma aplicação web de gestão da linha de produção fabril. Ele substitui controles manuais e planilhas, conectando em tempo real todos os pontos da fábrica: pesagem, mistura, linhas de produção, liberação de qualidade e o setor comercial.
+O sistema **ZanCollor Produção** é uma aplicação web de gestão da linha de produção fabril. Ele substitui controles manuais e planilhas, conectando em tempo real todos os pontos da fábrica: pesagem, mistura, linhas de produção, liberação de qualidade, manutenção e o setor comercial.
 
 **Stack:** React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Supabase (PostgreSQL + Auth + Realtime)
 
@@ -20,6 +20,7 @@ O campo `papel` na tabela `perfis` determina o que cada usuário vê e pode faze
 |---|---|---|
 | `gestor` | Administrador de produção | Acesso completo a todos os painéis |
 | `operador` | Operador de chão de fábrica | Apenas a estação atribuída (via campo `balanca`) |
+| `tecnico` | Técnico de manutenção | Painel de Manutenção, Abrir OS, Ferramentas |
 | `comercial` | Equipe de vendas | Apenas o Painel Comercial (consulta de disponibilidade) |
 
 ### Atribuição de estação para `operador`
@@ -118,6 +119,9 @@ Kanban diário com 5 colunas (Linha 1 a 5).
 - **Obs. Laboratório:** campo de anotações internas.
 - **Excluir:** remove apenas o registro do dia ou a OP inteira.
 - **Voltar para Fila:** devolve uma OP de `em_linha` para `aguardando_linha`.
+- **Notas de programação:** post-its por dia com cores (amarelo, azul, verde, rosa). Persistem em `notas_programacao`.
+- **Copiar programação:** move OPs de um dia para outro (por linha ou todas).
+- **Paradas:** registro de paradas de linha com motivo e horário.
 
 **Indicadores no card:**
 - Badge de status colorido.
@@ -216,7 +220,8 @@ Consulta e edição de OPs concluídas.
 **Funcionalidades:**
 - Visualização por dia ou por intervalo de datas.
 - Edição de `hora_inicio`, `hora_fim`, `quantidade_real`.
-- Exibe status em tempo real.
+- Reabrir OP (volta para `aguardando_liberacao`).
+- Totais de quantidade e quantidade real calculados com `useMemo`.
 
 ---
 
@@ -226,11 +231,14 @@ Consulta e edição de OPs concluídas.
 Dashboard analítico com gráficos de produtividade.
 
 **Indicadores:**
-- Produtividade por linha (kg/hora).
-- Distribuição de tamanho de OPs.
-- Timeline de produção por linha.
-- Impacto de paradas na eficiência.
-- Seletores de período com atalhos rápidos (última semana, mês etc.).
+- Produção total do período e média kg/hora geral.
+- Cards por linha: kg produzidos, média kg/h, número de OPs.
+- Horas por linha: trabalhadas, manutenção, sem material, problema de processo, falta energia, limpeza — com barra de eficiência.
+- Gráficos: média kg/h por faixa de OP, volume por faixa, produção mensal (12 meses), produtividade kg/h por mês com linha de meta.
+- Tabelas: Top 25 produtos por kg, Top 20 OPs mais repetidas.
+- Filtros: período com atalhos rápidos, filtro por linha, autocomplete de produto.
+
+**Suporte a dark mode:** usa `buildPalette(dark)` com MutationObserver para detectar `class="dark"` no `<html>`.
 
 ---
 
@@ -266,9 +274,62 @@ Consulta de disponibilidade de produtos para o setor de vendas.
 | `programacao_confirmada = true` | Próximo dia útil após `data_programacao` |
 | `programacao_confirmada ≠ true` | `data_emissao` + 7 dias úteis |
 
-- OPs confirmadas têm borda verde; não confirmadas têm borda laranja.
-- Mostra "Disponível desde [data]" se a data já passou.
-- Mostra "(estimado)" para OPs não confirmadas.
+---
+
+### 4.14 Painel de Manutenção (`PainelManutencao.tsx`)
+**Quem usa:** gestor, tecnico
+
+Central de gestão de Ordens de Serviço (OS).
+
+**Funcionalidades:**
+- Lista de OS com filtros por status, prioridade e técnico.
+- Criar, editar, iniciar e concluir OS.
+- Registro de movimentações de peças de estoque por OS.
+- Histórico de movimentações.
+- Reabertura de OS concluídas.
+
+---
+
+### 4.15 Análise de Manutenção (`PainelAnaliseManutencao.tsx`)
+**Quem usa:** gestor
+
+Dashboard analítico das OS.
+
+**Seções:**
+- **Por Equipamento:** ranking por número de OS, tempo médio de reparo por equipamento (gráficos de barra horizontal). Clique no equipamento abre modal com histórico completo de todas as OS daquele equipamento.
+- **Por Tempo:** tempo médio geral de reparo, OS abertas por mês, OS por dia da semana (destaque do dia com mais OS em amarelo).
+
+**Filtros:** atalhos de período (Hoje, Esta semana, Este mês, Este ano) + datas manuais + filtro por equipamento.
+
+**Suporte a dark mode:** usa `buildPalette(dark)` com MutationObserver — mesmo padrão do `PainelAnalises`.
+
+---
+
+### 4.16 Abrir OS (`AbrirOS.tsx`)
+**Quem usa:** gestor, tecnico
+
+Formulário para abertura de nova Ordem de Serviço.
+
+---
+
+### 4.17 Cadastro de Equipamentos (`CadastroEquipamentos.tsx`)
+**Quem usa:** gestor
+
+CRUD de equipamentos da fábrica com campos de TAG e linha associada.
+
+---
+
+### 4.18 Estoque de Manutenção (`EstoqueManutencao.tsx`)
+**Quem usa:** gestor, tecnico
+
+Controle de peças e materiais de manutenção em estoque.
+
+---
+
+### 4.19 Ferramentas de Manutenção (`FerramentasManutencao.tsx`)
+**Quem usa:** gestor, tecnico
+
+Controle de ferramentas do setor de manutenção.
 
 ---
 
@@ -297,7 +358,7 @@ Consulta de disponibilidade de produtos para o setor de vendas.
 ### 5.5 Lotes e Ordens
 - O lote é o identificador primário vindo do ERP (SAP).
 - Um lote só pode ter **uma OP ativa** no sistema.
-- Ao criar a OP, `data_emissao` é sincronizada de volta para `cadastro_lotes` para que o painel comercial possa calcular disponibilidade via `data_emissao`.
+- Ao criar a OP, `data_emissao` é sincronizada de volta para `cadastro_lotes`.
 
 ### 5.6 Marca
 - Cada OP pertence a uma marca: **Pigma** ou **Zan Collor**.
@@ -323,25 +384,26 @@ Consulta de disponibilidade de produtos para o setor de vendas.
 | `balanca` | INTEGER | Balança de pesagem (1–2) |
 | `status` | TEXT | Ver fluxo de status |
 | `data_programacao` | DATE | Data programada para produção |
-| `data_emissao` | DATE | Data de emissão do lote (base para regra dos 7 dias) |
+| `data_emissao` | DATE | Data de emissão do lote |
 | `data_conclusao` | TIMESTAMP | Quando foi concluída |
 | `posicao` | INTEGER | Posição na fila da linha |
 | `formula_id` | TEXT | Referência à fórmula |
 | `tamanho_batelada` | NUMERIC | Tamanho de cada batelada em kg |
 | `marca` | TEXT | `Pigma` ou `Zan Collor` |
 | `obs` | TEXT | JSON: adições para mistura `[{qty, mp}]` |
+| `obs_linha` | TEXT | Obs do operador de linha |
 | `obs_laboratorio` | TEXT | Anotações do laboratório |
 | `requer_mistura` | BOOLEAN | Se deve passar pela etapa de mistura |
 | `programacao_confirmada` | BOOLEAN | Confirmação comercial da programação |
 | `hora_inicio` | TIME | Hora de início da produção na linha |
 | `hora_fim` | TIME | Hora de fim |
 | `quantidade_real` | NUMERIC | Quantidade efetivamente produzida (kg) |
-| `motivo_reprovacao` | TEXT | Motivo em caso de reprovação na liberação |
+| `motivo_reprovacao` | TEXT | Motivo em caso de reprovação |
+| `data_reprovacao` | DATE | Data da reprovação |
+| `tipo_op` | TEXT | Tipo da ordem de produção |
 | `criado_em` | TIMESTAMP | Criação do registro |
 
 ### Tabela `cadastro_lotes`
-Registro mestre de lotes importados do ERP.
-
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `lote` | NUMBER | Identificador único do lote |
@@ -354,8 +416,6 @@ Registro mestre de lotes importados do ERP.
 | `data_emissao` | DATE | Sincronizado da OP ao criar |
 
 ### Tabela `formulas`
-Receituário de ingredientes.
-
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `formula_id` | TEXT | Identificador da fórmula |
@@ -367,8 +427,6 @@ Receituário de ingredientes.
 | `percentual` | NUMERIC | % da batelada |
 
 ### Tabela `ordens_formula`
-Quantidades customizadas por OP (sobrescreve a fórmula base).
-
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `ordem_id` | UUID | FK para ordens |
@@ -377,8 +435,6 @@ Quantidades customizadas por OP (sobrescreve a fórmula base).
 | `quantidade_kg` | NUMERIC | Quantidade customizada |
 
 ### Tabela `registros_diarios`
-Produção registrada por dia por OP.
-
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `ordem_id` | UUID | FK para ordens |
@@ -388,8 +444,6 @@ Produção registrada por dia por OP.
 | `registro_producao` | JSONB | Array de `{qty, peso}` (bateladas × kg) |
 
 ### Tabela `paradas`
-Paralisações de linha.
-
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `linha` | INTEGER | Linha afetada |
@@ -398,9 +452,43 @@ Paralisações de linha.
 | `hora_inicio` | TIME | Início da parada |
 | `hora_fim` | TIME | Fim da parada |
 
-### Tabela `historico`
-Log de mudanças de status das OPs.
+### Tabela `notas_programacao`
+Post-its do painel de programação.
 
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID | PK |
+| `texto` | TEXT | Conteúdo da nota |
+| `cor` | TEXT | `amarelo`, `azul`, `verde`, `rosa` |
+| `data` | DATE | Dia ao qual a nota pertence (null = global) |
+| `criado_em` | TIMESTAMP | Criação |
+
+### Tabela `ordens_servico`
+Ordens de Serviço de manutenção.
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID | PK |
+| `descricao_problema` | TEXT | Descrição do problema |
+| `prioridade` | TEXT | `baixa`, `media`, `alta`, `critica` |
+| `status` | TEXT | `aberta`, `em_andamento`, `aguardando_aprovacao`, `concluida` |
+| `aberta_por` | TEXT | Nome de quem abriu |
+| `tecnico_nome` | TEXT | Nome do técnico responsável |
+| `solucao_aplicada` | TEXT | Solução descrita ao concluir |
+| `aberta_em` | TIMESTAMP | Data/hora de abertura |
+| `iniciado_em` | TIMESTAMP | Início do atendimento |
+| `concluido_em` | TIMESTAMP | Conclusão |
+| `equipamentos` | FK | Relação com equipamentos |
+
+### Tabela `equipamentos`
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID | PK |
+| `nome` | TEXT | Nome do equipamento |
+| `tag` | TEXT | TAG de identificação |
+| `linha` | INTEGER | Linha associada (opcional) |
+
+### Tabela `historico`
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `ordem_id` | UUID | FK para ordens |
@@ -409,34 +497,66 @@ Log de mudanças de status das OPs.
 | `alterado_em` | TIMESTAMP | Quando ocorreu |
 
 ### Tabela `perfis`
-Perfis de usuário (complementa Supabase Auth).
-
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `id` | TEXT | UUID do usuário (Supabase Auth) |
 | `nome` | TEXT | Nome de exibição |
-| `papel` | TEXT | `gestor`, `operador`, `comercial` |
-| `balanca` | TEXT | Estação do operador: `1`, `2`, `mistura`, `linha1`–`linha5` |
+| `papel` | TEXT | `gestor`, `operador`, `tecnico`, `comercial` |
+| `balanca` | TEXT | Estação do operador |
 
 ---
 
 ## 7. Funcionalidades em Tempo Real
 
-O Supabase Realtime (PostgreSQL change notifications) mantém os painéis atualizados automaticamente.
-
 | Painel | Canal | Debounce |
 |---|---|---|
 | Painel Gestor | `gestor-pendentes-global` | 300ms |
-| Programação | Canal por data | 600ms |
+| Programação | `programacao-ordens` | 1500ms (com filtro por data) |
 | Balança | Canal por balança | 300ms |
 | Mistura | `mistura-realtime` | 300ms |
 | Linha | Canal por linha | 300ms |
 | Paradas | Canal por linha | imediato |
 | Registros diários | Canal por ordem | imediato |
 
+> **Nota:** A subscription do PainelProgramacao filtra eventos por relevância — só dispara refetch quando o evento toca o dia atual (`data_programacao`, `data_reprovacao` ou `data` do registro).
+
 ---
 
-## 8. Utilitários e Funções Principais
+## 8. Navegação e Layout (`Index.tsx`)
+
+O `Index.tsx` é o shell principal. Após autenticação, roteia o usuário para o layout correto conforme o `papel`:
+
+- **operador:** layout fixo para a estação atribuída (sem sidebar de navegação).
+- **tecnico:** sidebar com 3 abas (Painel de Manutenção, Abrir OS, Ferramentas).
+- **comercial:** sidebar com 1 aba (Painel Comercial).
+- **gestor:** sidebar completa com grupos colapsáveis (Produção, Manutenção, Comercial).
+
+### Keep-Alive de Abas (gestor)
+
+Painéis com fetch de dados montam apenas na **primeira visita** e ficam no DOM com `display: none` nas demais, evitando re-fetch ao trocar de aba.
+
+Abas com keep-alive: Gestor, Programação, Programação Balanças, Histórico, Liberação, Análises, Consulta Fórmula, Comercial, Balanças 1 e 2, Mistura, Linhas 1–5, todos os painéis de Manutenção.
+
+Abas que sempre remontam (formulários/one-shot): Nova Ordem, Importar, Abrir OS.
+
+---
+
+## 9. Dark Mode
+
+Suporte completo a dark mode via Tailwind (`dark:` classes) em todas as páginas e via paleta dinâmica (`buildPalette(dark)`) nos painéis com gráficos Recharts.
+
+Páginas com suporte a dark mode implementado:
+- `Index.tsx` (shell e sidebar)
+- `PainelAnalises.tsx`
+- `PainelAnaliseManutencao.tsx`
+- `PainelProgramacao.tsx` (cards Kanban via `SortableCard`)
+- `PaginaInicial.tsx` (landing page)
+
+A detecção do tema usa `MutationObserver` no `document.documentElement` observando mudanças na classe `dark`.
+
+---
+
+## 10. Utilitários e Funções Principais
 
 | Arquivo | Função | O que faz |
 |---|---|---|
@@ -448,10 +568,11 @@ O Supabase Realtime (PostgreSQL change notifications) mantém os painéis atuali
 | `lib/obsUtils.ts` | `parseObsItems(obs)` | Decodifica o JSON de adições para mistura |
 | `lib/utils.ts` | `sortOrdens(ordens)` | Ordena OPs: concluídas/em liberação no topo, depois por posição |
 | `lib/utils.ts` | `formatKg(valor)` | Formata número como kg (3 casas, pt-BR) |
+| `lib/utils.ts` | `parseHoras(inicio, fim)` | Calcula horas entre dois horários HH:MM |
 
 ---
 
-## 9. Componentes Reutilizáveis
+## 11. Componentes Reutilizáveis
 
 | Componente | Descrição |
 |---|---|
@@ -459,39 +580,49 @@ O Supabase Realtime (PostgreSQL change notifications) mantém os painéis atuali
 | `MarcaBadge` | Badge da marca (Pigma / Zan Collor) |
 | `EditarOrdemDialog` | Modal de edição completa de uma OP |
 | `DetalheOrdemDialog` | Modal com histórico completo de registros da OP |
-| `MetricCard` | Card de métrica para o painel de análises |
+| `EditarRegistrosDiariosModal` | Modal para editar/deletar registros diários |
+| `ErrorBoundary` | Captura erros React e exibe fallback amigável |
 
 ---
 
-## 10. Estrutura de Arquivos
+## 12. Estrutura de Arquivos
 
 ```
 src/
 ├── pages/
-│   ├── Index.tsx                   # Shell principal, roteamento por papel
-│   ├── Login.tsx                   # Autenticação
-│   ├── PainelGestor.tsx            # Dashboard do gestor
-│   ├── PainelProgramacao.tsx       # Kanban de programação (5 linhas)
-│   ├── CriarOrdem.tsx              # Criação de nova OP
-│   ├── PainelBalanca.tsx           # Estação de pesagem
-│   ├── PainelMistura.tsx           # Estação de mistura
-│   ├── PainelLinha.tsx             # Linha de produção
-│   ├── PainelLiberacao.tsx         # Liberação/qualidade
-│   ├── PainelHistorico.tsx         # Histórico de OPs concluídas
-│   ├── PainelAnalises.tsx          # Dashboard analítico
-│   ├── PainelComercial.tsx         # Consulta de disponibilidade
-│   ├── PainelConsultaFormula.tsx   # Consulta de fórmulas
-│   ├── PainelProgramacaoBalanca.tsx # Programação por balança
-│   └── ImportarProgramacao.tsx     # Importação de CSV
+│   ├── Index.tsx                     # Shell principal, roteamento por papel + keep-alive
+│   ├── Login.tsx                     # Autenticação
+│   ├── PaginaInicial.tsx             # Landing page de boas-vindas
+│   ├── PainelGestor.tsx              # Dashboard do gestor
+│   ├── PainelProgramacao.tsx         # Kanban de programação (5 linhas)
+│   ├── PainelProgramacaoBalanca.tsx  # Programação por balança
+│   ├── CriarOrdem.tsx                # Criação de nova OP
+│   ├── PainelBalanca.tsx             # Estação de pesagem
+│   ├── PainelMistura.tsx             # Estação de mistura
+│   ├── PainelLinha.tsx               # Linha de produção
+│   ├── PainelLiberacao.tsx           # Liberação/qualidade
+│   ├── PainelHistorico.tsx           # Histórico de OPs concluídas
+│   ├── PainelAnalises.tsx            # Dashboard analítico de produção
+│   ├── PainelAnaliseManutencao.tsx   # Dashboard analítico de manutenção
+│   ├── PainelComercial.tsx           # Consulta de disponibilidade
+│   ├── PainelConsultaFormula.tsx     # Consulta de fórmulas
+│   ├── PainelManutencao.tsx          # Central de OS de manutenção
+│   ├── AbrirOS.tsx                   # Formulário de nova OS
+│   ├── CadastroEquipamentos.tsx      # CRUD de equipamentos
+│   ├── EstoqueManutencao.tsx         # Estoque de manutenção
+│   ├── FerramentasManutencao.tsx     # Ferramentas de manutenção
+│   └── ImportarProgramacao.tsx       # Importação de CSV
 ├── components/
 │   ├── StatusBadge.tsx
 │   ├── MarcaBadge.tsx
 │   ├── EditarOrdemDialog.tsx
 │   ├── DetalheOrdemDialog.tsx
-│   ├── MetricCard.tsx
-│   └── ui/                         # Componentes shadcn/ui
+│   ├── EditarRegistrosDiariosModal.tsx
+│   ├── ErrorBoundary.tsx
+│   └── ui/                           # Componentes shadcn/ui
 ├── hooks/
 │   ├── useAuth.ts
+│   ├── useTheme.ts
 │   ├── useOrdens.ts
 │   ├── useFormula.ts
 │   └── use-toast.ts
@@ -505,5 +636,40 @@ src/
     ├── client.ts
     └── types.ts
 
-supabase/migrations/               # Histórico de alterações no banco
+supabase/migrations/                  # Histórico de alterações no banco
 ```
+
+---
+
+## 13. Otimizações de Performance Realizadas (Jun/2026)
+
+### `use-toast.ts`
+- Corrigido dep array `[state]` → `[]` no `useEffect` do listener. Antes, o listener era re-registrado a cada toast disparado.
+
+### `PainelLinha.tsx`
+- Constante `today` movida do escopo de módulo para `useMemo(() => ..., [])` dentro do componente — corrige bug onde a data não atualizava se o app ficasse aberto após meia-noite.
+- Removido import `OctagonX` não utilizado.
+
+### `PainelHistorico.tsx`
+- Totais do `<tfoot>` (dois `reduce()` + IIFE) extraídos para `useMemo` — não recalculam mais a cada render.
+
+### `PainelProgramacao.tsx`
+- **Subscription realtime** passa a filtrar por relevância: eventos que não tocam o dia atual (`data_programacao`, `data_reprovacao`, `data`) são descartados antes do debounce, eliminando re-fetches espúrios quando outro usuário salva algo em outro dia.
+- **`handleDeletarRegistro`**: substituída dependência instável `[registrosDoDia]` por `registrosDoDiaRef` — callback agora é estável e não invalida o `memo` das 5 `LinhaColumn` a cada fetch.
+- **`handleMoverLinha`**: envolvido em `useCallback` — `FormulaDialog` (memoizado) deixa de re-renderizar em todo `setState` do pai.
+- **`notasVisiveis`**: movido para `useMemo([notas, data])`.
+- **`todayStr`**: movido para `useMemo([])`.
+- Removidos 3 `console.log` de debug esquecidos em produção.
+
+### `PainelLiberacao.tsx`
+- Removido `console.log` de debug esquecido em produção.
+
+### `Index.tsx`
+- `handleCriarOP` envolvido em `useCallback`.
+- `activeLabel` movido para `useMemo`.
+- **Keep-alive de abas**: painéis montam apenas na primeira visita e permanecem no DOM (`display: none`) nas demais — elimina re-fetch ao Supabase em cada troca de aba.
+
+### `PainelAnaliseManutencao.tsx`
+- Dark mode completo implementado com `buildPalette(dark)` + MutationObserver, matching o padrão do `PainelAnalises.tsx`.
+- `PRIORIDADE_CONFIG` e `STATUS_CONFIG` convertidos para funções `getPrioridadeConfig(D)` / `getStatusConfig(D)` para refletir o tema atual.
+- `colorScheme` adicionado nos inputs de data.
