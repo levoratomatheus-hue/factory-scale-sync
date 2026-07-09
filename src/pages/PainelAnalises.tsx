@@ -187,14 +187,14 @@ type HorasLinha = {
 };
 
 const BREAKDOWN_DEFS = [
-  { key: "horasTrabalhadas", emoji: "✅", label: "Trabalhadas",    color: "#10b981", semPct: false },
-  { key: "manutencao",       emoji: "🔧", label: "Manutenção",     color: "#f97316", semPct: false },
-  { key: "sem_material",     emoji: "📦", label: "Sem Material",   color: "#eab308", semPct: false },
-  { key: "problema_processo",emoji: "⚙️", label: "Prob. Processo", color: "#ef4444", semPct: false },
-  { key: "falta_energia",    emoji: "⚡", label: "Falta Energia",  color: "#b91c1c", semPct: true  },
-  { key: "reuniao",          emoji: "👥", label: "Reunião",        color: "#8b5cf6", semPct: true  },
-  { key: "outros",           emoji: "📋", label: "Outros",         color: "#6b7280", semPct: false },
-  { key: "horasLimpeza",     emoji: "🧹", label: "Limpeza",        color: "#3b82f6", semPct: false },
+  { key: "horasTrabalhadas", emoji: "✅", label: "Trabalhadas",   color: "#10b981", semPct: false },
+  { key: "manutencao",       emoji: "🔧", label: "Manutenção",    color: "#f97316", semPct: false },
+  { key: "sem_material",     emoji: "📦", label: "Sem Material",  color: "#eab308", semPct: false },
+  { key: "problema_processo",emoji: "⚙️", label: "Processo",      color: "#ef4444", semPct: false },
+  { key: "falta_energia",    emoji: "⚡", label: "F. Energia",    color: "#b91c1c", semPct: true  },
+  { key: "reuniao",          emoji: "👥", label: "Reunião",       color: "#8b5cf6", semPct: true  },
+  { key: "outros",           emoji: "📋", label: "Outros",        color: "#6b7280", semPct: false },
+  { key: "horasLimpeza",     emoji: "🧹", label: "Limpeza",       color: "#3b82f6", semPct: false },
 ] as const;
 
 function CardHorasLinha(h: HorasLinha) {
@@ -221,8 +221,8 @@ function CardHorasLinha(h: HorasLinha) {
           const val = h[key as keyof HorasLinha] as number;
           const pct = (!semPct && h.capacidade > 0) ? (val / h.capacidade) * 100 : null;
           return (
-            <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr auto 60px", alignItems: "center", gap: "0 0.25rem" }}>
-              <span style={{ fontSize: 11, color: D.muted }}>{emoji} {label}</span>
+            <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr 48px 54px", alignItems: "center", gap: "0 0.25rem", lineHeight: "1.6" }}>
+              <span style={{ fontSize: 11, color: D.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{emoji} {label}</span>
               <span style={{ fontSize: 11, fontWeight: 600, fontFamily: "monospace", fontVariantNumeric: "tabular-nums", color: val === 0 ? D.muted : color, textAlign: "right" }}>
                 {fmtHHMM(val)}
               </span>
