@@ -211,7 +211,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       .channel("ordens-servico-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens_servico" }, () => {
         if (debounce) clearTimeout(debounce);
-        debounce = setTimeout(() => fetchOss(), 1500);
+        debounce = setTimeout(() => fetchOss(), 300);
       })
       .subscribe();
     return () => {

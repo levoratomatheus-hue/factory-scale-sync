@@ -99,11 +99,20 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
 
   useEffect(() => {
     fetchItems();
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => fetchItems(), 300);
+    };
     const channel = supabase
       .channel("estoque-manutencao-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "estoque_manutencao" }, fetchItems)
+      .on("postgres_changes", { event: "*", schema: "public", table: "estoque_manutencao" }, trigger)
+      .on("postgres_changes", { event: "*", schema: "public", table: "estoque_movimentacoes" }, trigger)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      supabase.removeChannel(channel);
+    };
   }, [fetchItems]);
 
   async function salvarCadastro() {
