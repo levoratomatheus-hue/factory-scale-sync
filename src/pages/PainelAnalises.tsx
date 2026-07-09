@@ -1104,34 +1104,6 @@ export default function PainelAnalises() {
                   </button>
                 ))}
               </div>
-              <div style={{ ...cardStyle }}>
-                <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Total kg por classe · período selecionado</p>
-                <ResponsiveContainer width="100%" height={Math.max(140, dadosPorClasse.length * 36)}>
-                  <BarChart data={dadosPorClasse} layout="vertical" margin={{ top: 4, right: 48, left: 8, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={D.grid} />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false}
-                      tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                    <YAxis type="category" dataKey="classe" tick={{ fontSize: 11, fill: D.text, fontWeight: 600, fontFamily: "monospace" }} tickLine={false} axisLine={false} width={52} />
-                    <Tooltip
-                      content={({ active, payload }: any) => {
-                        if (!active || !payload?.length) return null;
-                        const { classe, kg, media, ops } = payload[0].payload;
-                        return (
-                          <div style={{ ...makeTooltipStyle(D) }}>
-                            <p style={{ fontWeight: 700, margin: 0, fontFamily: "monospace" }}>{classe}</p>
-                            <p style={{ margin: "4px 0 0", color: D.emerald }}>{kg.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kg</p>
-                            <p style={{ margin: "2px 0 0", color: D.cyan }}>{media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg/h</p>
-                            <p style={{ margin: "2px 0 0", color: D.muted }}>{ops} OP{ops !== 1 ? "s" : ""}</p>
-                          </div>
-                        );
-                      }}
-                      cursor={{ fill: "#ffffff08" }}
-                    />
-                    <Bar dataKey="kg" fill={D.emerald} radius={[0, 4, 4, 0]} maxBarSize={28}
-                      label={{ position: "right", fontSize: 10, fill: D.muted, formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v)) }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
             </div>
           )}
 
