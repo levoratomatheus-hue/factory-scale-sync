@@ -357,17 +357,6 @@ export default function Index() {
                       <span>Abrir OS</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={activeTab === 'ferramentas_manutencao'}
-                      tooltip="Ferramentas"
-                      onClick={() => goToTab('ferramentas_manutencao')}
-                      size="sm"
-                    >
-                      <Hammer className="h-3.5 w-3.5 shrink-0" />
-                      <span>Ferramentas</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
