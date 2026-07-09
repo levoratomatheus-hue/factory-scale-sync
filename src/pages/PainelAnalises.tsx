@@ -179,7 +179,8 @@ function TooltipProdutividade({ active, payload, label }: any) {
 // ── CardHorasLinha ────────────────────────────────────────────────────────────
 
 type HorasLinha = {
-  linha: number; diasComOP: number; capacidade: number; horasTrabalhadas: number;
+  linha: number; diasAtivos: number; diasComOP: number;
+  capacidadeBruta: number; capacidade: number; horasTrabalhadas: number;
   manutencao: number; sem_material: number; problema_processo: number; falta_energia: number;
   reuniao: number; outros: number;
   horasLimpeza: number; eficiencia: number;
@@ -206,7 +207,7 @@ function CardHorasLinha(h: HorasLinha) {
         <div className={`inline-flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br ${CORES_LINHA[h.linha - 1]} text-white`}>
           <span className="text-xs font-bold">{h.linha}</span>
         </div>
-        <span style={{ fontSize: 11, color: D.muted }}>{h.diasComOP}d</span>
+        <span style={{ fontSize: 11, color: D.muted }}>{h.diasAtivos}d</span>
       </div>
       <p style={{ fontSize: 11, color: D.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
         Linha {h.linha}
@@ -603,6 +604,8 @@ export default function PainelAnalises() {
 
     const TURNO_H = 9;
     const MOTIVOS_PARADA = ["manutencao", "sem_material", "problema_processo", "falta_energia", "reuniao", "outros"] as const;
+    // Paradas que reduzem a capacidade disponível (planejadas/externas)
+    const MOTIVOS_FORA_DISPONIBILIDADE = new Set(["reuniao", "falta_energia"]);
     const horasPorLinha = [1, 2, 3, 4, 5].map((linha) => {
       const diasComOP = diasLinhaMap[linha]?.size ?? 0;
       const toH = (t: string | null) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
@@ -617,6 +620,11 @@ export default function PainelAnalises() {
           return s + Math.max(0, h - hp);
         }, 0);
       const paradasLinha = paradas.filter((p) => Number(p.linha) === linha);
+      // Dias com parada registrada (mesmo sem OP)
+      const diasComParada = new Set(paradasLinha.map((p) => p.data));
+      // Dias ativos = união de dias com OP e dias com parada
+      const diasAtivoSet = new Set([...(diasLinhaMap[linha] ?? new Set()), ...diasComParada]);
+      const diasAtivos = diasAtivoSet.size;
       const porMotivo = Object.fromEntries(
         MOTIVOS_PARADA.map((m) => [
           m,
@@ -624,10 +632,20 @@ export default function PainelAnalises() {
         ])
       ) as Record<typeof MOTIVOS_PARADA[number], number>;
       const totalParadasRegistradas = MOTIVOS_PARADA.reduce((s, m) => s + porMotivo[m], 0);
-      const capacidade = diasComOP * TURNO_H;
-      const horasLimpeza = Math.max(0, capacidade - horasTrabalhadas - totalParadasRegistradas);
+      // Capacidade bruta = dias ativos × 9h
+      const capacidadeBruta = diasAtivos * TURNO_H;
+      // Capacidade disponível = bruta − paradas planejadas (reunião + falta de energia)
+      const horasForaDisponibilidade = MOTIVOS_PARADA
+        .filter((m) => MOTIVOS_FORA_DISPONIBILIDADE.has(m))
+        .reduce((s, m) => s + porMotivo[m], 0);
+      const capacidade = Math.max(0, capacidadeBruta - horasForaDisponibilidade);
+      // Limpeza = horas não explicadas dentro da capacidade disponível
+      const paradasDentroDisponibilidade = MOTIVOS_PARADA
+        .filter((m) => !MOTIVOS_FORA_DISPONIBILIDADE.has(m))
+        .reduce((s, m) => s + porMotivo[m], 0);
+      const horasLimpeza = Math.max(0, capacidade - horasTrabalhadas - paradasDentroDisponibilidade);
       const eficiencia = capacidade > 0 ? (horasTrabalhadas / capacidade) * 100 : 0;
-      return { linha, diasComOP, capacidade, horasTrabalhadas, ...porMotivo, horasLimpeza, eficiencia };
+      return { linha, diasAtivos, diasComOP, capacidadeBruta, capacidade, horasTrabalhadas, ...porMotivo, horasLimpeza, eficiencia };
     });
 
     return { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha };
