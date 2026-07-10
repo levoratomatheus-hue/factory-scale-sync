@@ -678,15 +678,40 @@ export default function PainelLiberacao() {
                         ? regs.filter((r: any) => r.data > ordem.data_reprovacao)
                         : regs;
                       const total = calcQtdFromRegistros(regsParaTotal);
-                      if (total === null) return null;
+                      if (total !== null) {
+                        return (
+                          <div className="px-4 py-2.5 bg-blue-100/80 dark:bg-blue-900/40 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+                              Total calculado
+                            </span>
+                            <span className="text-base font-extrabold text-blue-900 dark:text-blue-300 font-mono">
+                              {formatKg(total)} kg
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (regsParaTotal.length === 0) return null;
+                      // Todos os registros sem quantidade — pede ao gestor informar o total real
+                      const nDias = regsParaTotal.length;
                       return (
-                        <div className="px-4 py-2.5 bg-blue-100/80 dark:bg-blue-900/40 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
-                            Total calculado
-                          </span>
-                          <span className="text-base font-extrabold text-blue-900 dark:text-blue-300 font-mono">
-                            {formatKg(total)} kg
-                          </span>
+                        <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 space-y-2">
+                          <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                            Quantidade total produzida nos {nDias} dia{nDias !== 1 ? "s" : ""} trabalhado{nDias !== 1 ? "s" : ""}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={qtdReal[ordem.id] ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9,]/g, "");
+                                setQtdReal((prev) => ({ ...prev, [ordem.id]: val }));
+                              }}
+                              placeholder="0,000"
+                              className="w-40 rounded-md border border-emerald-300 dark:border-emerald-700 bg-background dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <span className="text-sm text-muted-foreground">kg</span>
+                          </div>
                         </div>
                       );
                     })()}
