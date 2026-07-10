@@ -485,19 +485,50 @@ export default function PainelAnalises() {
       if ((materialFiltro || classeFiltro !== "todas") && !ordensAnuaisIds.has(r.ordem_id)) return false;
       return true;
     });
-    // Iteração única sobre registros anuais
+    // Passo 1: detectar OPs tipo B (só horários, sem quantidade nos itens, mas com quantidade_real)
+    const kgItemsPorOrdemAnual: Record<string, number> = {};
+    const horasRawPorOrdemAnual: Record<string, number> = {};
+    regsAnuaisFiltrados.forEach((r: any) => {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      kgItemsPorOrdemAnual[r.ordem_id] = (kgItemsPorOrdemAnual[r.ordem_id] || 0) + kg;
+      const h = parseHoras(r.hora_inicio, r.hora_fim);
+      if (h !== null) horasRawPorOrdemAnual[r.ordem_id] = (horasRawPorOrdemAnual[r.ordem_id] || 0) + h;
+    });
+    const qtdRealTipoBAnual = new Map<string, number>();
+    regsAnuaisFiltrados.forEach((r: any) => {
+      if ((kgItemsPorOrdemAnual[r.ordem_id] ?? 0) > 0) return;
+      const qr = Number(r.ordens?.quantidade_real);
+      if (qr > 0) qtdRealTipoBAnual.set(r.ordem_id, qr);
+    });
+
+    // Passo 2: iterar registros distribuindo kg corretamente por tipo
     const mapaKg: Record<string, number> = {};
     const mapaProd: Record<string, { kg: number; h: number }> = {};
     regsAnuaisFiltrados.forEach((r: any) => {
       const chave = String(r.data).slice(0, 7);
-      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-      const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-      mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
-      const h = parseHoras(r.hora_inicio, r.hora_fim);
-      if (h !== null) {
+      if (qtdRealTipoBAnual.has(r.ordem_id)) {
+        // Tipo B: distribuir quantidade_real proporcionalmente às horas de cada dia
+        const qr = qtdRealTipoBAnual.get(r.ordem_id)!;
+        const horasTotal = horasRawPorOrdemAnual[r.ordem_id] ?? 0;
+        const hDia = parseHoras(r.hora_inicio, r.hora_fim);
+        if (hDia === null || horasTotal === 0) return;
+        const kgDia = qr * (hDia / horasTotal);
+        mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
         if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
         mapaProd[chave].kg += kgDia;
-        mapaProd[chave].h += h;
+        mapaProd[chave].h += hDia;
+      } else {
+        // Tipo A: soma de itens (comportamento atual intacto)
+        const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+        const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+        mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
+        const h = parseHoras(r.hora_inicio, r.hora_fim);
+        if (h !== null) {
+          if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
+          mapaProd[chave].kg += kgDia;
+          mapaProd[chave].h += h;
+        }
       }
     });
     const dadosMensais = meses.map(({ key, label }) => ({ mes: label, kg: Math.round(mapaKg[key] || 0) }));
@@ -510,7 +541,7 @@ export default function PainelAnalises() {
   }, [registrosDiariosAnuaisRaw, linhaFiltro, materialFiltro, classeFiltro, ordensAnuaisIds]);
 
   const { producaoTotal, mediaKgHora, porLinha, dadosFaixas, topProdutos, topRepetidas, horasPorLinha } = useMemo(() => {
-    // kg por registro diário — mesmo filtro do gráfico
+    // Tipo B: OPs com registros só de horários (kg=0) e quantidade_real preenchida
     const kgPorOrdem: Record<string, number> = {};
     registrosDiariosRaw.forEach((r: any) => {
       if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
@@ -518,6 +549,14 @@ export default function PainelAnalises() {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
       kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
+    });
+    // Para OPs onde kg dos itens = 0, usar quantidade_real se disponível
+    registrosDiariosRaw.forEach((r: any) => {
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
+      if ((materialFiltro || classeFiltro !== "todas") && !ordensAnuaisIds.has(r.ordem_id)) return;
+      if ((kgPorOrdem[r.ordem_id] ?? 0) > 0) return; // já tem kg dos itens — não sobrescrever
+      const qr = Number(r.ordens?.quantidade_real);
+      if (qr > 0) kgPorOrdem[r.ordem_id] = qr;
     });
 
     const producaoTotal = Object.values(kgPorOrdem).reduce((s, v) => s + v, 0);
@@ -547,11 +586,8 @@ export default function PainelAnalises() {
       const regsLinha = (regsPorLinha.get(linha) ?? []).filter((r: any) =>
         (!(materialFiltro || classeFiltro !== "todas") || ordensAnuaisIds.has(r.ordem_id))
       );
-      const totalKg = regsLinha.reduce((s: number, r: any) => {
-        const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-        return s + items.reduce((ss: number, it: any) => ss + (it.qty || 0) * (it.peso || 0), 0);
-      }, 0);
       const uniqueIds = new Set<string>(regsLinha.map((r: any) => r.ordem_id));
+      const totalKg = [...uniqueIds].reduce((s, id) => s + (kgPorOrdem[id] || 0), 0);
       let kgH = 0, hH = 0;
       uniqueIds.forEach((id) => {
         const h = horasMap[id] ?? null;
@@ -653,7 +689,6 @@ export default function PainelAnalises() {
   }, [ordens, paradas, horasMap, diasLinhaMap, registrosDiariosRaw, linhaFiltro, materialFiltro, classeFiltro, ordensAnuaisIds]);
 
   const dadosPorClasse = useMemo(() => {
-    const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
     const kgPorOrdem: Record<string, number> = {};
     const ordemClasseMap = new Map<string, string>();
     const linhaOrdemMap: Record<string, number> = {};
@@ -666,6 +701,14 @@ export default function PainelAnalises() {
       kgPorOrdem[r.ordem_id] = (kgPorOrdem[r.ordem_id] || 0) + kg;
       if (!ordemClasseMap.has(r.ordem_id)) ordemClasseMap.set(r.ordem_id, getClasse(r.ordens?.produto));
       if (!linhaOrdemMap[r.ordem_id]) linhaOrdemMap[r.ordem_id] = Number(r.ordens?.linha);
+    });
+    // Tipo B: OPs sem kg nos itens — usar quantidade_real
+    registrosDiariosRaw.forEach((r: any) => {
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
+      if (materialFiltro && !ordensAnuaisIdsNoClasse.has(r.ordem_id)) return;
+      if ((kgPorOrdem[r.ordem_id] ?? 0) > 0) return;
+      const qr = Number(r.ordens?.quantidade_real);
+      if (qr > 0) kgPorOrdem[r.ordem_id] = qr;
     });
 
     const mapa: Record<string, { kg: number; kgComH: number; h: number; ops: Set<string> }> = {};
