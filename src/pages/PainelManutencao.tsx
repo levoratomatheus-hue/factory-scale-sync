@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -71,6 +71,10 @@ interface OS {
   observacoes_andamento: string | null;
   motivo_reprovacao: string | null;
   reprovada_em: string | null;
+  externa: boolean | null;
+  empresa_externa: string | null;
+  contato_externo: string | null;
+  prazo_retorno: string | null;
   equipamentos?: { nome: string; tag: string | null; linha: number | null } | null;
 }
 
@@ -148,6 +152,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [loading, setLoading] = useState(true);
   const [tabAtiva, setTabAtiva] = useState<string>("aberta");
   const [tipoFiltro, setTipoFiltro] = useState<"todas" | "corretiva" | "preventiva">("todas");
+  const [externaFiltro, setExternaFiltro] = useState<"todas" | "interna" | "externa">("todas");
 
   const [solucao_aplicadaDialogOS, setSolucaoDialogOS] = useState<OS | null>(null);
   const [solucao_aplicadaText, setSolucaoText] = useState("");
@@ -170,7 +175,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [savingPeca, setSavingPeca] = useState(false);
 
   const [editOS, setEditOS] = useState<OS | null>(null);
-  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "", aberta_em: "" });
+  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "", aberta_em: "", externa: false, empresa_externa: "", contato_externo: "", prazo_retorno: "" });
   const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -246,8 +251,13 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     if (tipoFiltro !== "todas") {
       porStatus = porStatus.filter((o) => (o.tipo ?? "corretiva") === tipoFiltro);
     }
+    if (externaFiltro === "externa") {
+      porStatus = porStatus.filter((o) => o.externa === true);
+    } else if (externaFiltro === "interna") {
+      porStatus = porStatus.filter((o) => !o.externa);
+    }
     return porStatus;
-  }, [oss, tabAtiva, dataInicio, dataFim, tipoFiltro]);
+  }, [oss, tabAtiva, dataInicio, dataFim, tipoFiltro, externaFiltro]);
 
   useEffect(() => {
     if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida" && tabAtiva !== "em_andamento") return;
@@ -449,6 +459,10 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       prioridade: os.prioridade,
       tecnico_nome: os.tecnico_nome ?? "",
       aberta_em: toDatetimeLocal(os.aberta_em),
+      externa: os.externa ?? false,
+      empresa_externa: os.empresa_externa ?? "",
+      contato_externo: os.contato_externo ?? "",
+      prazo_retorno: os.prazo_retorno ?? "",
     });
     const { data } = await (supabase as any)
       .from("equipamentos")
@@ -469,7 +483,11 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       equipamento_id: editForm.equipamento_id || null,
       descricao_problema: editForm.descricao_problema.trim(),
       prioridade: editForm.prioridade,
-      tecnico_nome: editForm.tecnico_nome.trim() || null,
+      tecnico_nome: editForm.externa ? null : (editForm.tecnico_nome.trim() || null),
+      externa: editForm.externa,
+      empresa_externa: editForm.externa ? (editForm.empresa_externa.trim() || null) : null,
+      contato_externo: editForm.externa ? (editForm.contato_externo.trim() || null) : null,
+      prazo_retorno: editForm.externa ? (editForm.prazo_retorno || null) : null,
     };
     if (papel === "gestor" && editForm.aberta_em) {
       updatePayload.aberta_em = spLocalToISO(editForm.aberta_em);
@@ -698,26 +716,48 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
         })}
       </div>
 
-      {/* Filtro por tipo */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground font-medium">Tipo:</span>
-        {(["todas", "corretiva", "preventiva"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTipoFiltro(t)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-              tipoFiltro === t
-                ? t === "corretiva"
-                  ? "bg-red-100 text-red-700 border-red-300"
-                  : t === "preventiva"
-                  ? "bg-green-100 text-green-700 border-green-300"
-                  : "bg-primary text-primary-foreground border-primary"
-                : "border-input bg-background text-muted-foreground hover:border-foreground/30"
-            }`}
-          >
-            {t === "todas" ? "Todas" : t === "corretiva" ? "Corretiva" : "Preventiva"}
-          </button>
-        ))}
+      {/* Filtros por tipo e origem */}
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium">Tipo:</span>
+          {(["todas", "corretiva", "preventiva"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTipoFiltro(t)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                tipoFiltro === t
+                  ? t === "corretiva"
+                    ? "bg-red-100 text-red-700 border-red-300"
+                    : t === "preventiva"
+                    ? "bg-green-100 text-green-700 border-green-300"
+                    : "bg-primary text-primary-foreground border-primary"
+                  : "border-input bg-background text-muted-foreground hover:border-foreground/30"
+              }`}
+            >
+              {t === "todas" ? "Todas" : t === "corretiva" ? "Corretiva" : "Preventiva"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium">Origem:</span>
+          {(["todas", "interna", "externa"] as const).map((o) => (
+            <button
+              key={o}
+              onClick={() => setExternaFiltro(o)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                externaFiltro === o
+                  ? o === "externa"
+                    ? "bg-purple-100 text-purple-700 border-purple-300"
+                    : o === "interna"
+                    ? "bg-blue-100 text-blue-700 border-blue-300"
+                    : "bg-primary text-primary-foreground border-primary"
+                  : "border-input bg-background text-muted-foreground hover:border-foreground/30"
+              }`}
+            >
+              {o === "todas" ? "Todas" : o === "interna" ? "Interna" : "Externa"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Filtro de período — apenas na aba Concluída */}
@@ -769,6 +809,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             const prio = PRIORIDADE_CONFIG[os.prioridade] ?? { label: os.prioridade, class: "bg-muted text-muted-foreground" };
             const st = STATUS_CONFIG[os.status] ?? { label: os.status, class: "bg-muted text-muted-foreground" };
             const equip = os.equipamentos;
+            const hoje = new Date().toISOString().split("T")[0];
+            const prazoVencido = os.externa && os.prazo_retorno && os.prazo_retorno < hoje && os.status !== "concluida";
 
             /* ── Card compacto para OS concluída ── */
             if (os.status === "concluida") {
@@ -789,6 +831,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       <span className="text-xs text-muted-foreground">L{equip.linha}</span>
                     )}
                     <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                      {os.externa && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                          <Building2 className="h-3 w-3" />
+                          {os.empresa_externa ?? "Externa"}
+                        </span>
+                      )}
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                         {(os.tipo ?? "corretiva") === "preventiva" ? "Preventiva" : "Corretiva"}
                       </span>
@@ -896,7 +944,13 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     </div>
                     <p className="text-sm text-foreground/80 line-clamp-2">{os.descricao_problema}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {os.externa && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                        <Building2 className="h-3 w-3" />
+                        {os.empresa_externa ?? "Externa"}
+                      </span>
+                    )}
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                       {(os.tipo ?? "corretiva") === "preventiva" ? "Preventiva" : "Corretiva"}
                     </span>
@@ -908,6 +962,28 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     </span>
                   </div>
                 </div>
+
+                {/* Bloco de manutenção externa */}
+                {os.externa && (
+                  <div className={`rounded-md border px-3 py-2 text-sm flex items-start gap-2 ${prazoVencido ? "bg-red-50 border-red-300" : "bg-purple-50 border-purple-200"}`}>
+                    <Building2 className={`h-4 w-4 shrink-0 mt-0.5 ${prazoVencido ? "text-red-500" : "text-purple-500"}`} />
+                    <div className="space-y-0.5">
+                      <p className={`font-semibold text-xs ${prazoVencido ? "text-red-700" : "text-purple-700"}`}>
+                        Manutenção Externa{os.empresa_externa ? `: ${os.empresa_externa}` : ""}
+                      </p>
+                      {os.contato_externo && (
+                        <p className="text-xs text-muted-foreground">Contato: {os.contato_externo}</p>
+                      )}
+                      {os.prazo_retorno && (
+                        <p className={`text-xs font-medium flex items-center gap-1 ${prazoVencido ? "text-red-700" : "text-purple-700"}`}>
+                          {prazoVencido && <AlertCircle className="h-3 w-3" />}
+                          Prazo de retorno: {format(new Date(os.prazo_retorno + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                          {prazoVencido && " — VENCIDO"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Peça aguardada (destaque âmbar) */}
                 {os.peca_aguardada && (
@@ -1422,13 +1498,64 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 <option value="critica">Crítica</option>
               </select>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Técnico responsável</label>
-              <Input
-                value={editForm.tecnico_nome}
-                onChange={(e) => setEditForm(f => ({ ...f, tecnico_nome: e.target.value }))}
-                placeholder="Nome do técnico"
-              />
+            {/* Toggle externa */}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setEditForm(f => ({ ...f, externa: !f.externa }))}
+                className={`flex items-center gap-2.5 w-full rounded-md border px-3 py-2.5 text-sm font-medium transition-all ${
+                  editForm.externa
+                    ? "bg-purple-50 border-purple-300 text-purple-700"
+                    : "bg-background border-input text-muted-foreground hover:border-foreground/30"
+                }`}
+              >
+                <Building2 className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left">Manutenção externa (terceiros)</span>
+                <span className={`w-8 rounded-full relative inline-flex items-center transition-colors py-2 ${editForm.externa ? "bg-purple-500" : "bg-muted-foreground/30"}`}>
+                  <span className={`absolute w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${editForm.externa ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                </span>
+              </button>
+
+              {editForm.externa ? (
+                <div className="rounded-md border border-purple-200 bg-purple-50/50 p-3 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-purple-800">Empresa</label>
+                    <Input
+                      value={editForm.empresa_externa}
+                      onChange={(e) => setEditForm(f => ({ ...f, empresa_externa: e.target.value }))}
+                      placeholder="Nome da empresa terceirizada"
+                      className="border-purple-200 focus-visible:ring-purple-400"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-purple-800">Contato</label>
+                    <Input
+                      value={editForm.contato_externo}
+                      onChange={(e) => setEditForm(f => ({ ...f, contato_externo: e.target.value }))}
+                      placeholder="Nome ou telefone do contato"
+                      className="border-purple-200 focus-visible:ring-purple-400"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-purple-800">Prazo previsto de retorno</label>
+                    <input
+                      type="date"
+                      value={editForm.prazo_retorno}
+                      onChange={(e) => setEditForm(f => ({ ...f, prazo_retorno: e.target.value }))}
+                      className="w-full rounded-md border border-purple-200 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Técnico responsável</label>
+                  <Input
+                    value={editForm.tecnico_nome}
+                    onChange={(e) => setEditForm(f => ({ ...f, tecnico_nome: e.target.value }))}
+                    placeholder="Nome do técnico"
+                  />
+                </div>
+              )}
             </div>
             {papel === "gestor" && (
               <div className="space-y-1.5">

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Wrench, AlertTriangle } from "lucide-react";
+import { Loader2, Wrench, AlertTriangle, Building2 } from "lucide-react";
 
 interface Equipamento {
   id: string;
@@ -30,6 +30,10 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
   const [descricao, setDescricao] = useState("");
   const [prioridade, setPrioridade] = useState("media");
   const [tipo, setTipo] = useState<"corretiva" | "preventiva">("corretiva");
+  const [externa, setExterna] = useState(false);
+  const [empresaExterna, setEmpresaExterna] = useState("");
+  const [contatoExterno, setContatoExterno] = useState("");
+  const [prazoRetorno, setPrazoRetorno] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fetchEquipamentos = useCallback(async () => {
@@ -54,6 +58,10 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
       toast({ title: "Descreva o problema", variant: "destructive" });
       return;
     }
+    if (externa && !empresaExterna.trim()) {
+      toast({ title: "Informe o nome da empresa terceirizada", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     const { error } = await (supabase as any).from("ordens_servico").insert({
       equipamento_id: equipamentoId,
@@ -63,6 +71,10 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
       status: "aberta",
       aberta_por: perfilNome,
       aberta_em: new Date().toISOString(),
+      externa,
+      empresa_externa: externa ? empresaExterna.trim() || null : null,
+      contato_externo: externa ? contatoExterno.trim() || null : null,
+      prazo_retorno: externa ? prazoRetorno || null : null,
     });
     setSaving(false);
     if (error) {
@@ -74,6 +86,10 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
     setDescricao("");
     setPrioridade("media");
     setTipo("corretiva");
+    setExterna(false);
+    setEmpresaExterna("");
+    setContatoExterno("");
+    setPrazoRetorno("");
     onSuccess?.();
   }
 
@@ -177,6 +193,59 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Toggle: Manutenção externa */}
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setExterna(!externa)}
+            className={`flex items-center gap-2.5 w-full rounded-md border px-3 py-2.5 text-sm font-medium transition-all ${
+              externa
+                ? "bg-purple-50 border-purple-300 text-purple-700"
+                : "bg-background border-input text-muted-foreground hover:border-foreground/30"
+            }`}
+          >
+            <Building2 className="h-4 w-4 shrink-0" />
+            <span className="flex-1 text-left">Manutenção externa (terceiros)</span>
+            <span className={`w-8 h-4.5 rounded-full relative inline-flex items-center transition-colors ${externa ? "bg-purple-500" : "bg-muted-foreground/30"}`}>
+              <span className={`absolute w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${externa ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+            </span>
+          </button>
+
+          {externa && (
+            <div className="rounded-md border border-purple-200 bg-purple-50/50 p-4 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-purple-800">Empresa *</label>
+                <input
+                  type="text"
+                  value={empresaExterna}
+                  onChange={(e) => setEmpresaExterna(e.target.value)}
+                  placeholder="Nome da empresa terceirizada..."
+                  className="w-full rounded-md border border-purple-200 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-purple-800">Contato</label>
+                <input
+                  type="text"
+                  value={contatoExterno}
+                  onChange={(e) => setContatoExterno(e.target.value)}
+                  placeholder="Nome ou telefone do contato..."
+                  className="w-full rounded-md border border-purple-200 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-purple-800">Prazo previsto de retorno</label>
+                <input
+                  type="date"
+                  value={prazoRetorno}
+                  onChange={(e) => setPrazoRetorno(e.target.value)}
+                  className="w-full rounded-md border border-purple-200 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="pt-2 flex justify-end">

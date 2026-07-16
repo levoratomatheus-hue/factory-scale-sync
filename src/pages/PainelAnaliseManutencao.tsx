@@ -78,6 +78,8 @@ interface OS {
   aberta_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
+  externa: boolean | null;
+  empresa_externa: string | null;
   equipamentos?: { id: string; nome: string; tag: string | null; linha: number | null } | null;
 }
 
@@ -351,6 +353,31 @@ export default function PainelAnaliseManutencao() {
     return { total, preventiva, corretiva, pctPreventiva: pct(preventiva), pctCorretiva: pct(corretiva) };
   }, [ossFiltered]);
 
+  const origemProporção = useMemo(() => {
+    const total = ossFiltered.length;
+    const externa = ossFiltered.filter((o) => o.externa === true).length;
+    const interna = total - externa;
+    const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
+    return { total, externa, interna, pctExterna: pct(externa), pctInterna: pct(interna) };
+  }, [ossFiltered]);
+
+  const rankingExterna = useMemo(() => {
+    const map = new Map<string, { nome: string; tag: string | null; count: number }>();
+    ossFiltered
+      .filter((o) => o.externa === true)
+      .forEach((o) => {
+        const id   = o.equipamentos?.id   ?? "__unknown";
+        const nome = o.equipamentos?.nome ?? "Equipamento removido";
+        const tag  = o.equipamentos?.tag  ?? null;
+        if (!map.has(id)) map.set(id, { nome, tag, count: 0 });
+        map.get(id)!.count++;
+      });
+    return Array.from(map.entries())
+      .map(([id, { nome, tag, count }]) => ({ id, nome, tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [ossFiltered]);
+
   const osPorDiaSemana = useMemo(() => {
     const counts = [0, 0, 0, 0, 0, 0, 0];
     ossFiltered.forEach((o) => {
@@ -508,6 +535,84 @@ export default function PainelAnaliseManutencao() {
             {tipoProporção.pctPreventiva > 0 && (
               <div style={{ width: `${tipoProporção.pctPreventiva}%`, background: D.emerald, transition: "width 0.4s" }} />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Proporção Interna × Externa ── */}
+      {origemProporção.total > 0 && (
+        <div style={{ ...cardStyle, marginBottom: "1.75rem" }}>
+          <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Proporção Interna × Externa
+          </p>
+          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "0.875rem" }}>
+            {/* Interna */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: D.cyan, flexShrink: 0 }} />
+              <div>
+                <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: D.cyan, lineHeight: 1 }}>
+                  {origemProporção.interna}
+                  <span style={{ fontSize: "0.85rem", fontWeight: 500, color: D.muted, marginLeft: "0.25rem" }}>
+                    ({origemProporção.pctInterna}%)
+                  </span>
+                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "0.72rem", color: D.muted }}>Interna</p>
+              </div>
+            </div>
+            {/* Externa */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: D.violet, flexShrink: 0 }} />
+              <div>
+                <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: D.violet, lineHeight: 1 }}>
+                  {origemProporção.externa}
+                  <span style={{ fontSize: "0.85rem", fontWeight: 500, color: D.muted, marginLeft: "0.25rem" }}>
+                    ({origemProporção.pctExterna}%)
+                  </span>
+                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "0.72rem", color: D.muted }}>Externa (terceiros)</p>
+              </div>
+            </div>
+          </div>
+          {/* Barra de proporção */}
+          <div style={{ height: 10, borderRadius: 999, overflow: "hidden", background: D.border, display: "flex" }}>
+            {origemProporção.pctInterna > 0 && (
+              <div style={{ width: `${origemProporção.pctInterna}%`, background: D.cyan, transition: "width 0.4s" }} />
+            )}
+            {origemProporção.pctExterna > 0 && (
+              <div style={{ width: `${origemProporção.pctExterna}%`, background: D.violet, transition: "width 0.4s" }} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Ranking: equipamentos que mais vão para externa ── */}
+      {rankingExterna.length > 0 && (
+        <div style={{ ...cardStyle, marginBottom: "1.75rem" }}>
+          <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Equipamentos com mais OS externas
+          </p>
+          <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
+            <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${D.border}`, background: D.cardAlt }}>
+                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11, width: 32 }}>#</th>
+                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Equipamento</th>
+                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>OS Externas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankingExterna.map(({ id, nome, tag, count }, i) => (
+                  <tr key={id} style={{ borderBottom: `1px solid ${D.border}` }}>
+                    <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{i + 1}º</td>
+                    <td style={{ padding: "0.5rem 0.75rem" }}>
+                      <p style={{ fontWeight: 500, fontSize: 11, color: D.text, margin: 0 }}>{nome}</p>
+                      {tag && <p style={{ fontSize: 11, color: D.muted, fontFamily: "monospace", margin: 0 }}>{tag}</p>}
+                    </td>
+                    <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, fontSize: 11, color: D.violet }}>{count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
