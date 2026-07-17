@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, Search, AlertTriangle, PackageSearch, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
+import { Save, Loader2, Search, AlertTriangle, PackageSearch } from 'lucide-react';
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
 import { getNextPosicao } from '@/lib/recalcularPosicoes';
+import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
+import { ComparatorPanel } from '@/components/ComparatorPanel';
 
 interface LoteDisponivel {
   lote: number;
@@ -20,31 +22,6 @@ interface LoteDisponivel {
   quantidade: number;
 }
 
-// ── Tipos do comparador TID × Excel ──────────────────────────────────────────
-
-interface ComparatorDiffRow {
-  materia_prima: string;
-  pct_tid: number | null;   // % na escala TID (0–100), null = só no Excel
-  pct_excel: number | null; // % na escala TID (excel×100), null = só no TID
-  isDiff: boolean;
-}
-
-interface ComparatorMpProblem {
-  cod_mp: string;
-  materia_prima: string;
-  motivo: 'sem_depara' | 'ambiguo';
-}
-
-type ComparatorStatus = 'idle' | 'loading' | 'ok' | 'divergente' | 'sem_depara' | 'sem_formula_excel';
-
-interface ComparatorState {
-  status: ComparatorStatus;
-  rows?: ComparatorDiffRow[];
-  nDiffs?: number;
-  problems?: ComparatorMpProblem[];
-}
-
-const COMPARATOR_IDLE: ComparatorState = { status: 'idle' };
 
 const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
@@ -57,113 +34,6 @@ const ordemSchema = z.object({
 
 type OrdemFormValues = z.infer<typeof ordemSchema>;
 
-// ── Sub-componente: painel do comparador ─────────────────────────────────────
-
-function ComparatorPanel({ state }: { state: ComparatorState }) {
-  const { status, rows, nDiffs, problems } = state;
-
-  if (status === 'idle') return null;
-
-  if (status === 'loading') {
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Comparando com fórmula do Excel…
-      </div>
-    );
-  }
-
-  if (status === 'sem_formula_excel') {
-    return (
-      <p className="text-xs text-muted-foreground">
-        ○ Produto sem fórmula no Excel — vinculação pendente no lab.
-      </p>
-    );
-  }
-
-  if (status === 'ok') {
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        Fórmula confere — TID e Excel idênticos
-      </div>
-    );
-  }
-
-  if (status === 'sem_depara') {
-    return (
-      <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-200 dark:border-amber-800 bg-amber-100/60 dark:bg-amber-900/20">
-          <HelpCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-          <span className="text-xs font-semibold text-amber-800 dark:text-amber-400">
-            Não foi possível comparar — {problems!.length} MP{problems!.length !== 1 ? 's' : ''} sem de-para
-          </span>
-        </div>
-        <ul className="px-3 py-2 space-y-0.5">
-          {problems!.map((p) => (
-            <li key={p.cod_mp} className="text-xs text-amber-900 dark:text-amber-300">
-              <span className="font-mono">{p.cod_mp}</span> · {p.materia_prima}
-              {p.motivo === 'ambiguo' && <span className="ml-1 text-amber-600">(cod_tid ambíguo)</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  // status === 'divergente'
-  return (
-    <div className="rounded-md border border-red-300 bg-red-50/50 dark:bg-red-950/20 dark:border-red-800 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-red-200 dark:border-red-800 bg-red-100/60 dark:bg-red-900/20">
-        <AlertCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
-        <span className="text-xs font-semibold text-red-800 dark:text-red-400">
-          Fórmula diverge do Excel — {nDiffs} diferença{nDiffs !== 1 ? 's' : ''}
-        </span>
-      </div>
-      <div className="max-h-52 overflow-y-auto">
-        <table className="w-full text-xs">
-          <thead className="text-muted-foreground bg-red-50 dark:bg-red-950/30 sticky top-0">
-            <tr>
-              <th className="text-left px-3 py-1.5 font-medium">Matéria-Prima</th>
-              <th className="text-right px-3 py-1.5 font-medium w-16">% TID</th>
-              <th className="text-right px-3 py-1.5 font-medium w-16">% Excel</th>
-              <th className="text-right px-3 py-1.5 font-medium w-16">Dif.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows!.map((r, i) => {
-              const diff = r.pct_tid !== null && r.pct_excel !== null
-                ? r.pct_tid - r.pct_excel : null;
-              return (
-                <tr
-                  key={i}
-                  className={`border-t ${r.isDiff
-                    ? 'bg-red-100/70 dark:bg-red-900/20 text-red-900 dark:text-red-300 font-medium'
-                    : 'text-muted-foreground'}`}
-                >
-                  <td className="px-3 py-1 truncate max-w-[180px]">{r.materia_prima}</td>
-                  <td className="px-3 py-1 text-right font-mono">
-                    {r.pct_tid !== null ? r.pct_tid.toFixed(2) : <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-3 py-1 text-right font-mono">
-                    {r.pct_excel !== null ? r.pct_excel.toFixed(2) : <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-3 py-1 text-right font-mono">
-                    {diff !== null
-                      ? <span className={Math.abs(diff) > 0.01 ? 'text-red-600' : ''}>
-                          {diff > 0 ? '+' : ''}{diff.toFixed(2)}
-                        </span>
-                      : <span className="text-muted-foreground">—</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 interface CriarOrdemProps {
   prefillLote?: number;
@@ -193,7 +63,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(false);
   const [buscaLote, setBuscaLote] = useState('');
-  const [comparator, setComparator] = useState<ComparatorState>(COMPARATOR_IDLE);
+  const [comparator, setComparator] = useState<ResultadoComparacao | null>(null);
+  const [comparatorLoading, setComparatorLoading] = useState(false);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -241,7 +112,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setLoteJaTemOP(false);
     setSemFormula(false);
     setNomes({});
-    setComparator(COMPARATOR_IDLE);
+    setComparator(null);
+    setComparatorLoading(false);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
       supabase.from('cadastro_lotes').select('*').eq('lote', loteNum).single(),
@@ -291,104 +163,15 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
   // ── Comparador TID × Excel ────────────────────────────────────────────────
   const runComparison = useCallback(async (fid: string) => {
-    setComparator({ status: 'loading' });
+    setComparatorLoading(true);
+    setComparator(null);
     try {
-      // 1. Buscar itens da fórmula no Excel
-      const { data: excelItens } = await (supabase as any)
-        .from('formulas_excel')
-        .select('cod_mp_excel, materia_prima, percentual')
-        .eq('formula_id', fid);
-
-      if (!excelItens || excelItens.length === 0) {
-        setComparator({ status: 'sem_formula_excel' });
-        return;
-      }
-
-      // 2. Buscar itens do TID com cod_mp
-      const { data: tidItens } = await (supabase as any)
-        .from('formulas')
-        .select('cod_mp, materia_prima, percentual')
-        .eq('formula_id', fid)
-        .order('sequencia', { ascending: true });
-
-      if (!tidItens || tidItens.length === 0) {
-        setComparator({ status: 'sem_formula_excel' });
-        return;
-      }
-
-      // 3. Buscar de-para (só MPs com cod_tid preenchido)
-      const { data: depara } = await (supabase as any)
-        .from('mp_depara')
-        .select('cod_excel, cod_tid')
-        .not('cod_tid', 'is', null);
-
-      // 4. Montar mapa cod_tid → cod_excel[] (detecta ambiguidade)
-      const tidToExcel = new Map<string, string[]>();
-      for (const row of depara ?? []) {
-        if (!row.cod_tid) continue;
-        if (!tidToExcel.has(row.cod_tid)) tidToExcel.set(row.cod_tid, []);
-        tidToExcel.get(row.cod_tid)!.push(row.cod_excel);
-      }
-
-      // 5. Traduzir cod_mp do TID para cod_excel
-      const problems: ComparatorMpProblem[] = [];
-      const translated: { cod_excel: string; materia_prima: string; percentual: number }[] = [];
-
-      for (const item of tidItens) {
-        const excels = tidToExcel.get(item.cod_mp);
-        if (!excels || excels.length === 0) {
-          problems.push({ cod_mp: item.cod_mp, materia_prima: item.materia_prima, motivo: 'sem_depara' });
-        } else if (excels.length > 1) {
-          problems.push({ cod_mp: item.cod_mp, materia_prima: item.materia_prima, motivo: 'ambiguo' });
-        } else {
-          translated.push({ cod_excel: excels[0], materia_prima: item.materia_prima, percentual: item.percentual });
-        }
-      }
-
-      if (problems.length > 0) {
-        setComparator({ status: 'sem_depara', problems });
-        return;
-      }
-
-      // 6. Comparar percentuais (Excel × 100 para igualar escala do TID)
-      const excelByCode = new Map<string, { pct: number; nome: string }>();
-      for (const item of excelItens) {
-        excelByCode.set(item.cod_mp_excel, { pct: item.percentual * 100, nome: item.materia_prima });
-      }
-      const tidByCode = new Map<string, { materia_prima: string; percentual: number }>();
-      for (const item of translated) {
-        tidByCode.set(item.cod_excel, { materia_prima: item.materia_prima, percentual: item.percentual });
-      }
-
-      const allCodes = new Set([...tidByCode.keys(), ...excelByCode.keys()]);
-      const rows: ComparatorDiffRow[] = [];
-      let nDiffs = 0;
-
-      for (const code of allCodes) {
-        const t = tidByCode.get(code);
-        const e = excelByCode.get(code);
-        const pct_tid = t?.percentual ?? null;
-        const pct_excel = e?.pct ?? null;
-        const isDiff = pct_tid === null || pct_excel === null
-          || Math.abs(pct_tid - pct_excel) > 0.01;
-        if (isDiff) nDiffs++;
-        rows.push({
-          materia_prima: t?.materia_prima ?? e!.nome,
-          pct_tid,
-          pct_excel,
-          isDiff,
-        });
-      }
-
-      // Diferenças primeiro, depois itens que conferem
-      rows.sort((a, b) => (b.isDiff ? 1 : 0) - (a.isDiff ? 1 : 0));
-
-      setComparator(nDiffs > 0
-        ? { status: 'divergente', rows, nDiffs }
-        : { status: 'ok' }
-      );
+      const resultado = await compararFormulas(fid);
+      setComparator(resultado);
     } catch {
-      setComparator(COMPARATOR_IDLE); // falha silenciosa — não bloqueia a OP
+      // falha silenciosa — não bloqueia a OP
+    } finally {
+      setComparatorLoading(false);
     }
   }, []);
 
@@ -473,7 +256,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     form.reset({ lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' });
     setLoteEncontrado(null);
     setFormulaId(null);
-    setComparator(COMPARATOR_IDLE);
+    setComparator(null);
+    setComparatorLoading(false);
     setTamanhoBatelada(null);
     setSemFormula(false);
     setObsItems([{ qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }, { qty: '', mp: '' }]);
@@ -690,7 +474,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 )}
 
                 {/* ── Comparador TID × Excel ── */}
-                <ComparatorPanel state={comparator} />
+                <ComparatorPanel resultado={comparator} loading={comparatorLoading} />
 
                 <div>
                   <label className="text-xs font-medium">Orientações para Produção</label>

@@ -18,6 +18,7 @@ interface FormulaExcelRow {
   cod_mp_excel: string;
   materia_prima: string;
   percentual: number;
+  produto_chave: string;
 }
 
 interface ImportSummary {

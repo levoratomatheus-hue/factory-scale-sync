@@ -28,6 +28,7 @@ interface FormulaExcelRow {
   cod_mp_excel: string;
   materia_prima: string;
   percentual: number;
+  produto_chave: string; // col S (índice 18) — ex.: "MBG-10-3156"
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -108,11 +109,11 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
     type State = 'SCAN' | 'IN_ITEMS' | 'AWAIT_CLASSE' | 'IN_PRODUCTS';
     let state: State = 'SCAN';
     let blockItems: { cod_mp_excel: string; materia_prima: string; percentual: number }[] = [];
-    let blockProducts: string[] = [];
+    let blockProducts: { fid: string; produto_chave: string }[] = [];
 
     const flushBlock = () => {
       if (blockItems.length === 0 || blockProducts.length === 0) return;
-      for (const fid of blockProducts) {
+      for (const { fid, produto_chave } of blockProducts) {
         formulaIdCount.set(fid, (formulaIdCount.get(fid) ?? 0) + 1);
         for (let si = 0; si < blockItems.length; si++) {
           formulaItems.push({
@@ -121,6 +122,7 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
             cod_mp_excel: blockItems[si].cod_mp_excel,
             materia_prima: blockItems[si].materia_prima,
             percentual: blockItems[si].percentual,
+            produto_chave,
           });
         }
       }
@@ -166,7 +168,8 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
         if (isBlankOrError(colU)) continue;
         const fid = normalizeCode(colU);
         if (!fid || fid === '0') continue;
-        blockProducts.push(fid);
+        const produto_chave = String(row[18] ?? '').trim(); // col S
+        blockProducts.push({ fid, produto_chave });
       }
     }
 
