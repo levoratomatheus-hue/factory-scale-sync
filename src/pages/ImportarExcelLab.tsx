@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, Loader2, AlertCircle, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
-// ── Tipos internos ────────────────────────────────────────────────────────────
+// ── Tipos (espelhados do worker) ──────────────────────────────────────────────
 
 interface MpDepara {
   cod_excel: string;
@@ -21,7 +20,7 @@ interface FormulaExcelRow {
   percentual: number;
 }
 
-interface ImportResult {
+interface ImportSummary {
   totalMPs: number;
   mpsComTid: number;
   mpsSemTid: number;
@@ -32,37 +31,14 @@ interface ImportResult {
   formulasSomaNaoFecha: string[];
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Remove pontos de milhar e zeros à esquerda. "000142" → "142", "5.478" → "5478". */
-function normalizeCode(v: unknown): string {
-  const s = String(v ?? '').trim().replace(/\./g, '');
-  return s.replace(/^0+/, '') || '0';
-}
-
-/** Retorna true para célula vazia, #N/A ou qualquer erro Excel (#REF!, #VALUE!, etc.). */
-function isBlankOrError(v: unknown): boolean {
-  const s = String(v ?? '').trim();
-  return !s || s.startsWith('#');
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function ImportarExcelLab() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
-  const [resultado, setResultado] = useState<ImportResult | null>(null);
+  const [resultado, setResultado] = useState<ImportSummary | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-
-  /** Permite que o React re-renderize entre operações síncronas pesadas. */
-  const yield_ = () => new Promise<void>((r) => setTimeout(r, 0));
-
-  const setStep = async (pct: number, label: string) => {
-    setProgress(pct);
-    setProgressLabel(label);
-    await yield_();
-  };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -71,222 +47,112 @@ export default function ImportarExcelLab() {
     setLoading(true);
     setResultado(null);
     setErro(null);
-    setProgress(0);
+    setProgress(2);
+    setProgressLabel('Lendo arquivo…');
 
-    try {
-      // ── Leitura do workbook ─────────────────────────────────────────────
-      await setStep(5, 'Lendo arquivo…');
-      const buffer = await file.arrayBuffer();
-
-      await setStep(10, 'Abrindo planilha…');
-      const wb = XLSX.read(buffer, { type: 'array', cellText: false });
-
-      // ── 2.1  MATÉRIA PRIMA-OK! → mp_depara ─────────────────────────────
-      await setStep(15, 'Lendo matérias-primas…');
-
-      const wsMP = wb.Sheets['MATÉRIA PRIMA-OK!'];
-      if (!wsMP) throw new Error('Aba "MATÉRIA PRIMA-OK!" não encontrada na planilha.');
-
-      const mpRaws = XLSX.utils.sheet_to_json<any[]>(wsMP, { header: 1, defval: '' });
-      const mps: MpDepara[] = [];
-
-      // Linha 0 = cabeçalho; dados a partir da linha 1
-      for (let i = 1; i < mpRaws.length; i++) {
-        const row = mpRaws[i];
-        const colA = String(row[0] ?? '').trim();
-        if (isBlankOrError(colA)) continue; // col A vazia → pular
-
-        const colB = String(row[1] ?? '').trim();
-        const cod_tid = (!colB || isBlankOrError(colB)) ? null : normalizeCode(colB);
-
-        mps.push({
-          cod_excel: normalizeCode(colA),
-          cod_tid,
-          tipo:      String(row[2] ?? '').trim(),
-          descricao: String(row[3] ?? '').trim(),
-        });
-      }
-
-      await setStep(30, `${mps.length} MPs lidas. Parseando fórmulas…`);
-
-      // ── 2.2  Formulações Produção-OK! → formulas_excel ─────────────────
-      const wsForm = wb.Sheets['Formulações Produção-OK!'];
-      if (!wsForm) throw new Error('Aba "Formulações Produção-OK!" não encontrada na planilha.');
-
-      const formRaws = XLSX.utils.sheet_to_json<any[]>(wsForm, { header: 1, defval: '' });
-
-      const formulaItems: FormulaExcelRow[] = [];
-      // Quantas vezes cada formula_id apareceu como produto (detecta duplicatas de bloco)
-      const formulaIdCount = new Map<string, number>();
-
-      type State = 'SCAN' | 'IN_ITEMS' | 'AWAIT_CLASSE' | 'IN_PRODUCTS';
-      let state: State = 'SCAN';
-
-      let blockItems: { cod_mp: string; nome_mp: string; percentual: number }[] = [];
-      let blockProducts: string[] = []; // formula_ids do bloco atual
-
-      const flushBlock = () => {
-        if (blockItems.length === 0 || blockProducts.length === 0) return;
-        for (const fid of blockProducts) {
-          formulaIdCount.set(fid, (formulaIdCount.get(fid) ?? 0) + 1);
-          for (let si = 0; si < blockItems.length; si++) {
-            formulaItems.push({
-              formula_id: fid,
-              sequencia:  si + 1,
-              cod_mp:     blockItems[si].cod_mp,
-              nome_mp:    blockItems[si].nome_mp,
-              percentual: blockItems[si].percentual,
-            });
-          }
-        }
-      };
-
-      for (const row of formRaws) {
-        const colB = String(row[1] ?? '').trim();
-
-        // ── Início de novo bloco ─────────────────────────────────────────
-        if (colB === 'MATÉRIA PRIMA') {
-          // Fechar bloco anterior (se estávamos coletando produtos)
-          if (state === 'IN_PRODUCTS') flushBlock();
-          // Zerar para o novo bloco — crítico para blocos #N/A não vazar itens
-          blockItems   = [];
-          blockProducts = [];
-          state = 'IN_ITEMS';
-          continue;
-        }
-
-        // ── Coleta de itens ──────────────────────────────────────────────
-        if (state === 'IN_ITEMS') {
-          if (colB === 'Totalizador') {
-            state = 'AWAIT_CLASSE';
-            continue;
-          }
-          const colA = String(row[0] ?? '').trim();
-          if (isBlankOrError(colA)) continue; // célula vazia ou #N/A → ignorar item
-          const percentual = parseFloat(String(row[8] ?? '0')); // col I (índice 8)
-          if (isNaN(percentual)) continue;
-          blockItems.push({ cod_mp: normalizeCode(colA), nome_mp: colB, percentual });
-          continue;
-        }
-
-        // ── Aguardando cabeçalho "CLASSE" ────────────────────────────────
-        if (state === 'AWAIT_CLASSE') {
-          if (colB === 'CLASSE') {
-            state = 'IN_PRODUCTS';
-          }
-          // Ignorar linhas até aparecer "CLASSE"
-          continue;
-        }
-
-        // ── Coleta de produtos (linhas com formula_id) ───────────────────
-        if (state === 'IN_PRODUCTS') {
-          const colU = String(row[20] ?? '').trim(); // col U (índice 20)
-          if (isBlankOrError(colU)) continue;        // sem formula_id → ignorar silenciosamente
-          const fid = normalizeCode(colU);
-          if (!fid || fid === '0') continue;
-          blockProducts.push(fid);
-        }
-      }
-
-      // Flush do último bloco
-      if (state === 'IN_PRODUCTS') flushBlock();
-
-      await setStep(55, 'Calculando resumo…');
-
-      // ── Resumo e alertas ────────────────────────────────────────────────
-      const mpsComTid = mps.filter((m) => m.cod_tid !== null).length;
-
-      // formula_ids que apareceram em mais de um bloco (bug de bloco duplicado na planilha)
-      const formulaIdsDuplicados = [...formulaIdCount.entries()]
-        .filter(([, n]) => n > 1)
-        .map(([id]) => id)
-        .sort();
-
-      // cod_tid duplicados (mesmo código TID em duas MPs diferentes)
-      const tidCount = new Map<string, number>();
-      for (const mp of mps) {
-        if (mp.cod_tid) tidCount.set(mp.cod_tid, (tidCount.get(mp.cod_tid) ?? 0) + 1);
-      }
-      const codTidDuplicados = [...tidCount.entries()]
-        .filter(([, n]) => n > 1)
-        .map(([tid]) => tid)
-        .sort();
-
-      // Fórmulas cuja soma de percentuais não fecha 1,00 (tolerância ±0,06)
-      const sumByFormula = new Map<string, number>();
-      for (const r of formulaItems) {
-        sumByFormula.set(r.formula_id, (sumByFormula.get(r.formula_id) ?? 0) + r.percentual);
-      }
-      const formulasSomaNaoFecha = [...sumByFormula.entries()]
-        .filter(([, s]) => Math.abs(s - 1) > 0.06)
-        .map(([id]) => id)
-        .sort();
-
-      const totalFormulas = formulaIdCount.size;
-
-      // ── 2.3  Gravação ───────────────────────────────────────────────────
-      await setStep(58, 'Limpando tabelas…');
-
-      // Apaga tudo antes de reinserir (import apaga-e-recarrega)
-      const { error: delMpErr } = await (supabase as any)
-        .from('mp_depara')
-        .delete()
-        .not('cod_excel', 'is', null);
-      if (delMpErr) throw new Error(`Erro ao limpar mp_depara: ${delMpErr.message}`);
-
-      const { error: delFormErr } = await (supabase as any)
-        .from('formulas_excel')
-        .delete()
-        .not('formula_id', 'is', null);
-      if (delFormErr) throw new Error(`Erro ao limpar formulas_excel: ${delFormErr.message}`);
-
-      // Inserir MPs
-      await setStep(62, `Inserindo ${mps.length} matérias-primas…`);
-      const BATCH = 500;
-      for (let i = 0; i < mps.length; i += BATCH) {
-        const { error } = await (supabase as any)
-          .from('mp_depara')
-          .insert(mps.slice(i, i + BATCH));
-        if (error) throw new Error(`Erro ao inserir MPs: ${error.message}`);
-        setProgress(62 + Math.round(Math.min((i + BATCH) / mps.length, 1) * 8)); // 62→70
-        await yield_();
-      }
-
-      // Inserir itens de fórmula
-      await setStep(70, `Inserindo ${formulaItems.length} itens de fórmula…`);
-      for (let i = 0; i < formulaItems.length; i += BATCH) {
-        const { error } = await (supabase as any)
-          .from('formulas_excel')
-          .insert(formulaItems.slice(i, i + BATCH));
-        if (error) throw new Error(`Erro ao inserir fórmulas: ${error.message}`);
-        setProgress(70 + Math.round(Math.min((i + BATCH) / formulaItems.length, 1) * 28)); // 70→98
-        await yield_();
-      }
-
-      await setStep(100, 'Concluído!');
-
-      const result: ImportResult = {
-        totalMPs: mps.length,
-        mpsComTid,
-        mpsSemTid: mps.length - mpsComTid,
-        totalFormulas,
-        totalItens: formulaItems.length,
-        formulaIdsDuplicados,
-        codTidDuplicados,
-        formulasSomaNaoFecha,
-      };
-
-      setResultado(result);
-      toast({
-        title: 'Importação concluída!',
-        description: `${totalFormulas} fórmulas · ${formulaItems.length} itens · ${mps.length} MPs.`,
-      });
-    } catch (err: any) {
-      setErro(err?.message ?? 'Erro desconhecido ao processar o arquivo.');
-    }
-
-    setLoading(false);
+    // Ler o buffer na thread principal (é I/O assíncrono, não bloqueia)
+    const buffer = await file.arrayBuffer();
     e.target.value = '';
+
+    // Criar o worker — parse pesado fica fora da thread principal
+    const worker = new Worker(
+      new URL('./excelImport.worker.ts', import.meta.url),
+      { type: 'module' },
+    );
+
+    worker.onmessage = async (evt: MessageEvent) => {
+      const msg = evt.data;
+
+      // ── Progresso vindo do worker ─────────────────────────────────────────
+      if (msg.type === 'progress') {
+        setProgress(msg.percentual);
+        setProgressLabel(msg.etapa);
+        return;
+      }
+
+      // ── Erro no worker ────────────────────────────────────────────────────
+      if (msg.type === 'error') {
+        setErro(msg.message);
+        setLoading(false);
+        worker.terminate();
+        return;
+      }
+
+      // ── Parse concluído — gravar no Supabase (thread principal) ──────────
+      if (msg.type === 'result') {
+        const { mps, formulaItems, summary } = msg as {
+          mps: MpDepara[];
+          formulaItems: FormulaExcelRow[];
+          summary: ImportSummary;
+        };
+
+        worker.terminate(); // liberar o worker antes dos awaits
+
+        try {
+          // Apagar tudo antes de reinserir
+          setProgress(59);
+          setProgressLabel('Limpando tabelas…');
+
+          const { error: delMpErr } = await (supabase as any)
+            .from('mp_depara')
+            .delete()
+            .not('cod_excel', 'is', null);
+          if (delMpErr) throw new Error(`Erro ao limpar mp_depara: ${delMpErr.message}`);
+
+          const { error: delFormErr } = await (supabase as any)
+            .from('formulas_excel')
+            .delete()
+            .not('formula_id', 'is', null);
+          if (delFormErr) throw new Error(`Erro ao limpar formulas_excel: ${delFormErr.message}`);
+
+          // Inserir MPs (62→70%)
+          setProgress(62);
+          setProgressLabel(`Inserindo ${mps.length} matérias-primas…`);
+          const BATCH = 500;
+
+          for (let i = 0; i < mps.length; i += BATCH) {
+            const { error } = await (supabase as any)
+              .from('mp_depara')
+              .insert(mps.slice(i, i + BATCH));
+            if (error) throw new Error(`Erro ao inserir MPs: ${error.message}`);
+            setProgress(62 + Math.round(Math.min((i + BATCH) / mps.length, 1) * 8));
+          }
+
+          // Inserir itens de fórmula (70→98%)
+          setProgress(70);
+          setProgressLabel(`Inserindo ${formulaItems.length} itens de fórmula…`);
+
+          for (let i = 0; i < formulaItems.length; i += BATCH) {
+            const { error } = await (supabase as any)
+              .from('formulas_excel')
+              .insert(formulaItems.slice(i, i + BATCH));
+            if (error) throw new Error(`Erro ao inserir fórmulas: ${error.message}`);
+            setProgress(70 + Math.round(Math.min((i + BATCH) / formulaItems.length, 1) * 28));
+          }
+
+          setProgress(100);
+          setProgressLabel('Concluído!');
+          setResultado(summary);
+          toast({
+            title: 'Importação concluída!',
+            description: `${summary.totalFormulas} fórmulas · ${summary.totalItens} itens · ${summary.totalMPs} MPs.`,
+          });
+        } catch (err: any) {
+          setErro(err?.message ?? 'Erro ao gravar no banco.');
+        }
+
+        setLoading(false);
+      }
+    };
+
+    worker.onerror = (err) => {
+      setErro(`Erro no worker: ${err.message}`);
+      setLoading(false);
+      worker.terminate();
+    };
+
+    // Transferir o buffer para o worker (zero-copy — buffer fica detached aqui)
+    worker.postMessage(buffer, [buffer]);
   };
 
   return (
@@ -342,14 +208,13 @@ export default function ImportarExcelLab() {
         {/* Resultado */}
         {resultado && (
           <div className="space-y-3">
-            {/* Resumo de sucesso */}
             <div className="flex items-start gap-3 p-4 rounded-lg bg-status-done-bg border border-status-done/30">
               <CheckCircle2 className="h-5 w-5 text-status-done mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <p className="font-semibold text-status-done">Importação concluída!</p>
                 <p className="text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">{resultado.totalMPs}</span>{' '}
-                  matérias-primas importadas —{' '}
+                  matérias-primas —{' '}
                   <span className="font-medium text-foreground">{resultado.mpsComTid}</span> com Cod Tid ·{' '}
                   <span className="font-medium text-foreground">{resultado.mpsSemTid}</span> sem
                 </p>
@@ -362,7 +227,6 @@ export default function ImportarExcelLab() {
               </div>
             </div>
 
-            {/* Alertas informativos */}
             {resultado.formulaIdsDuplicados.length > 0 && (
               <WarningBox
                 title={`${resultado.formulaIdsDuplicados.length} formula_id duplicado${resultado.formulaIdsDuplicados.length !== 1 ? 's' : ''} na planilha — mesmo ID em blocos diferentes`}
@@ -382,7 +246,6 @@ export default function ImportarExcelLab() {
               />
             )}
 
-            {/* Nenhum alerta */}
             {resultado.formulaIdsDuplicados.length === 0 &&
               resultado.codTidDuplicados.length === 0 &&
               resultado.formulasSomaNaoFecha.length === 0 && (
@@ -409,15 +272,14 @@ export default function ImportarExcelLab() {
         <p>
           • <strong>MATÉRIA PRIMA-OK!</strong> → <code>mp_depara</code>
           <br />
-          &nbsp;&nbsp;Col A=cod_excel · B=cod_tid · C=tipo · D=descricao (cabeçalho na linha 1, dados a partir da linha 2)
+          &nbsp;&nbsp;Col A=cod_excel · B=cod_tid · C=tipo · D=descricao
         </p>
         <p>
           • <strong>Formulações Produção-OK!</strong> → <code>formulas_excel</code>
           <br />
-          &nbsp;&nbsp;Blocos: "MATÉRIA PRIMA" (início) → itens (col A=cod_mp, B=nome, I=percentual) → "Totalizador" → "CLASSE" → linhas de produto (col U=formula_id)
+          &nbsp;&nbsp;Blocos: "MATÉRIA PRIMA" → itens (col A=cod_mp, B=nome, I=percentual) → "Totalizador" → "CLASSE" → produto (col U=formula_id)
         </p>
-        <p>• Somente fórmulas com formula_id preenchido (col U) são gravadas</p>
-        <p>• percentual = valor bruto da col I (fração 0–1, não multiplicado)</p>
+        <p>• Parse roda em Web Worker — a UI não congela durante o processamento</p>
         <p>• Importação é sempre apaga-e-recarrega (DELETE + INSERT)</p>
       </div>
     </div>
