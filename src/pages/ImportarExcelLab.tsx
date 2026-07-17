@@ -15,8 +15,8 @@ interface MpDepara {
 interface FormulaExcelRow {
   formula_id: string;
   sequencia: number;
-  cod_mp: string;
-  nome_mp: string;
+  cod_mp_excel: string;
+  materia_prima: string;
   percentual: number;
 }
 

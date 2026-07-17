@@ -25,8 +25,8 @@ interface MpDepara {
 interface FormulaExcelRow {
   formula_id: string;
   sequencia: number;
-  cod_mp: string;
-  nome_mp: string;
+  cod_mp_excel: string;
+  materia_prima: string;
   percentual: number;
 }
 
@@ -107,7 +107,7 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
 
     type State = 'SCAN' | 'IN_ITEMS' | 'AWAIT_CLASSE' | 'IN_PRODUCTS';
     let state: State = 'SCAN';
-    let blockItems: { cod_mp: string; nome_mp: string; percentual: number }[] = [];
+    let blockItems: { cod_mp_excel: string; materia_prima: string; percentual: number }[] = [];
     let blockProducts: string[] = [];
 
     const flushBlock = () => {
@@ -118,8 +118,8 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
           formulaItems.push({
             formula_id: fid,
             sequencia:  si + 1,
-            cod_mp:     blockItems[si].cod_mp,
-            nome_mp:    blockItems[si].nome_mp,
+            cod_mp_excel: blockItems[si].cod_mp_excel,
+            materia_prima: blockItems[si].materia_prima,
             percentual: blockItems[si].percentual,
           });
         }
@@ -152,7 +152,7 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
         if (isBlankOrError(colA)) continue;
         const percentual = parseFloat(String(row[8] ?? '0'));
         if (isNaN(percentual)) continue;
-        blockItems.push({ cod_mp: normalizeCode(colA), nome_mp: colB, percentual });
+        blockItems.push({ cod_mp_excel: normalizeCode(colA), materia_prima: colB, percentual });
         continue;
       }
 

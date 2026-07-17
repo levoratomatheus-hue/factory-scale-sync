@@ -296,7 +296,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       // 1. Buscar itens da fórmula no Excel
       const { data: excelItens } = await (supabase as any)
         .from('formulas_excel')
-        .select('cod_mp, nome_mp, percentual')
+        .select('cod_mp_excel, materia_prima, percentual')
         .eq('formula_id', fid);
 
       if (!excelItens || excelItens.length === 0) {
@@ -353,7 +353,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       // 6. Comparar percentuais (Excel × 100 para igualar escala do TID)
       const excelByCode = new Map<string, { pct: number; nome: string }>();
       for (const item of excelItens) {
-        excelByCode.set(item.cod_mp, { pct: item.percentual * 100, nome: item.nome_mp });
+        excelByCode.set(item.cod_mp_excel, { pct: item.percentual * 100, nome: item.materia_prima });
       }
       const tidByCode = new Map<string, { materia_prima: string; percentual: number }>();
       for (const item of translated) {
