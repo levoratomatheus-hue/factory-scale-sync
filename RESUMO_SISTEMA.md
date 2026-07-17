@@ -252,9 +252,15 @@ Busca e exibe o conteúdo completo de uma fórmula pelo `formula_id`.
 ### 4.12 Importar Programação (`ImportarProgramacao.tsx`)
 **Quem usa:** gestor
 
-Importa lotes de um arquivo CSV (codificação Windows-1252, gerado pelo SAP/ERP) para a tabela `cadastro_lotes`.
+Duas seções independentes de importação:
 
-Campos esperados: número do lote, produto, quantidade, `formula_id`, data de emissão.
+**Importar Programação (lotes):** arquivo TXT Windows-1252 gerado pelo TID/ERP, separador `;`. Popula `cadastro_lotes` com lote, produto, quantidade, `formula_id`, data de emissão, classe. O `formula_id` tem pontos de milhar removidos automaticamente.
+
+**Importar Fórmulas (TID):** arquivo TXT latin-1, separador `;`, 20 colunas, sem cabeçalho.
+- Linhas com **col 6 = `Formula`** → tabela `formulas` (col 1=formula_id, col 2=produto, col 4=ativo, col 5=sequencia, col 7=cod_mp+materia_prima separados no 1º espaço, col 9=unidade, col 10=percentual pt-BR).
+- Linhas com **col 6 = `Produto Acabado`** → tabela `produtos_tid` (col 11=cod_produto, col 12=produto, col 13=unidade, col 1=formula_id, col 14=ativo).
+- Antes de inserir, limpa `formulas` e `produtos_tid` para todos os `formula_id` do arquivo (reimportação segura sem duplicatas).
+- Exibe resumo final: X fórmulas, Y itens, Z produtos importados.
 
 ---
 
@@ -418,13 +424,27 @@ Controle de ferramentas do setor de manutenção.
 ### Tabela `formulas`
 | Campo | Tipo | Descrição |
 |---|---|---|
-| `formula_id` | TEXT | Identificador da fórmula |
+| `formula_id` | TEXT | Identificador da fórmula — **sem ponto de milhar** (ex: `5500`, nunca `5.500`) |
 | `produto` | TEXT | Produto ao qual pertence |
 | `sequencia` | INTEGER | Ordem dos ingredientes |
-| `materia_prima` | TEXT | Nome da matéria-prima |
-| `fornecedor` | TEXT | Fornecedor |
+| `cod_mp` | TEXT | Código da matéria-prima no TID (parte antes do 1º espaço da col 7) |
+| `materia_prima` | TEXT | Nome da matéria-prima (parte após o 1º espaço da col 7) |
 | `unidade` | TEXT | Unidade (kg, l, etc.) |
 | `percentual` | NUMERIC | % da batelada |
+| `ativo` | BOOLEAN | Se o item está ativo na fórmula |
+
+> **Importante:** `formula_id` deve sempre ser gravado sem formatação de milhar. O parser de `ImportarProgramacao.tsx` remove automaticamente os pontos (`.replace(/\./g, '')`). Nunca inserir manualmente com ponto — isso causaria duplicatas invisíveis.
+
+### Tabela `produtos_tid`
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `cod_produto` | INTEGER | Código do produto no TID (sem zeros à esquerda) |
+| `produto` | TEXT | Nome do produto |
+| `unidade` | TEXT | Unidade de medida |
+| `formula_id` | TEXT | Referência à fórmula correspondente |
+| `ativo` | BOOLEAN | Se o produto está ativo |
+
+> Populada pela importação do relatório TID. Linhas com col 6 = `Produto Acabado` vão para esta tabela — nunca para `formulas`.
 
 ### Tabela `ordens_formula`
 | Campo | Tipo | Descrição |
@@ -673,3 +693,15 @@ supabase/migrations/                  # Histórico de alterações no banco
 - Dark mode completo implementado com `buildPalette(dark)` + MutationObserver, matching o padrão do `PainelAnalises.tsx`.
 - `PRIORIDADE_CONFIG` e `STATUS_CONFIG` convertidos para funções `getPrioridadeConfig(D)` / `getStatusConfig(D)` para refletir o tema atual.
 - `colorScheme` adicionado nos inputs de data.
+
+---
+
+## 14. Histórico de Mudanças na Base de Dados
+
+### Jul/2026 — Migração da base de fórmulas
+- Tabela `formulas` ganhou a coluna `cod_mp` (código da matéria-prima no TID, parte antes do 1º espaço da coluna 7 do relatório).
+- Tabela `produtos_tid` criada para receber linhas do tipo `Produto Acabado` do relatório TID.
+- Base migrada 100% para o formato novo: **5.479 fórmulas** (IDs 1–5500), **36.849 itens**.
+- **Limpeza realizada:** removidas 4.486 fórmulas duplicadas do import antigo (IDs com ponto de milhar, ex: `"1.000"` vs `"1000"`) e 35 registros inválidos de 1 item.
+- **453 OPs** e o `cadastro_lotes` tiveram `formula_id` normalizado (ponto removido) sem perda de histórico.
+- **Regra permanente:** `formula_id` deve sempre ser gravado sem formatação de milhar. O parser de `ImportarProgramacao.tsx` aplica `.replace(/\./g, '')` tanto na importação de lotes quanto na de fórmulas. Importações futuras do TID mantêm essa normalização automaticamente.

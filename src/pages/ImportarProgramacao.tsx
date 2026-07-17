@@ -17,10 +17,19 @@ interface FormulaRow {
   formula_id: string;
   produto: string;
   sequencia: number;
+  cod_mp: string;
   materia_prima: string;
-  fornecedor: string;
   unidade: string;
   percentual: number;
+  ativo: boolean;
+}
+
+interface ProdutoTidRow {
+  cod_produto: number;
+  produto: string;
+  unidade: string;
+  formula_id: string;
+  ativo: boolean;
 }
 
 function parseTxtWindows1252(buffer: ArrayBuffer): string {
@@ -37,7 +46,11 @@ export default function ImportarProgramacao() {
   const [erro, setErro] = useState<string | null>(null);
 
   const [loadingFormulas, setLoadingFormulas] = useState(false);
-  const [resultadoFormulas, setResultadoFormulas] = useState<{ totalFormulas: number; totalLinhas: number } | null>(null);
+  const [resultadoFormulas, setResultadoFormulas] = useState<{
+    totalFormulas: number;
+    totalItens: number;
+    totalProdutos: number;
+  } | null>(null);
   const [erroFormulas, setErroFormulas] = useState<string | null>(null);
 
   // ── Importar Programação (lotes) ──────────────────────────────────────────
@@ -75,7 +88,7 @@ export default function ImportarProgramacao() {
           const quantidade = parseFloat(limpar(p[8] ?? '0').replace(/\./g, '').replace(',', '.'));
           return {
             lote,
-            formula_id:   limpar(p[3] ?? '') || null,
+            formula_id:   limpar(p[3] ?? '').replace(/\./g, '') || null,
             produto:      limpar(p[4] ?? ''),
             data_emissao: parseDateBR(p[5] ?? ''),
             status:       limpar(p[6] ?? '') || null,
@@ -137,7 +150,10 @@ export default function ImportarProgramacao() {
     e.target.value = '';
   };
 
-  // ── Importar Fórmulas ─────────────────────────────────────────────────────
+  // ── Importar Fórmulas (novo relatório TID) ───────────────────────────────
+  // Formato: TXT · ; · latin-1 · 20 colunas · sem cabeçalho
+  // col 6 = "Formula"         → tabela formulas
+  // col 6 = "Produto Acabado" → tabela produtos_tid
   const handleFormulaFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -157,83 +173,123 @@ export default function ImportarProgramacao() {
         return;
       }
 
-      const rows: FormulaRow[] = lines
-        .map((line) => {
-          const p = line.split(';');
-          return {
-            formula_id:    (p[0] ?? '').trim(),
-            produto:       (p[1] ?? '').trim(),
-            sequencia:     parseInt((p[2] ?? '0').trim()) || 0,
-            materia_prima: (p[3] ?? '').trim(),
-            fornecedor:    (p[4] ?? '').trim(),
-            unidade:       (p[5] ?? '').trim(),
-            percentual:    parseFloat((p[6] ?? '0').trim().replace(',', '.')) || 0,
-          };
-        })
-        .filter((r) => r.formula_id && r.materia_prima);
+      const tr = (v: string | undefined) => (v ?? '').trim();
 
-      if (rows.length === 0) {
-        setErroFormulas('Nenhuma linha válida. Verifique o separador (;) e o formato do arquivo.');
+      const formulaRows: FormulaRow[] = [];
+      const produtoRows: ProdutoTidRow[] = [];
+
+      for (const line of lines) {
+        const p = line.split(';');
+        const tipo = tr(p[5]); // col 6
+
+        if (tipo === 'Formula') {
+          const formulaId = tr(p[0]).replace(/\./g, ''); // col 1, remove dots
+          const mpRaw = tr(p[6]); // col 7: "142 PLDB IC 32"
+          const spaceIdx = mpRaw.indexOf(' ');
+          const cod_mp = spaceIdx >= 0 ? mpRaw.slice(0, spaceIdx) : mpRaw;
+          const materia_prima = spaceIdx >= 0 ? mpRaw.slice(spaceIdx + 1) : '';
+          const percentual = parseFloat(tr(p[9]).replace(/\./g, '').replace(',', '.')) || 0; // col 10, pt-BR
+
+          formulaRows.push({
+            formula_id:   formulaId,
+            produto:      tr(p[1]),                           // col 2
+            sequencia:    parseInt(tr(p[4])) || 0,            // col 5
+            cod_mp,
+            materia_prima,
+            unidade:      tr(p[8]),                           // col 9
+            percentual,
+            ativo:        tr(p[3]) === 'Ativo',               // col 4
+          });
+        } else if (tipo === 'Produto Acabado') {
+          const formulaId = tr(p[0]).replace(/\./g, '');
+          const cod_produto = parseInt(tr(p[10]), 10); // col 11, parseInt remove zeros à esquerda
+
+          produtoRows.push({
+            cod_produto: isNaN(cod_produto) ? 0 : cod_produto,
+            produto:     tr(p[11]),                           // col 12
+            unidade:     tr(p[12]),                           // col 13
+            formula_id:  formulaId,                           // col 1
+            ativo:       tr(p[13]) === 'Ativo',               // col 14
+          });
+        }
+      }
+
+      if (formulaRows.length === 0 && produtoRows.length === 0) {
+        setErroFormulas('Nenhuma linha válida (Formula ou Produto Acabado). Verifique o separador (;) e o formato do arquivo.');
         setLoadingFormulas(false);
         return;
       }
 
-      // Group rows by formula_id so we can delete+reinsert each formula atomically.
-      // ordens_formula (historical pesagem data) is a separate table and is NEVER touched here.
-      const byFormula = rows.reduce<Map<string, FormulaRow[]>>((map, row) => {
-        if (!map.has(row.formula_id)) map.set(row.formula_id, []);
-        map.get(row.formula_id)!.push(row);
-        return map;
-      }, new Map());
+      // Coletar todos os formula_ids únicos do arquivo
+      const allFormulaIds = [
+        ...new Set([
+          ...formulaRows.map((r) => r.formula_id),
+          ...produtoRows.map((r) => r.formula_id),
+        ]),
+      ].filter(Boolean);
 
-      const formulaIds = Array.from(byFormula.keys());
+      // Limpar registros anteriores para esses formula_ids (evita duplicatas na reimportação)
+      const CHUNK = 200;
+      for (let i = 0; i < allFormulaIds.length; i += CHUNK) {
+        const chunk = allFormulaIds.slice(i, i + CHUNK);
 
-      // Verify concluded OPs for each formula_id (informational).
-      // Even when concluded OPs exist their ingredient data is already preserved
-      // in ordens_formula — the standard formulas table can be safely overwritten.
-      const { data: opsConcluidas } = await supabase
-        .from('ordens')
-        .select('formula_id')
-        .in('formula_id', formulaIds)
-        .eq('status', 'concluido');
-
-      const formulasComHistorico = new Set((opsConcluidas ?? []).map((o: any) => o.formula_id));
-
-      for (const [formulaId, formulaRows] of byFormula) {
-        // Delete existing rows in `formulas` only — never touches ordens_formula
-        const { error: delErr } = await (supabase as any)
+        const { error: delFormErr } = await (supabase as any)
           .from('formulas')
           .delete()
-          .eq('formula_id', formulaId);
-
-        if (delErr) {
-          setErroFormulas(`Erro ao deletar fórmula ${formulaId}: ${delErr.message}`);
+          .in('formula_id', chunk);
+        if (delFormErr) {
+          setErroFormulas(`Erro ao limpar fórmulas: ${delFormErr.message}`);
           setLoadingFormulas(false);
           return;
         }
 
-        // Insert updated ingredient list
-        const { error: insErr } = await (supabase as any)
-          .from('formulas')
-          .insert(formulaRows);
-
-        if (insErr) {
-          setErroFormulas(`Erro ao inserir fórmula ${formulaId}: ${insErr.message}`);
+        const { error: delProdErr } = await (supabase as any)
+          .from('produtos_tid')
+          .delete()
+          .in('formula_id', chunk);
+        if (delProdErr) {
+          setErroFormulas(`Erro ao limpar produtos TID: ${delProdErr.message}`);
           setLoadingFormulas(false);
           return;
         }
       }
 
-      const comHistorico = formulaIds.filter((id) => formulasComHistorico.has(id)).length;
-      setResultadoFormulas({ totalFormulas: formulaIds.length, totalLinhas: rows.length });
+      // Inserir itens de fórmula em lotes
+      const BATCH = 500;
+      for (let i = 0; i < formulaRows.length; i += BATCH) {
+        const { error: insErr } = await (supabase as any)
+          .from('formulas')
+          .insert(formulaRows.slice(i, i + BATCH));
+        if (insErr) {
+          setErroFormulas(`Erro ao inserir itens de fórmula: ${insErr.message}`);
+          setLoadingFormulas(false);
+          return;
+        }
+      }
+
+      // Inserir produtos TID em lotes
+      for (let i = 0; i < produtoRows.length; i += BATCH) {
+        const { error: insErr } = await (supabase as any)
+          .from('produtos_tid')
+          .insert(produtoRows.slice(i, i + BATCH));
+        if (insErr) {
+          setErroFormulas(`Erro ao inserir produtos TID: ${insErr.message}`);
+          setLoadingFormulas(false);
+          return;
+        }
+      }
+
+      const totalFormulas = new Set(formulaRows.map((r) => r.formula_id)).size;
+      const totalItens = formulaRows.length;
+      const totalProdutos = produtoRows.length;
+
+      setResultadoFormulas({ totalFormulas, totalItens, totalProdutos });
       toast({
-        title: `${formulaIds.length} fórmula${formulaIds.length !== 1 ? 's' : ''} reimportada${formulaIds.length !== 1 ? 's' : ''} com sucesso!`,
-        description: comHistorico > 0
-          ? `${comHistorico} fórmula${comHistorico !== 1 ? 's' : ''} com OPs concluídas — histórico ordens_formula preservado.`
-          : undefined,
+        title: 'Importação concluída!',
+        description: `${totalFormulas} fórmula${totalFormulas !== 1 ? 's' : ''}, ${totalItens} iten${totalItens !== 1 ? 's' : ''}, ${totalProdutos} produto${totalProdutos !== 1 ? 's' : ''} importados.`,
       });
     } catch {
-      setErroFormulas('Erro ao ler o arquivo. Verifique se é um TXT válido com encoding Windows-1252.');
+      setErroFormulas('Erro ao ler o arquivo. Verifique se é um TXT válido com encoding latin-1.');
     }
 
     setLoadingFormulas(false);
@@ -336,11 +392,13 @@ export default function ImportarProgramacao() {
       </div>
 
       {/* ── Seção 2: Fórmulas ── */}
-      <h2 className="text-xl font-bold pt-2">Importar Fórmulas (TI Soft)</h2>
+      <h2 className="text-xl font-bold pt-2">Importar Fórmulas (TID)</h2>
 
       <div className="bg-card rounded-lg border p-6 space-y-4">
         <p className="text-muted-foreground text-sm">
-          Faça o upload do arquivo TXT de fórmulas exportado pelo TI Soft (encoding Windows-1252, separador <strong>;</strong>).
+          Faça o upload do relatório TXT exportado pelo TID (encoding latin-1, separador <strong>;</strong>, 20 colunas, sem cabeçalho).
+          Linhas com coluna 6 = <strong>Formula</strong> são importadas para a tabela de fórmulas;
+          linhas com coluna 6 = <strong>Produto Acabado</strong> são importadas para produtos TID.
         </p>
 
         <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer hover:border-primary transition-colors">
@@ -368,7 +426,9 @@ export default function ImportarProgramacao() {
             <div>
               <p className="font-semibold text-status-done">Importação concluída!</p>
               <p className="text-sm text-muted-foreground">
-                {resultadoFormulas.totalFormulas} fórmula{resultadoFormulas.totalFormulas !== 1 ? 's' : ''} · {resultadoFormulas.totalLinhas} linha{resultadoFormulas.totalLinhas !== 1 ? 's' : ''} de ingredientes reimportadas.
+                <span className="font-medium text-foreground">{resultadoFormulas.totalFormulas}</span> fórmula{resultadoFormulas.totalFormulas !== 1 ? 's' : ''} ·{' '}
+                <span className="font-medium text-foreground">{resultadoFormulas.totalItens}</span> iten{resultadoFormulas.totalItens !== 1 ? 's' : ''} ·{' '}
+                <span className="font-medium text-foreground">{resultadoFormulas.totalProdutos}</span> produto{resultadoFormulas.totalProdutos !== 1 ? 's' : ''} importados.
               </p>
             </div>
           </div>
@@ -383,11 +443,13 @@ export default function ImportarProgramacao() {
       </div>
 
       <div className="bg-card rounded-lg border p-4 text-sm text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">Formato esperado — Fórmulas:</p>
+        <p className="font-medium text-foreground">Formato esperado — Fórmulas TID (20 colunas, sem cabeçalho):</p>
         <p className="font-mono text-xs bg-muted px-2 py-1 rounded">
-          formula_id;produto;sequencia;materia_prima;fornecedor;unidade;percentual
+          col1=formula_id · col2=produto · col4=ativo · col5=sequencia · col6=tipo · col7=cod_mp+materia_prima · col9=unidade · col10=percentual
         </p>
-        <p>• Registros novos são inseridos; existentes (mesmo <strong>formula_id + sequencia</strong>) são atualizados</p>
+        <p>• Linhas com <strong>col 6 = Formula</strong>: importadas para <strong>formulas</strong> (col 7 separada no 1º espaço → cod_mp / materia_prima)</p>
+        <p>• Linhas com <strong>col 6 = Produto Acabado</strong>: importadas para <strong>produtos_tid</strong> (col 11=cod_produto, 12=produto, 13=unidade, 14=ativo)</p>
+        <p>• Antes de importar, os formula_ids do arquivo são limpos nas duas tabelas (evita duplicatas)</p>
         <p>• Linhas vazias são ignoradas automaticamente</p>
       </div>
     </div>
