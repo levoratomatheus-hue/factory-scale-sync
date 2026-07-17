@@ -1,22 +1,17 @@
 /**
  * PainelConsultaFormula — consulta e comparação de fórmulas TID × Excel.
  *
- * Busca por:
- *   - formula_id numérico
- *   - número do lote (resolve via cadastro_lotes → formula_id)
- *   - nome do produto (busca parcial ≥ 3 chars; lista candidatos se > 1 resultado)
- *
- * Exibe:
- *   - Painel de 4 estados (ok / divergente / sem_depara / sem_excel)
- *   - Tabela completa: matéria-prima | % TID | % Excel | diferença
- *   - Chave do produto no Excel (quando disponível)
- *   - Botão "Conferir todas" — roda comparação em batch nas fórmulas do Excel
+ * Campo de busca com autocomplete: formula_id, lote, nome do produto ou chave Excel.
+ * Cada sugestão já indica se existe vínculo em formulas_excel (badge 🔗/🚫).
+ * Botão "Conferir todas" roda batch nas fórmulas do Excel.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Loader2, ChevronRight, BarChart2, CheckCircle2, AlertCircle, HelpCircle, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import {
+  Search, Loader2, BarChart2, CheckCircle2, AlertCircle, HelpCircle,
+  X, ChevronRight, Link2, Unlink,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 import {
@@ -26,18 +21,25 @@ import {
   type ResultadoConferirTodas,
 } from '@/lib/compararFormulas';
 
-interface Candidato {
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+
+interface Sugestao {
   formula_id: string;
   produto: string;
+  hasExcel: boolean;
+  lote?: number; // quando encontrado via cadastro_lotes
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function PainelConsultaFormula() {
   const [busca, setBusca] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
-  const [formulaAtual, setFormulaAtual] = useState<Candidato | null>(null);
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
+  const [sugestoesLoading, setSugestoesLoading] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+
+  const [formulaAtual, setFormulaAtual] = useState<{ formula_id: string; produto: string } | null>(null);
   const [comparatorLoading, setComparatorLoading] = useState(false);
   const [resultado, setResultado] = useState<ResultadoComparacao | null>(null);
 
@@ -49,16 +51,127 @@ export default function PainelConsultaFormula() {
   const [showConferencia, setShowConferencia] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Selecionar uma fórmula e rodar comparação ─────────────────────────────
+  // Fecha dropdown ao clicar fora
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
-  const selecionarFormula = useCallback(async (candidato: Candidato) => {
-    setFormulaAtual(candidato);
-    setCandidatos([]);
+  // ── Buscar sugestões ────────────────────────────────────────────────────────
+
+  const buscarSugestoes = useCallback(async (texto: string) => {
+    const t = texto.trim();
+    if (t.length < 3) {
+      setSugestoes([]);
+      setDropdownOpen(false);
+      setSugestoesLoading(false);
+      return;
+    }
+
+    setSugestoesLoading(true);
+    const isNumeric = /^\d+$/.test(t);
+
+    // ── Queries em paralelo ───────────────────────────────────────────────────
+
+    const [formulaExata, formulaNome, excelChave, loteExato] = await Promise.all([
+      // formula_id exato (só se numérico)
+      isNumeric
+        ? (supabase as any).from('formulas').select('formula_id, produto').eq('formula_id', t).eq('sequencia', 1).limit(1)
+        : Promise.resolve({ data: [] }),
+
+      // produto ilike
+      (supabase as any).from('formulas').select('formula_id, produto').ilike('produto', `%${t}%`).eq('sequencia', 1).order('formula_id').limit(15),
+
+      // produto_chave ilike no Excel (coluna pode não existir ainda — silencioso)
+      (async () => {
+        try {
+          const { data } = await (supabase as any)
+            .from('formulas_excel')
+            .select('formula_id, produto_chave')
+            .ilike('produto_chave', `%${t}%`)
+            .eq('sequencia', 1)
+            .limit(10);
+          return data ?? [];
+        } catch { return []; }
+      })(),
+
+      // lote exato (só se numérico)
+      isNumeric
+        ? (supabase as any).from('cadastro_lotes').select('lote, formula_id, produto').eq('lote', parseInt(t, 10)).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    // ── Combinar e deduplicar por formula_id ──────────────────────────────────
+
+    const combined = new Map<string, Sugestao>();
+
+    const add = (formula_id: string, produto: string, hasExcel: boolean, lote?: number) => {
+      if (!formula_id) return;
+      if (combined.has(formula_id)) {
+        if (hasExcel) combined.get(formula_id)!.hasExcel = true;
+      } else {
+        combined.set(formula_id, { formula_id, produto, hasExcel, lote });
+      }
+    };
+
+    // formula_id exato vem primeiro
+    for (const r of formulaExata?.data ?? []) add(r.formula_id, r.produto, false);
+    // lote (prioridade alta — usuário digitou o lote)
+    const ld = loteExato?.data;
+    if (ld?.formula_id) add(ld.formula_id, ld.produto, false, ld.lote);
+    // produto_chave do Excel — já sabemos que hasExcel = true
+    for (const r of excelChave ?? []) add(r.formula_id, r.produto_chave ?? '', true);
+    // produto por nome
+    for (const r of formulaNome?.data ?? []) add(r.formula_id, r.produto, false);
+
+    let lista = [...combined.values()].slice(0, 15);
+
+    // Verificar hasExcel para os que ainda não têm (batch único)
+    const semExcelCheck = lista.filter((s) => !s.hasExcel).map((s) => s.formula_id);
+    if (semExcelCheck.length > 0) {
+      const { data: excelCheck } = await (supabase as any)
+        .from('formulas_excel')
+        .select('formula_id')
+        .in('formula_id', semExcelCheck)
+        .eq('sequencia', 1);
+      const excelSet = new Set((excelCheck ?? []).map((r: any) => r.formula_id));
+      lista = lista.map((s) => ({ ...s, hasExcel: s.hasExcel || excelSet.has(s.formula_id) }));
+    }
+
+    setSugestoes(lista);
+    setDropdownOpen(lista.length > 0);
+    setHighlighted(-1);
+    setSugestoesLoading(false);
+  }, []);
+
+  const handleBuscaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setBusca(v);
+    setDropdownOpen(false);
+    setSugestoesLoading(v.trim().length >= 3);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => buscarSugestoes(v), 300);
+  };
+
+  // ── Selecionar sugestão ─────────────────────────────────────────────────────
+
+  const selecionarSugestao = useCallback(async (s: Sugestao) => {
+    setDropdownOpen(false);
+    setSugestoes([]);
+    setBusca(s.formula_id);
+    setFormulaAtual({ formula_id: s.formula_id, produto: s.produto });
     setComparatorLoading(true);
     setResultado(null);
     try {
-      const r = await compararFormulas(candidato.formula_id);
+      const r = await compararFormulas(s.formula_id);
       setResultado(r);
     } catch {
       setResultado(null);
@@ -67,126 +180,55 @@ export default function PainelConsultaFormula() {
     }
   }, []);
 
-  // ── Resolver a busca (debounced) ──────────────────────────────────────────
+  // ── Navegação por teclado ───────────────────────────────────────────────────
 
-  const resolverBusca = useCallback(async (termo: string) => {
-    const t = termo.trim();
-    if (!t) {
-      setCandidatos([]);
-      setFormulaAtual(null);
-      setResultado(null);
-      return;
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!dropdownOpen || sugestoes.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlighted((h) => Math.min(h + 1, sugestoes.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlighted >= 0) selecionarSugestao(sugestoes[highlighted]);
+    } else if (e.key === 'Escape') {
+      setDropdownOpen(false);
+      setHighlighted(-1);
     }
-
-    setSearching(true);
-    setCandidatos([]);
-    setFormulaAtual(null);
-    setResultado(null);
-
-    const isNumeric = /^\d+$/.test(t);
-
-    if (isNumeric) {
-      // Tenta como número de lote
-      const loteNum = parseInt(t, 10);
-      const { data: loteData } = await (supabase as any)
-        .from('cadastro_lotes')
-        .select('formula_id, produto')
-        .eq('lote', loteNum)
-        .maybeSingle();
-
-      if (loteData?.formula_id) {
-        setSearching(false);
-        await selecionarFormula({ formula_id: loteData.formula_id, produto: loteData.produto });
-        return;
-      }
-
-      // Tenta como formula_id direto
-      const { data: fData } = await (supabase as any)
-        .from('formulas')
-        .select('formula_id, produto')
-        .eq('formula_id', t)
-        .eq('sequencia', 1)
-        .maybeSingle();
-
-      if (fData) {
-        setSearching(false);
-        await selecionarFormula({ formula_id: fData.formula_id, produto: fData.produto });
-        return;
-      }
-
-      setSearching(false);
-      setCandidatos([]);
-      return;
-    }
-
-    // Busca por nome de produto (mínimo 3 chars)
-    if (t.length >= 3) {
-      const { data } = await (supabase as any)
-        .from('formulas')
-        .select('formula_id, produto')
-        .ilike('produto', `%${t}%`)
-        .eq('sequencia', 1)
-        .order('formula_id')
-        .limit(60);
-
-      const deduped: Candidato[] = [];
-      const seen = new Set<string>();
-      for (const r of data ?? []) {
-        if (seen.has(r.formula_id)) continue;
-        seen.add(r.formula_id);
-        deduped.push({ formula_id: r.formula_id, produto: r.produto });
-      }
-
-      setSearching(false);
-      if (deduped.length === 1) {
-        await selecionarFormula(deduped[0]);
-      } else {
-        setCandidatos(deduped);
-      }
-      return;
-    }
-
-    setSearching(false);
-  }, [selecionarFormula]);
-
-  const handleBuscaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setBusca(v);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => resolverBusca(v), 380);
   };
 
   const limpar = () => {
     setBusca('');
-    setCandidatos([]);
+    setSugestoes([]);
+    setDropdownOpen(false);
     setFormulaAtual(null);
     setResultado(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    inputRef.current?.focus();
   };
 
-  // ── Conferir todas ────────────────────────────────────────────────────────
+  // ── Conferir todas ──────────────────────────────────────────────────────────
 
   const handleConferirTodas = async () => {
     setConferindo(true);
     setResultadoConferencia(null);
     setProgConferencia(0);
     setTotalConferencia(0);
-    setShowConferencia(true);
-
     try {
       const r = await conferirTodasFormulas((done, total) => {
         setProgConferencia(done);
         setTotalConferencia(total);
       });
       setResultadoConferencia(r);
-    } catch {
-      // silencioso
-    } finally {
+    } catch { /* silencioso */ } finally {
       setConferindo(false);
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -212,19 +254,14 @@ export default function PainelConsultaFormula() {
               <X className="h-4 w-4" />
             </button>
           </div>
-
           {!conferindo && !resultadoConferencia && (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
                 Compara todas as fórmulas do Excel com as do TID de uma vez.
-                Pode levar alguns segundos dependendo do volume de dados.
               </p>
-              <Button size="sm" onClick={handleConferirTodas}>
-                Iniciar conferência
-              </Button>
+              <Button size="sm" onClick={handleConferirTodas}>Iniciar conferência</Button>
             </div>
           )}
-
           {conferindo && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -241,14 +278,13 @@ export default function PainelConsultaFormula() {
               )}
             </div>
           )}
-
           {resultadoConferencia && !conferindo && (
             <ResultadoConferencia
               r={resultadoConferencia}
-              onSelecionarFormula={async (fid) => {
+              onSelecionarFormula={(fid) => {
                 setBusca(fid);
                 setShowConferencia(false);
-                await selecionarFormula({ formula_id: fid, produto: '' });
+                selecionarSugestao({ formula_id: fid, produto: '', hasExcel: true });
               }}
               onRenovar={handleConferirTodas}
             />
@@ -256,91 +292,113 @@ export default function PainelConsultaFormula() {
         </div>
       )}
 
-      {/* ── Campo de busca ──────────────────────────────────────────────────── */}
-      <div className="relative">
-        {searching ? (
-          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
-        ) : (
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        )}
-        <Input
-          className="pl-9 pr-8"
-          placeholder="Fórmula, lote ou nome do produto…"
-          value={busca}
-          onChange={handleBuscaChange}
-        />
-        {busca && (
-          <button
-            onClick={limpar}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+      {/* ── Campo de busca com autocomplete ────────────────────────────────── */}
+      <div ref={containerRef} className="relative">
+        <div className="relative">
+          {sugestoesLoading ? (
+            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin pointer-events-none" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          )}
+          <input
+            ref={inputRef}
+            type="text"
+            value={busca}
+            onChange={handleBuscaChange}
+            onKeyDown={handleKeyDown}
+            onFocus={() => sugestoes.length > 0 && setDropdownOpen(true)}
+            placeholder="Fórmula, lote, produto ou chave Excel (MBG-10-…)"
+            className="w-full rounded-md border border-input bg-background pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            autoComplete="off"
+          />
+          {busca && (
+            <button
+              onClick={limpar}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              tabIndex={-1}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Dropdown de sugestões */}
+        {dropdownOpen && sugestoes.length > 0 && (
+          <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md overflow-hidden">
+            <ul role="listbox">
+              {sugestoes.map((s, i) => (
+                <li
+                  key={s.formula_id}
+                  role="option"
+                  aria-selected={highlighted === i}
+                  onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
+                  onMouseEnter={() => setHighlighted(i)}
+                  className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer text-sm border-b last:border-0 transition-colors ${
+                    highlighted === i ? 'bg-accent' : 'hover:bg-accent/60'
+                  }`}
+                >
+                  {/* formula_id em destaque */}
+                  <span className="font-mono font-bold text-primary shrink-0 w-12 text-right">
+                    {s.formula_id}
+                  </span>
+
+                  {/* lote badge se aplicável */}
+                  {s.lote && (
+                    <span className="text-[10px] font-medium bg-muted text-muted-foreground rounded px-1 py-0.5 shrink-0">
+                      lote {s.lote}
+                    </span>
+                  )}
+
+                  {/* nome do produto */}
+                  <span className="flex-1 truncate text-muted-foreground">{s.produto}</span>
+
+                  {/* badge Excel */}
+                  {s.hasExcel ? (
+                    <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded px-1.5 py-0.5 shrink-0">
+                      <Link2 className="h-2.5 w-2.5" />
+                      Excel
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-muted border border-border rounded px-1.5 py-0.5 shrink-0">
+                      <Unlink className="h-2.5 w-2.5" />
+                      sem Excel
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
-      {/* ── Lista de candidatos ─────────────────────────────────────────────── */}
-      {candidatos.length > 0 && (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <p className="px-4 py-2 text-xs text-muted-foreground border-b">
-            {candidatos.length} fórmula{candidatos.length !== 1 ? 's' : ''} encontrada{candidatos.length !== 1 ? 's' : ''} — escolha uma:
-          </p>
-          <ul className="divide-y">
-            {candidatos.map((c) => (
-              <li key={c.formula_id}>
-                <button
-                  onClick={() => { setBusca(c.formula_id); selecionarFormula(c); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-muted/50 transition-colors flex items-center gap-3"
-                >
-                  <span className="font-mono text-sm font-semibold text-primary w-16 shrink-0">
-                    {c.formula_id}
-                  </span>
-                  <span className="text-sm text-muted-foreground truncate">{c.produto}</span>
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground ml-auto shrink-0" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {/* Dica inicial */}
+      {!busca && !formulaAtual && (
+        <p className="text-sm text-muted-foreground text-center py-10 border border-dashed rounded-lg">
+          Digite ≥ 3 caracteres — fórmula, lote, produto ou chave Excel
+        </p>
       )}
 
-      {/* ── Sem resultados ──────────────────────────────────────────────────── */}
-      {!searching && busca.trim() && !formulaAtual && candidatos.length === 0 && !comparatorLoading && (
+      {/* Sem resultados */}
+      {busca.trim().length >= 3 && !sugestoesLoading && sugestoes.length === 0 && !formulaAtual && !dropdownOpen && (
         <p className="text-sm text-muted-foreground text-center py-10 border border-dashed rounded-lg">
           Nenhuma fórmula encontrada para "{busca.trim()}"
         </p>
       )}
 
-      {/* ── Placeholder vazio ───────────────────────────────────────────────── */}
-      {!busca.trim() && !formulaAtual && (
-        <p className="text-sm text-muted-foreground text-center py-10 border border-dashed rounded-lg">
-          Digite uma fórmula, lote ou nome do produto para consultar
-        </p>
-      )}
-
-      {/* ── Resultado da fórmula selecionada ────────────────────────────────── */}
+      {/* ── Resultado da fórmula selecionada ──────────────────────────────── */}
       {(formulaAtual || comparatorLoading) && (
         <div className="space-y-3">
           {formulaAtual && (
-            <div className="flex items-start gap-3 pb-1 border-b">
-              <div>
-                <p className="text-xs text-muted-foreground">Fórmula</p>
-                <p className="font-mono font-bold text-lg leading-tight">{formulaAtual.formula_id}</p>
-              </div>
+            <div className="flex items-baseline gap-3 pb-2 border-b">
+              <span className="font-mono font-bold text-2xl text-primary leading-none">
+                {formulaAtual.formula_id}
+              </span>
               {formulaAtual.produto && (
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Produto</p>
-                  <p className="text-sm font-medium truncate">{formulaAtual.produto}</p>
-                </div>
+                <span className="text-sm text-muted-foreground truncate">{formulaAtual.produto}</span>
               )}
             </div>
           )}
-
-          <ComparatorPanel
-            resultado={resultado}
-            loading={comparatorLoading}
-            tabelaCompleta
-          />
+          <ComparatorPanel resultado={resultado} loading={comparatorLoading} tabelaCompleta />
         </div>
       )}
     </div>
@@ -381,7 +439,6 @@ function ResultadoConferencia({
           <p className="text-lg font-bold text-amber-700 dark:text-amber-400">{r.semDepara.length}</p>
         </div>
       </div>
-
       {r.semFórmulaTid > 0 && (
         <p className="text-xs text-muted-foreground">
           + {r.semFórmulaTid} fórmula{r.semFórmulaTid !== 1 ? 's' : ''} no Excel sem correspondente no TID
@@ -409,10 +466,8 @@ function ResultadoConferencia({
                     onClick={() => onSelecionarFormula(d.formula_id)}
                     className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center gap-3 text-xs"
                   >
-                    <span className="font-mono font-semibold text-foreground w-14 shrink-0">{d.formula_id}</span>
-                    <span className="text-red-600">
-                      {d.nDiffs} diferença{d.nDiffs !== 1 ? 's' : ''}
-                    </span>
+                    <span className="font-mono font-semibold text-primary w-14 shrink-0">{d.formula_id}</span>
+                    <span className="text-red-600">{d.nDiffs} diferença{d.nDiffs !== 1 ? 's' : ''}</span>
                     <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
                   </button>
                 </li>
@@ -443,10 +498,8 @@ function ResultadoConferencia({
                     onClick={() => onSelecionarFormula(d.formula_id)}
                     className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center gap-3 text-xs"
                   >
-                    <span className="font-mono font-semibold text-foreground w-14 shrink-0">{d.formula_id}</span>
-                    <span className="text-amber-700">
-                      {d.nMpsSemDepara} MP{d.nMpsSemDepara !== 1 ? 's' : ''} sem de-para
-                    </span>
+                    <span className="font-mono font-semibold text-primary w-14 shrink-0">{d.formula_id}</span>
+                    <span className="text-amber-700">{d.nMpsSemDepara} MP{d.nMpsSemDepara !== 1 ? 's' : ''} sem de-para</span>
                     <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
                   </button>
                 </li>
@@ -457,7 +510,7 @@ function ResultadoConferencia({
       )}
 
       {r.divergentes.length === 0 && r.semDepara.length === 0 && (
-        <div className="flex items-center gap-2 text-xs text-green-700">
+        <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
           <CheckCircle2 className="h-4 w-4" />
           Todas as fórmulas conferem — TID e Excel idênticos!
         </div>
