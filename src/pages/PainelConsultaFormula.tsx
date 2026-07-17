@@ -6,13 +6,14 @@
  * Botão "Conferir todas" roda batch nas fórmulas do Excel.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Search, Loader2, BarChart2, CheckCircle2, AlertCircle, HelpCircle,
   X, ChevronRight, Link2, Unlink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 import {
   compararFormulas,
@@ -51,19 +52,7 @@ export default function PainelConsultaFormula() {
   const [showConferencia, setShowConferencia] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Fecha dropdown ao clicar fora
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   // ── Buscar sugestões ────────────────────────────────────────────────────────
 
@@ -293,83 +282,97 @@ export default function PainelConsultaFormula() {
       )}
 
       {/* ── Campo de busca com autocomplete ────────────────────────────────── */}
-      <div ref={containerRef} className="relative">
-        <div className="relative">
-          {sugestoesLoading ? (
-            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin pointer-events-none" />
-          ) : (
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          )}
-          <input
-            ref={inputRef}
-            type="text"
-            value={busca}
-            onChange={handleBuscaChange}
-            onKeyDown={handleKeyDown}
-            onFocus={() => sugestoes.length > 0 && setDropdownOpen(true)}
-            placeholder="Fórmula, lote, produto ou chave Excel (MBG-10-…)"
-            className="w-full rounded-md border border-input bg-background pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            autoComplete="off"
-          />
-          {busca && (
-            <button
-              onClick={limpar}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              tabIndex={-1}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Dropdown de sugestões */}
-        {dropdownOpen && sugestoes.length > 0 && (
-          <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md overflow-hidden">
-            <ul role="listbox">
-              {sugestoes.map((s, i) => (
-                <li
-                  key={s.formula_id}
-                  role="option"
-                  aria-selected={highlighted === i}
-                  onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
-                  onMouseEnter={() => setHighlighted(i)}
-                  className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer text-sm border-b last:border-0 transition-colors ${
-                    highlighted === i ? 'bg-accent' : 'hover:bg-accent/60'
-                  }`}
-                >
-                  {/* formula_id em destaque */}
-                  <span className="font-mono font-bold text-primary shrink-0 w-12 text-right">
-                    {s.formula_id}
-                  </span>
-
-                  {/* lote badge se aplicável */}
-                  {s.lote && (
-                    <span className="text-[10px] font-medium bg-muted text-muted-foreground rounded px-1 py-0.5 shrink-0">
-                      lote {s.lote}
-                    </span>
-                  )}
-
-                  {/* nome do produto */}
-                  <span className="flex-1 truncate text-muted-foreground">{s.produto}</span>
-
-                  {/* badge Excel */}
-                  {s.hasExcel ? (
-                    <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded px-1.5 py-0.5 shrink-0">
-                      <Link2 className="h-2.5 w-2.5" />
-                      Excel
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-muted border border-border rounded px-1.5 py-0.5 shrink-0">
-                      <Unlink className="h-2.5 w-2.5" />
-                      sem Excel
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
+      {/*
+        PopoverAnchor ancora o PopoverContent ao input sem transformá-lo em trigger.
+        PopoverContent usa Portal → renderiza no body, nunca cortado por overflow-hidden.
+      */}
+      <Popover
+        open={dropdownOpen}
+        onOpenChange={(v) => { if (!v) setDropdownOpen(false); }}
+      >
+        <PopoverAnchor asChild>
+          <div className="relative">
+            {sugestoesLoading ? (
+              <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin pointer-events-none" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            )}
+            <input
+              ref={inputRef}
+              type="text"
+              value={busca}
+              onChange={handleBuscaChange}
+              onKeyDown={handleKeyDown}
+              onFocus={() => sugestoes.length > 0 && setDropdownOpen(true)}
+              placeholder="Fórmula, lote, produto ou chave Excel (MBG-10-…)"
+              className="w-full rounded-md border border-input bg-background pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              autoComplete="off"
+            />
+            {busca && (
+              <button
+                onClick={limpar}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        )}
-      </div>
+        </PopoverAnchor>
+
+        {/* Renderizado em Portal → não sofre clipping de nenhum ancestral */}
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="p-0 w-[--radix-popover-trigger-width]"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <ul role="listbox" className="max-h-80 overflow-y-auto py-1">
+            {sugestoes.map((s, i) => (
+              <li
+                key={s.formula_id}
+                role="option"
+                aria-selected={highlighted === i}
+                onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
+                onMouseEnter={() => setHighlighted(i)}
+                className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer text-sm transition-colors ${
+                  highlighted === i ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'
+                }`}
+              >
+                {/* formula_id em destaque */}
+                <span className="font-mono font-bold text-primary shrink-0 w-12 text-right">
+                  {s.formula_id}
+                </span>
+
+                {/* badge de lote */}
+                {s.lote && (
+                  <span className="text-[10px] font-medium bg-muted text-muted-foreground rounded px-1 py-0.5 shrink-0 whitespace-nowrap">
+                    lote {s.lote}
+                  </span>
+                )}
+
+                {/* nome do produto */}
+                <span className="flex-1 truncate text-muted-foreground whitespace-nowrap min-w-0">
+                  {s.produto}
+                </span>
+
+                {/* badge Excel */}
+                {s.hasExcel ? (
+                  <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap">
+                    <Link2 className="h-2.5 w-2.5" />
+                    Excel
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-muted border border-border rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap">
+                    <Unlink className="h-2.5 w-2.5" />
+                    sem Excel
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
 
       {/* Dica inicial */}
       {!busca && !formulaAtual && (
