@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -12,6 +12,7 @@ const PainelHistorico         = lazy(() => import('./PainelHistorico'));
 const PainelAnalises          = lazy(() => import('./PainelAnalises'));
 const PainelLiberacao         = lazy(() => import('./PainelLiberacao'));
 const ImportarProgramacao     = lazy(() => import('./ImportarProgramacao'));
+const ImportarExcelLab        = lazy(() => import('./ImportarExcelLab'));
 const PainelProgramacao       = lazy(() => import('./PainelProgramacao'));
 const PainelProgramacaoBalanca = lazy(() => import('./PainelProgramacaoBalanca'));
 const PainelConsultaFormula   = lazy(() => import('./PainelConsultaFormula'));
@@ -44,7 +45,7 @@ import {
 } from '@/components/ui/sidebar';
 
 type TabGestorId =
-  | 'gestor' | 'programacao' | 'programacao_balanca' | 'criar' | 'historico' | 'importar'
+  | 'gestor' | 'programacao' | 'programacao_balanca' | 'criar' | 'historico' | 'importar' | 'importar_excel'
   | 'balanca1' | 'balanca2'
   | 'mistura'
   | 'linha1' | 'linha2' | 'linha3' | 'linha4' | 'linha5'
@@ -113,7 +114,8 @@ const gruposGestor = [
       { id: 'criar'               as TabGestorId, label: 'Nova Ordem',            icon: PlusCircle },
       { id: 'historico'   as TabGestorId, label: 'Histórico',        icon: History },
       { id: 'consulta_formula' as TabGestorId, label: 'Consulta por Fórmula', icon: ClipboardList },
-      { id: 'importar'    as TabGestorId, label: 'Importar',         icon: FileUp },
+      { id: 'importar'       as TabGestorId, label: 'Importar',          icon: FileUp },
+      { id: 'importar_excel' as TabGestorId, label: 'Importar Excel Lab', icon: Sheet  },
     ],
   },
 ] as const;
@@ -653,6 +655,9 @@ export default function Index() {
               )}
               {activeTab === 'importar' && (
                 <Suspense fallback={TAB_LOADING}><ImportarProgramacao /></Suspense>
+              )}
+              {activeTab === 'importar_excel' && (
+                <Suspense fallback={TAB_LOADING}><ImportarExcelLab /></Suspense>
               )}
               {activeTab === 'abrir_os' && (
                 <Suspense fallback={TAB_LOADING}>
