@@ -264,7 +264,80 @@ Duas seções independentes de importação:
 
 ---
 
-### 4.13 Painel Comercial (`PainelComercial.tsx`)
+### 4.13 Importar Excel do Lab (`ImportarExcelLab.tsx` + `excelImport.worker.ts`)
+**Quem usa:** gestor / lab
+
+Importa a planilha Excel mensal do laboratório (`.xlsx`) que contém a tabela de matérias-primas e as fórmulas de cada produto. Todo o parsing pesado roda em um **Web Worker** (`excelImport.worker.ts`) para não travar a UI.
+
+**Abas lidas do arquivo:**
+- `MATÉRIA PRIMA-OK!` → tabela `mp_depara` (código Excel, código TID, tipo, descrição)
+- `Formulações Produção-OK!` → tabela `formulas_excel` (formula_id, sequência, cod_mp_excel, materia_prima, percentual, produto_chave)
+
+**Fluxo:**
+1. Selecionar arquivo `.xlsx`.
+2. Worker faz o parse e retorna: MPs, itens de fórmula e resumo de alertas.
+3. Gestor revisa alertas (fórmulas duplicadas, cod_tid ambíguos, somas ≠ 1).
+4. Confirmar → gravação no Supabase: apaga `mp_depara` e `formulas_excel` inteiros e reinsere tudo.
+
+**Alertas gerados pelo parser:**
+- `formulaIdsDuplicados`: mesmo `formula_id` aparece em mais de um bloco — verificar planilha.
+- `codTidDuplicados`: mesmo `cod_tid` mapeado a mais de um código Excel — ambiguidade no de-para.
+- `formulasSomaNaoFecha`: soma dos percentuais da fórmula difere de 1 em mais de 6% — possível erro no Excel.
+
+**Tabelas populadas:**
+
+| Tabela | Conteúdo |
+|---|---|
+| `mp_depara` | De-para entre código Excel e código TID de cada MP |
+| `formulas_excel` | Itens das fórmulas com produto_chave e formula_id |
+
+> **⚠️ Detalhe crítico do parser — não remover sem ler:**
+>
+> A aba `Formulações Produção-OK!` usa **dois formatos de cabeçalho de bloco**:
+>
+> | Formato | Condição de detecção |
+> |---|---|
+> | Padrão | `col B = "MATÉRIA PRIMA"` |
+> | Alternativo | `col B = ""` (vazia) **e** `col H = "VALOR MP"` |
+>
+> Ambos marcam o início de um novo bloco de itens. O parser (`isBlockHeader`) reconhece os dois.
+> **Se algum dia o parser for reescrito e essa condição for simplificada para checar só `MATÉRIA PRIMA`,
+> todos os blocos com cabeçalho `VALOR MP` serão silenciosamente ignorados — os itens desses blocos
+> vão cair no formula_id do bloco anterior.** Esse bug não gera erro, só dados errados.
+>
+> Esse foi o bug que fez a fórmula 4507 (MBM-10-3602-1) receber os itens da 4496 (VERMELHO PR 254)
+> em vez dos seus próprios (Verde Ftalo + Amarelo), descoberto e corrigido em Jul/2026.
+
+**Estrutura do bloco na planilha:**
+```
+[cabeçalho: MATÉRIA PRIMA ou VALOR MP]
+  linha de item: col A = código MP, col B = nome, col I = percentual
+  ...
+[Totalizador]
+  linha de produto: col U = formula_id, col S = produto_chave
+  ...
+[próximo cabeçalho → flush do bloco anterior]
+```
+
+---
+
+### 4.13-B Comparador TID × Excel (`lib/compararFormulas.ts` + `ComparatorPanel.tsx`)
+**Quem usa:** gestor / lab (via CriarOrdem e PainelConsultaFormula)
+
+Compara a fórmula cadastrada no TID com a importada do Excel, usando `mp_depara` como camada de tradução (cod_tid → cod_excel).
+
+**Estados possíveis:**
+- `ok` — percentuais batem (tolerância ±0,01%)
+- `divergente` — há diferença de percentual ou MP extra/faltando
+- `sem_depara` — alguma MP do TID não tem cod_tid preenchido em mp_depara
+- `sem_excel` — produto não tem fórmula importada do Excel
+
+**Regra de negócio — variante "-1":**
+Fórmulas cujo `produto_chave` termina em `-1` (ex.: `MBG-10-3593-1`) usam PEBD recuperado (500319) no lugar do virgem (500028). A planilha Excel ainda lista o virgem nos dois lados; o comparador normaliza 500028 → 500319 simetricamente antes de comparar. Tabela de substituições em `SUBSTITUICOES_VARIANTE` em `compararFormulas.ts` — adicionar entradas lá para cobrir novos casos.
+
+---
+
+### 4.14 Painel Comercial (`PainelComercial.tsx`)
 **Quem usa:** comercial, gestor
 
 Consulta de disponibilidade de produtos para o setor de vendas.
@@ -282,7 +355,7 @@ Consulta de disponibilidade de produtos para o setor de vendas.
 
 ---
 
-### 4.14 Painel de Manutenção (`PainelManutencao.tsx`)
+### 4.15 Painel de Manutenção (`PainelManutencao.tsx`)
 **Quem usa:** gestor, tecnico
 
 Central de gestão de Ordens de Serviço (OS).
@@ -296,7 +369,7 @@ Central de gestão de Ordens de Serviço (OS).
 
 ---
 
-### 4.15 Análise de Manutenção (`PainelAnaliseManutencao.tsx`)
+### 4.16 Análise de Manutenção (`PainelAnaliseManutencao.tsx`)
 **Quem usa:** gestor
 
 Dashboard analítico das OS.
@@ -311,28 +384,28 @@ Dashboard analítico das OS.
 
 ---
 
-### 4.16 Abrir OS (`AbrirOS.tsx`)
+### 4.17 Abrir OS (`AbrirOS.tsx`)
 **Quem usa:** gestor, tecnico
 
 Formulário para abertura de nova Ordem de Serviço.
 
 ---
 
-### 4.17 Cadastro de Equipamentos (`CadastroEquipamentos.tsx`)
+### 4.18 Cadastro de Equipamentos (`CadastroEquipamentos.tsx`)
 **Quem usa:** gestor
 
 CRUD de equipamentos da fábrica com campos de TAG e linha associada.
 
 ---
 
-### 4.18 Estoque de Manutenção (`EstoqueManutencao.tsx`)
+### 4.19 Estoque de Manutenção (`EstoqueManutencao.tsx`)
 **Quem usa:** gestor, tecnico
 
 Controle de peças e materiais de manutenção em estoque.
 
 ---
 
-### 4.19 Ferramentas de Manutenção (`FerramentasManutencao.tsx`)
+### 4.20 Ferramentas de Manutenção (`FerramentasManutencao.tsx`)
 **Quem usa:** gestor, tecnico
 
 Controle de ferramentas do setor de manutenção.
@@ -697,6 +770,26 @@ supabase/migrations/                  # Histórico de alterações no banco
 ---
 
 ## 14. Histórico de Mudanças na Base de Dados
+
+### Jul/2026 — Importador Excel e comparador TID × Excel
+
+**Novos módulos:**
+- `ImportarExcelLab.tsx` + `excelImport.worker.ts`: importação da planilha mensal do lab (MPs e fórmulas) via Web Worker.
+- `lib/compararFormulas.ts` + `ComparatorPanel.tsx`: comparador TID × Excel com suporte a variante "-1" (PEBD recuperado).
+- Tabelas novas: `mp_depara` (de-para Excel↔TID) e `formulas_excel` (fórmulas do Excel).
+
+**Bugs corrigidos no parser da aba Formulações Produção-OK!:**
+
+1. **Estado `AWAIT_CLASSE` bloqueava bloco sem linha CLASSE** — o parser ficava preso esperando `col B = "CLASSE"` antes de coletar formula_ids. Em blocos sem essa linha, os itens nunca eram pareados com o formula_id correto, caindo no bloco adjacente. Corrigido eliminando `AWAIT_CLASSE`; o parser agora vai direto de `Totalizador` para `IN_PRODUCTS`.
+
+2. **Segundo formato de cabeçalho de bloco não reconhecido** — a aba tem dois formatos de cabeçalho:
+   - Padrão: `col B = "MATÉRIA PRIMA"`
+   - Alternativo: `col B = ""` + `col H = "VALOR MP"`
+   O parser só reconhecia o formato padrão; blocos com `VALOR MP` eram ignorados e seus itens caíam no bloco anterior. Corrigido com `isBlockHeader = (colB === 'MATÉRIA PRIMA') || (colB === '' && colH === 'VALOR MP')`. **Esse detalhe é crítico — nunca remover a segunda condição.**
+
+   Exemplo concreto: fórmula 4507 (MBM-10-3602-1) recebia os itens da 4496 (VERMELHO PR 254) em vez dos seus (Verde Ftalo + Amarelo) porque seu cabeçalho era `VALOR MP`.
+
+---
 
 ### Jul/2026 — Migração da base de fórmulas
 - Tabela `formulas` ganhou a coluna `cod_mp` (código da matéria-prima no TID, parte antes do 1º espaço da coluna 7 do relatório).
