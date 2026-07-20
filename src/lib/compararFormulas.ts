@@ -15,6 +15,29 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type EstadoComparacao = 'ok' | 'divergente' | 'sem_depara' | 'sem_excel';
 
+export interface SubstituicaoInfo {
+  de: string;
+  para: string;
+  desc: string;
+}
+
+// ── Regras de substituição para variantes "-1" ────────────────────────────────
+//
+// Fórmulas cujo produto_chave termina em "-1" usam PEBD recuperado no lugar do
+// virgem.  A planilha Excel ainda lista o virgem (500028) nos dois lados, mas a
+// comparação deve tratar os dois como equivalentes — daí a normalização simétrica.
+// Para cobrir novos casos no futuro, basta adicionar uma entrada aqui.
+//
+const SUBSTITUICOES_VARIANTE: SubstituicaoInfo[] = [
+  { de: '500028', para: '500319', desc: 'PEBD virgem → PEBD recuperado' },
+];
+
+/** Normaliza um código Excel pela tabela de substituições (retorna o mesmo cod se não houver regra). */
+function substituirCodigo(cod: string, subs: SubstituicaoInfo[]): string {
+  const s = subs.find((r) => r.de === cod);
+  return s ? s.para : cod;
+}
+
 export interface ItemComparado {
   cod_excel: string;
   materia_prima: string;
@@ -35,6 +58,8 @@ export interface ResultadoComparacao {
   nDiffs: number;
   mpsSemDepara: MpSemDepara[];
   produtoChaveExcel: string | null; // ex.: "MBG-10-3156"; null se coluna não existe ainda
+  isVariante: boolean;              // produto_chave termina em "-1"
+  substituicoesAplicadas: SubstituicaoInfo[]; // substituições efetivamente usadas nesta comparação
 }
 
 export interface ItemConferencia {
@@ -68,14 +93,32 @@ function buildTidToExcel(depara: { cod_tid: string | null; cod_excel: string }[]
 /**
  * Núcleo da comparação — funciona sobre dados já em memória.
  * Reutilizado por compararFormulas (query individual) e conferirTodasFormulas (batch).
+ *
+ * Quando isVariante=true, os códigos Excel de ambos os lados (TID traduzido e
+ * itens do Excel) são normalizados via SUBSTITUICOES_VARIANTE antes de comparar.
+ * Isso garante simetria: formulas ainda no virgem continuam casando, e fórmulas
+ * já atualizadas para o recuperado também casam.
  */
 function compararEmMemoria(
   tidItens: { cod_mp: string; materia_prima: string; percentual: number }[],
   excelItens: { cod_mp_excel: string; materia_prima: string; percentual: number }[],
   tidToExcel: Map<string, string[]>,
   produtoChaveExcel: string | null,
+  isVariante: boolean,
 ): ResultadoComparacao {
-  // 1. Traduzir cod_mp do TID → cod_excel via de-para
+  const subs = isVariante ? SUBSTITUICOES_VARIANTE : [];
+  const substituicoesAplicadas: SubstituicaoInfo[] = [];
+
+  /** Normaliza código e registra substituição se foi aplicada (dedup por 'de'). */
+  const normalizar = (cod: string): string => {
+    const norm = substituirCodigo(cod, subs);
+    if (norm !== cod && !substituicoesAplicadas.some((s) => s.de === cod)) {
+      substituicoesAplicadas.push(subs.find((s) => s.de === cod)!);
+    }
+    return norm;
+  };
+
+  // 1. Traduzir cod_mp do TID → cod_excel via de-para, normalizando substituições
   const mpsSemDepara: MpSemDepara[] = [];
   const translated: { cod_excel: string; materia_prima: string; percentual: number }[] = [];
 
@@ -86,18 +129,19 @@ function compararEmMemoria(
     } else if (excels.length > 1) {
       mpsSemDepara.push({ cod_mp: item.cod_mp, materia_prima: item.materia_prima, motivo: 'ambiguo' });
     } else {
-      translated.push({ cod_excel: excels[0], materia_prima: item.materia_prima, percentual: item.percentual });
+      translated.push({ cod_excel: normalizar(excels[0]), materia_prima: item.materia_prima, percentual: item.percentual });
     }
   }
 
   if (mpsSemDepara.length > 0) {
-    return { status: 'sem_depara', itens: [], nDiffs: 0, mpsSemDepara, produtoChaveExcel };
+    return { status: 'sem_depara', itens: [], nDiffs: 0, mpsSemDepara, produtoChaveExcel, isVariante, substituicoesAplicadas };
   }
 
-  // 2. Comparar percentuais (Excel × 100 para igualar escala do TID)
+  // 2. Comparar percentuais (Excel × 100 para igualar escala do TID).
+  //    Os códigos do Excel também são normalizados para a mesma base da substituição.
   const excelByCode = new Map<string, { pct: number; nome: string }>();
   for (const item of excelItens) {
-    excelByCode.set(item.cod_mp_excel, { pct: item.percentual * 100, nome: item.materia_prima });
+    excelByCode.set(normalizar(item.cod_mp_excel), { pct: item.percentual * 100, nome: item.materia_prima });
   }
   const tidByCode = new Map<string, { materia_prima: string; percentual: number }>();
   for (const item of translated) {
@@ -122,7 +166,7 @@ function compararEmMemoria(
   itens.sort((a, b) => (b.isDiff ? 1 : 0) - (a.isDiff ? 1 : 0));
 
   const status: EstadoComparacao = nDiffs > 0 ? 'divergente' : 'ok';
-  return { status, itens, nDiffs, mpsSemDepara: [], produtoChaveExcel };
+  return { status, itens, nDiffs, mpsSemDepara: [], produtoChaveExcel, isVariante, substituicoesAplicadas };
 }
 
 // ── compararFormulas ──────────────────────────────────────────────────────────
@@ -133,6 +177,8 @@ const VAZIO: ResultadoComparacao = {
   nDiffs: 0,
   mpsSemDepara: [],
   produtoChaveExcel: null,
+  isVariante: false,
+  substituicoesAplicadas: [],
 };
 
 export async function compararFormulas(formulaId: string): Promise<ResultadoComparacao> {
@@ -156,6 +202,9 @@ export async function compararFormulas(formulaId: string): Promise<ResultadoComp
     produtoChaveExcel = chaveData?.produto_chave ?? null;
   } catch { /* coluna ainda não existe — silencioso */ }
 
+  // Detectar variante "-1": produto_chave termina em "-1" (ex.: MBG-10-1024-1)
+  const isVariante = produtoChaveExcel?.endsWith('-1') ?? false;
+
   // 3. Buscar itens do TID
   const { data: tidItens } = await (supabase as any)
     .from('formulas')
@@ -163,7 +212,7 @@ export async function compararFormulas(formulaId: string): Promise<ResultadoComp
     .eq('formula_id', formulaId)
     .order('sequencia', { ascending: true });
 
-  if (!tidItens || tidItens.length === 0) return { ...VAZIO, produtoChaveExcel };
+  if (!tidItens || tidItens.length === 0) return { ...VAZIO, produtoChaveExcel, isVariante };
 
   // 4. Buscar de-para (só MPs com cod_tid preenchido)
   const { data: depara } = await (supabase as any)
@@ -173,7 +222,7 @@ export async function compararFormulas(formulaId: string): Promise<ResultadoComp
 
   const tidToExcel = buildTidToExcel(depara ?? []);
 
-  return compararEmMemoria(tidItens, excelItens, tidToExcel, produtoChaveExcel);
+  return compararEmMemoria(tidItens, excelItens, tidToExcel, produtoChaveExcel, isVariante);
 }
 
 // ── conferirTodasFormulas ─────────────────────────────────────────────────────
@@ -183,22 +232,26 @@ export async function conferirTodasFormulas(
 ): Promise<ResultadoConferirTodas> {
   const PAGE = 1000;
 
-  // 1. Buscar TODOS os itens do Excel (paginado)
-  const allExcel: { formula_id: string; cod_mp_excel: string; percentual: number }[] = [];
+  // 1. Buscar TODOS os itens do Excel (paginado) — inclui produto_chave para detectar variantes
+  const allExcel: { formula_id: string; cod_mp_excel: string; percentual: number; produto_chave: string | null }[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data } = await (supabase as any)
       .from('formulas_excel')
-      .select('formula_id, cod_mp_excel, percentual')
+      .select('formula_id, cod_mp_excel, percentual, produto_chave')
       .range(from, from + PAGE - 1);
     if (!data || data.length === 0) break;
     allExcel.push(...data);
     if (data.length < PAGE) break;
   }
 
-  // 2. Agrupar por formula_id
+  // 2. Agrupar por formula_id; capturar produto_chave (mesmo valor em todas as linhas da fórmula)
   const excelByFormula = new Map<string, { cod_mp_excel: string; percentual: number }[]>();
+  const produtoChaveByFormula = new Map<string, string | null>();
   for (const r of allExcel) {
-    if (!excelByFormula.has(r.formula_id)) excelByFormula.set(r.formula_id, []);
+    if (!excelByFormula.has(r.formula_id)) {
+      excelByFormula.set(r.formula_id, []);
+      produtoChaveByFormula.set(r.formula_id, r.produto_chave ?? null);
+    }
     excelByFormula.get(r.formula_id)!.push({ cod_mp_excel: r.cod_mp_excel, percentual: r.percentual });
   }
 
@@ -244,19 +297,27 @@ export async function conferirTodasFormulas(
     if (!tidItens || tidItens.length === 0) {
       resultado.semFórmulaTid++;
     } else {
-      // Contar MPs sem de-para
+      // Detectar variante "-1" a partir do produto_chave da fórmula
+      const produtoChave = produtoChaveByFormula.get(fid) ?? null;
+      const isVariante   = produtoChave?.endsWith('-1') ?? false;
+      const subs         = isVariante ? SUBSTITUICOES_VARIANTE : [];
+
+      // Contar MPs sem de-para; traduzir TID → cod_excel normalizando substituições
       let nSemDepara = 0;
       const translated: { cod_excel: string; percentual: number }[] = [];
       for (const item of tidItens) {
         const excels = tidToExcel.get(item.cod_mp);
         if (!excels || excels.length === 0 || excels.length > 1) { nSemDepara++; }
-        else { translated.push({ cod_excel: excels[0], percentual: item.percentual }); }
+        else { translated.push({ cod_excel: substituirCodigo(excels[0], subs), percentual: item.percentual }); }
       }
 
       if (nSemDepara > 0) {
         resultado.semDepara.push({ formula_id: fid, status: 'sem_depara', nDiffs: 0, nMpsSemDepara: nSemDepara });
       } else {
-        const excelMap = new Map(excelItens.map((e) => [e.cod_mp_excel, e.percentual * 100]));
+        // Normalizar códigos do Excel pelo mesmo mapa de substituição
+        const excelMap = new Map(
+          excelItens.map((e) => [substituirCodigo(e.cod_mp_excel, subs), e.percentual * 100])
+        );
         const tidMap   = new Map(translated.map((t) => [t.cod_excel, t.percentual]));
         const allCodes = new Set([...tidMap.keys(), ...excelMap.keys()]);
         let nDiffs = 0;

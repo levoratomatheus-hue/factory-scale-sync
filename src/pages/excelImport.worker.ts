@@ -106,7 +106,20 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
     const formulaItems: FormulaExcelRow[] = [];
     const formulaIdCount = new Map<string, number>();
 
-    type State = 'SCAN' | 'IN_ITEMS' | 'AWAIT_CLASSE' | 'IN_PRODUCTS';
+    /**
+     * Máquina de estados estritamente delimitada por bloco:
+     *
+     *   IN_ITEMS    — coleta itens desde MATÉRIA PRIMA (exclusive) até Totalizador (exclusive)
+     *   IN_PRODUCTS — coleta formula_ids (col U) desde Totalizador (exclusive) até o
+     *                 próximo MATÉRIA PRIMA (exclusive)
+     *
+     * Ao encontrar MATÉRIA PRIMA: fecha o bloco atual (flush) e inicia um novo.
+     * Se blockItems ou blockProducts estiver vazio ao fechar, os dados pendentes são
+     * descartados — nunca "vaza" item de um bloco para o formula_id de outro.
+     * O cabeçalho CLASSE (e qualquer outra linha sem col U preenchida em IN_PRODUCTS)
+     * é ignorado naturalmente sem precisar de estado extra.
+     */
+    type State = 'SCAN' | 'IN_ITEMS' | 'IN_PRODUCTS';
     let state: State = 'SCAN';
     let blockItems: { cod_mp_excel: string; materia_prima: string; percentual: number }[] = [];
     let blockProducts: { fid: string; produto_chave: string }[] = [];
@@ -117,11 +130,11 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
         formulaIdCount.set(fid, (formulaIdCount.get(fid) ?? 0) + 1);
         for (let si = 0; si < blockItems.length; si++) {
           formulaItems.push({
-            formula_id: fid,
-            sequencia:  si + 1,
-            cod_mp_excel: blockItems[si].cod_mp_excel,
+            formula_id:    fid,
+            sequencia:     si + 1,
+            cod_mp_excel:  blockItems[si].cod_mp_excel,
             materia_prima: blockItems[si].materia_prima,
-            percentual: blockItems[si].percentual,
+            percentual:    blockItems[si].percentual,
             produto_chave,
           });
         }
@@ -140,29 +153,28 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
       const row = formRaws[ri];
       const colB = String(row[1] ?? '').trim();
 
+      // ── MATÉRIA PRIMA: fecha bloco anterior e abre novo ─────────────────────
       if (colB === 'MATÉRIA PRIMA') {
-        if (state === 'IN_PRODUCTS') flushBlock();
-        blockItems   = [];
+        flushBlock();           // fecha bloco anterior (noop se itens ou produtos vazios)
+        blockItems    = [];     // descarta qualquer item ou produto não pareado
         blockProducts = [];
         state = 'IN_ITEMS';
         continue;
       }
 
+      // ── IN_ITEMS: coleta MPs até o Totalizador ───────────────────────────────
       if (state === 'IN_ITEMS') {
-        if (colB === 'Totalizador') { state = 'AWAIT_CLASSE'; continue; }
+        if (colB === 'Totalizador') { state = 'IN_PRODUCTS'; continue; }
         const colA = String(row[0] ?? '').trim();
-        if (isBlankOrError(colA)) continue;
+        if (isBlankOrError(colA)) continue;    // linha em branco — ignora sem quebrar bloco
         const percentual = parseFloat(String(row[8] ?? '0'));
         if (isNaN(percentual)) continue;
         blockItems.push({ cod_mp_excel: normalizeCode(colA), materia_prima: colB, percentual });
         continue;
       }
 
-      if (state === 'AWAIT_CLASSE') {
-        if (colB === 'CLASSE') state = 'IN_PRODUCTS';
-        continue;
-      }
-
+      // ── IN_PRODUCTS: coleta formula_ids (col U) até o próximo MATÉRIA PRIMA ─
+      // Linhas sem col U (ex.: cabeçalho CLASSE, linhas em branco) são ignoradas.
       if (state === 'IN_PRODUCTS') {
         const colU = String(row[20] ?? '').trim();
         if (isBlankOrError(colU)) continue;
@@ -173,7 +185,8 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
       }
     }
 
-    if (state === 'IN_PRODUCTS') flushBlock();
+    // Fecha o último bloco da planilha
+    flushBlock();
 
     // ── Resumo e alertas ──────────────────────────────────────────────────────
     progress(56, 'Calculando resumo…');

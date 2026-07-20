@@ -29,12 +29,24 @@ export function ComparatorPanel({ resultado, loading, tabelaCompleta }: Comparat
 
   if (!resultado) return null;
 
-  const { status, itens, nDiffs, mpsSemDepara, produtoChaveExcel } = resultado;
+  const { status, itens, nDiffs, mpsSemDepara, produtoChaveExcel, isVariante, substituicoesAplicadas } = resultado;
 
   const chaveHeader = tabelaCompleta && produtoChaveExcel ? (
     <p className="text-xs text-muted-foreground">
       Chave Excel:{' '}
       <span className="font-mono font-medium text-foreground">{produtoChaveExcel}</span>
+    </p>
+  ) : null;
+
+  // Nota exibida quando substituições de variante "-1" foram aplicadas
+  const notaVariante = isVariante && substituicoesAplicadas.length > 0 ? (
+    <p className="text-xs text-blue-600 dark:text-blue-400">
+      Variante -1:{' '}
+      {substituicoesAplicadas.map((s) => (
+        <span key={s.de}>
+          {s.desc} ({s.de} considerado como {s.para})
+        </span>
+      ))}
     </p>
   ) : null;
 
@@ -73,6 +85,11 @@ export function ComparatorPanel({ resultado, loading, tabelaCompleta }: Comparat
               </li>
             ))}
           </ul>
+          {isVariante && (
+            <p className="px-3 py-2 border-t border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-400">
+              Variante -1 detectada: verifique se 500319 (PEBD recuperado) tem Cod TID preenchido em mp_depara.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -94,6 +111,7 @@ export function ComparatorPanel({ resultado, loading, tabelaCompleta }: Comparat
   return (
     <div className="space-y-1.5">
       {chaveHeader}
+      {notaVariante}
       <div
         className={`rounded-md border overflow-hidden ${
           isDivergente
