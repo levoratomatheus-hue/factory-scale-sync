@@ -152,9 +152,16 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
 
       const row = formRaws[ri];
       const colB = String(row[1] ?? '').trim();
+      const colH = String(row[7] ?? '').trim(); // col H (índice 7)
 
-      // ── MATÉRIA PRIMA: fecha bloco anterior e abre novo ─────────────────────
-      if (colB === 'MATÉRIA PRIMA') {
+      // ── Início de bloco: dois formatos de cabeçalho reconhecidos ────────────
+      //   Formato 1: col B = "MATÉRIA PRIMA"
+      //   Formato 2: col B vazia e col H = "VALOR MP"  (layout alternativo)
+      const isBlockHeader =
+        colB === 'MATÉRIA PRIMA' ||
+        (colB === '' && colH === 'VALOR MP');
+
+      if (isBlockHeader) {
         flushBlock();           // fecha bloco anterior (noop se itens ou produtos vazios)
         blockItems    = [];     // descarta qualquer item ou produto não pareado
         blockProducts = [];
