@@ -107,18 +107,31 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
     const formulaIdCount = new Map<string, number>();
 
     /**
-     * Máquina de estados estritamente delimitada por bloco:
+     * Máquina de estados baseada em CONTEÚDO — não em cabeçalho de bloco.
      *
-     *   IN_ITEMS    — coleta itens desde MATÉRIA PRIMA (exclusive) até Totalizador (exclusive)
-     *   IN_PRODUCTS — coleta formula_ids (col U) desde Totalizador (exclusive) até o
-     *                 próximo MATÉRIA PRIMA (exclusive)
+     * Estados:
+     *   IN_ITEMS    — coletando itens de fórmula (col A = código, col I = %)
+     *   IN_PRODUCTS — coletando formula_ids (col U) após Totalizador
      *
-     * Ao encontrar MATÉRIA PRIMA: fecha o bloco atual (flush) e inicia um novo.
-     * Se blockItems ou blockProducts estiver vazio ao fechar, os dados pendentes são
-     * descartados — nunca "vaza" item de um bloco para o formula_id de outro.
-     * O cabeçalho CLASSE (e qualquer outra linha sem col U preenchida em IN_PRODUCTS)
-     * é ignorado naturalmente sem precisar de estado extra.
+     * Início de bloco: qualquer linha que seja "item de fórmula" enquanto NÃO
+     * estamos em IN_ITEMS.  Não depende de cabeçalho MATÉRIA PRIMA / VALOR MP
+     * — esses cabeçalhos continuam sendo reconhecidos (estão em MARCADORES) mas
+     * não são mais o único gatilho de início de bloco.
+     *
+     * Item de fórmula = linha com:
+     *   • código não-vazio em col A
+     *   • percentual numérico em col I
+     *   • col B ≠ marcador estrutural (MATÉRIA PRIMA, Totalizador, CLASSE, etc.)
+     *
+     * Fim de bloco de itens: linha Totalizador → passa para IN_PRODUCTS.
+     * Fim de bloco de produtos: primeira linha de item do próximo bloco → flush.
      */
+
+    // Palavras em col B que identificam linhas estruturais, não itens reais.
+    const MARCADORES = new Set([
+      'MATÉRIA PRIMA', 'Totalizador', 'CLASSE', 'Digitado', 'Veic',
+    ]);
+
     type State = 'SCAN' | 'IN_ITEMS' | 'IN_PRODUCTS';
     let state: State = 'SCAN';
     let blockItems: { cod_mp_excel: string; materia_prima: string; percentual: number }[] = [];
@@ -150,45 +163,45 @@ self.onmessage = (e: MessageEvent<ArrayBuffer>) => {
         progress(25 + Math.round((ri / totalRows) * 30), `Parseando fórmulas… (${ri}/${totalRows})`);
       }
 
-      const row = formRaws[ri];
-      const colB = String(row[1] ?? '').trim();
-      const colH = String(row[7] ?? '').trim(); // col H (índice 7)
+      const row    = formRaws[ri];
+      const colA   = String(row[0]  ?? '').trim();
+      const colB   = String(row[1]  ?? '').trim();
+      const colU   = String(row[20] ?? '').trim();
 
-      // ── Início de bloco: dois formatos de cabeçalho reconhecidos ────────────
-      //   Formato 1: col B = "MATÉRIA PRIMA"
-      //   Formato 2: col B vazia e col H = "VALOR MP"  (layout alternativo)
-      const isBlockHeader =
-        colB === 'MATÉRIA PRIMA' ||
-        (colB === '' && colH === 'VALOR MP');
-
-      if (isBlockHeader) {
-        flushBlock();           // fecha bloco anterior (noop se itens ou produtos vazios)
-        blockItems    = [];     // descarta qualquer item ou produto não pareado
-        blockProducts = [];
-        state = 'IN_ITEMS';
+      // ── Totalizador: encerra coleta de itens, abre coleta de formula_ids ────
+      if (colB === 'Totalizador') {
+        if (state === 'IN_ITEMS') state = 'IN_PRODUCTS';
         continue;
       }
 
-      // ── IN_ITEMS: coleta MPs até o Totalizador ───────────────────────────────
-      if (state === 'IN_ITEMS') {
-        if (colB === 'Totalizador') { state = 'IN_PRODUCTS'; continue; }
-        const colA = String(row[0] ?? '').trim();
-        if (isBlankOrError(colA)) continue;    // linha em branco — ignora sem quebrar bloco
-        const percentual = parseFloat(String(row[8] ?? '0'));
-        if (isNaN(percentual)) continue;
+      // ── Detectar linha de item de fórmula (baseado em conteúdo) ─────────────
+      // Critério: col A preenchida + percentual numérico em col I + col B não
+      // é marcador estrutural.  Cabeçalhos (MATÉRIA PRIMA, VALOR MP, etc.) não
+      // chegam aqui porque têm col A vazia ou col B em MARCADORES.
+      const percentual = parseFloat(String(row[8] ?? ''));
+      const isItemLine = !isNaN(percentual) && !isBlankOrError(colA) && !MARCADORES.has(colB);
+
+      if (isItemLine) {
+        // Primeira linha de item fora de IN_ITEMS → novo bloco começa aqui.
+        // Fecha o bloco anterior (itens + produtos já coletados) antes de abrir.
+        if (state !== 'IN_ITEMS') {
+          flushBlock();
+          blockItems    = [];
+          blockProducts = [];
+        }
+        state = 'IN_ITEMS';
         blockItems.push({ cod_mp_excel: normalizeCode(colA), materia_prima: colB, percentual });
         continue;
       }
 
-      // ── IN_PRODUCTS: coleta formula_ids (col U) até o próximo MATÉRIA PRIMA ─
-      // Linhas sem col U (ex.: cabeçalho CLASSE, linhas em branco) são ignoradas.
-      if (state === 'IN_PRODUCTS') {
-        const colU = String(row[20] ?? '').trim();
-        if (isBlankOrError(colU)) continue;
+      // ── Coletar formula_id (col U) entre Totalizador e próximo bloco ────────
+      // Linhas sem col U (cabeçalhos, linhas em branco) são ignoradas.
+      if (state === 'IN_PRODUCTS' && !isBlankOrError(colU)) {
         const fid = normalizeCode(colU);
-        if (!fid || fid === '0') continue;
-        const produto_chave = String(row[18] ?? '').trim(); // col S
-        blockProducts.push({ fid, produto_chave });
+        if (fid && fid !== '0') {
+          const produto_chave = String(row[18] ?? '').trim(); // col S
+          blockProducts.push({ fid, produto_chave });
+        }
       }
     }
 
