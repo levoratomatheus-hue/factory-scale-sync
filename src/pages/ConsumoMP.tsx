@@ -31,6 +31,7 @@ interface ConsumoMpRow {
 
 interface TotalPorMp {
   cod_mp_excel: string;
+  cod_tid: string | null;
   materia_prima: string;
   total_kg: number;
   num_retiradas: number;
@@ -87,6 +88,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [dataFim, setDataFim] = useState(toInputDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)));
   const [relatorio, setRelatorio] = useState<ConsumoMpRow[]>([]);
   const [carregandoRel, setCarregandoRel] = useState(false);
+  // mapa cod_excel → cod_tid, carregado uma vez
+  const [deparaMap, setDeparaMap] = useState<Map<string, string | null>>(new Map());
 
   // ── Autocomplete ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -163,6 +166,19 @@ export default function ConsumoMP({ perfilNome }: Props) {
     fetchRetiradas();
   };
 
+  // ── Carregar mapa cod_excel → cod_tid (uma vez) ──────────────────────────
+  useEffect(() => {
+    supabase
+      .from('mp_depara')
+      .select('cod_excel, cod_tid')
+      .then(({ data }) => {
+        if (!data) return;
+        const m = new Map<string, string | null>();
+        for (const row of data) m.set(row.cod_excel, (row as { cod_excel: string; cod_tid: string | null }).cod_tid ?? null);
+        setDeparaMap(m);
+      });
+  }, []);
+
   // ── Relatório ─────────────────────────────────────────────────────────────
   const fetchRelatorio = useCallback(async () => {
     setCarregandoRel(true);
@@ -184,7 +200,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
     for (const r of relatorio) {
       const key = r.cod_mp_excel;
       if (!map.has(key)) {
-        map.set(key, { cod_mp_excel: r.cod_mp_excel, materia_prima: r.materia_prima, total_kg: 0, num_retiradas: 0 });
+        map.set(key, {
+          cod_mp_excel: r.cod_mp_excel,
+          cod_tid: deparaMap.get(r.cod_mp_excel) ?? null,
+          materia_prima: r.materia_prima,
+          total_kg: 0,
+          num_retiradas: 0,
+        });
       }
       const entry = map.get(key)!;
       entry.total_kg += r.quantidade_kg;
@@ -208,10 +230,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
   // ── Exportar CSV ──────────────────────────────────────────────────────────
   const exportarCSV = () => {
     const rows = [
-      ['Data', 'Cód. MP', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
+      ['Data', 'Cód. Excel', 'Cód. TID', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
       ...relatorio.map(r => [
         fmt(r.data_retirada),
         r.cod_mp_excel,
+        deparaMap.get(r.cod_mp_excel) ?? '',
         r.materia_prima,
         String(r.quantidade_kg).replace('.', ','),
         r.retirado_por,
@@ -472,7 +495,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           <thead>
                             <tr className="border-b text-muted-foreground text-xs">
                               <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
-                              <th className="text-left pb-2 pr-3 font-medium">Código</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                               <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
                               <th className="text-right pb-2 font-medium">Nº retiradas</th>
                             </tr>
@@ -482,6 +506,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                               <tr key={t.cod_mp_excel} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
                                 <td className="py-2 pr-3">{t.materia_prima}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
                                 <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
                                 <td className="py-2 text-right text-muted-foreground">{t.num_retiradas}</td>
                               </tr>
@@ -504,6 +529,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
                             <tr className="border-b text-muted-foreground text-xs">
                               <th className="text-left pb-2 pr-3 font-medium">Data</th>
                               <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                               <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
                               <th className="text-left pb-2 pr-3 font-medium">Retirado por</th>
                               <th className="text-left pb-2 font-medium">Observação</th>
@@ -513,15 +540,12 @@ export default function ConsumoMP({ perfilNome }: Props) {
                             {relatorio.map(r => (
                               <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                                 <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
-                                <td className="py-2 pr-3">
-                                  <div className="leading-tight">
-                                    <span>{r.materia_prima}</span>
-                                    <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{r.cod_mp_excel}</span>
-                                  </div>
-                                </td>
+                                <td className="py-2 pr-3">{r.materia_prima}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{deparaMap.get(r.cod_mp_excel) ?? '—'}</td>
                                 <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
                                 <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
-                                <td className="py-2 text-xs text-muted-foreground max-w-[200px] truncate">{r.observacao ?? '—'}</td>
+                                <td className="py-2 text-xs text-muted-foreground max-w-[180px] truncate">{r.observacao ?? '—'}</td>
                               </tr>
                             ))}
                           </tbody>
