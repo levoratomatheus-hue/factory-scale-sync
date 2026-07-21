@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      consumo_mp: {
+        Row: {
+          id: string
+          cod_mp_excel: string
+          materia_prima: string
+          quantidade_kg: number
+          data_retirada: string
+          observacao: string | null
+          retirado_por: string
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          cod_mp_excel: string
+          materia_prima: string
+          quantidade_kg: number
+          data_retirada?: string
+          observacao?: string | null
+          retirado_por: string
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          cod_mp_excel?: string
+          materia_prima?: string
+          quantidade_kg?: number
+          data_retirada?: string
+          observacao?: string | null
+          retirado_por?: string
+          criado_em?: string
+        }
+        Relationships: []
+      }
       cadastro_lotes: {
         Row: {
           classe: string | null

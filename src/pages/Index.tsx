@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2 } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -24,6 +24,7 @@ const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao'));
 const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
 const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
+const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -54,7 +55,8 @@ type TabGestorId =
   | 'consulta_formula'
   | 'comercial'
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
-  | 'historico_paradas';
+  | 'historico_paradas'
+  | 'consumo_mp';
 
 const gruposGestor = [
   {
@@ -136,16 +138,18 @@ function resolveLinhaNumber(balanca: string | null): number | null {
 }
 
 const avatarColor: Record<string, string> = {
-  gestor:    '#2563eb',
-  operador:  '#16a34a',
-  tecnico:   '#ea580c',
-  comercial: '#7c3aed',
+  gestor:       '#2563eb',
+  operador:     '#16a34a',
+  tecnico:      '#ea580c',
+  comercial:    '#7c3aed',
+  desenvolvimento: '#0891b2',
 };
 const papelLabel: Record<string, string> = {
-  gestor:    'Gestor',
-  operador:  'Operador',
-  tecnico:   'Técnico',
-  comercial: 'Comercial',
+  gestor:       'Gestor',
+  operador:     'Operador',
+  tecnico:      'Técnico',
+  comercial:    'Comercial',
+  desenvolvimento: 'Desenvolvimento',
 };
 
 // Abas que ficam no DOM após a primeira visita (keep-alive).
@@ -158,6 +162,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
   'estoque_manutencao', 'ferramentas_manutencao',
   'historico_paradas',
+  'consumo_mp',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -235,8 +240,10 @@ export default function Index() {
 
   const activeLabel = useMemo(() => activeTab === null
     ? ''
-    : ([...gruposGestor.flatMap((g) => g.items), ...manutencaoItems, { id: 'comercial' as TabGestorId, label: 'Painel Comercial' }]
-        .find((i) => i.id === activeTab)?.label ?? ''),
+    : ([...gruposGestor.flatMap((g) => g.items), ...manutencaoItems,
+        { id: 'comercial' as TabGestorId, label: 'Painel Comercial' },
+        { id: 'consumo_mp' as TabGestorId, label: 'Consumo de MP' },
+      ].find((i) => i.id === activeTab)?.label ?? ''),
   [activeTab]);
 
   // Acumula as abas visitadas — deve ficar antes dos early returns
@@ -478,6 +485,77 @@ export default function Index() {
     );
   }
 
+  if (perfil.papel === 'desenvolvimento') {
+    return (
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="border-b">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton size="lg" tooltip="Consumo de MP">
+                  <TestTube2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                  <div className="flex flex-col leading-tight min-w-0">
+                    <span className="font-bold text-sm truncate">Consumo de MP</span>
+                    <span className="text-xs text-muted-foreground truncate">{perfil.nome}</span>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase px-2">
+                <TestTube2 className="h-3 w-3 shrink-0" />
+                Laboratório
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton isActive tooltip="Consumo de MP" size="sm">
+                      <TestTube2 className="h-3.5 w-3.5 shrink-0" />
+                      <span>Consumo de MP</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter className="border-t">
+            <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} onClick={toggleTheme}>
+                  {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                  <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Sair" onClick={logout}>
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span>Sair</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset className="overflow-x-hidden">
+          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
+            <SidebarTrigger />
+            <span className="font-semibold text-sm">Consumo de MP</span>
+            <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
+          </header>
+          <main className="p-3 sm:p-6 overflow-x-hidden">
+            <ErrorBoundary>
+              <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+                <ConsumoMP perfilNome={perfil.nome} />
+              </Suspense>
+            </ErrorBoundary>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    );
+  }
+
   // Gestor — acesso completo
   return (
     <SidebarProvider>
@@ -610,6 +688,36 @@ export default function Index() {
                   >
                     <Briefcase className="h-3.5 w-3.5 shrink-0" />
                     <span>Painel Comercial</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+            )}
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <button
+              onClick={() => toggleGroup('laboratorio')}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex items-center gap-1.5">
+                <TestTube2 className="h-3 w-3 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">Laboratório</span>
+              </span>
+              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('laboratorio') && '-rotate-90')} />
+            </button>
+            {openGroups.has('laboratorio') && (
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'consumo_mp'}
+                    tooltip="Consumo de MP"
+                    onClick={() => goToTab('consumo_mp')}
+                    size="sm"
+                  >
+                    <TestTube2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Consumo de MP</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -781,6 +889,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'historico_paradas'}>
                   <Suspense fallback={TAB_LOADING}>
                     <HistoricoParadas papel={perfil.papel} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('consumo_mp') && (
+                <KeepAlive active={activeTab === 'consumo_mp'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <ConsumoMP perfilNome={perfil.nome} />
                   </Suspense>
                 </KeepAlive>
               )}
