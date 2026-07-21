@@ -490,36 +490,46 @@ export default function Index() {
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton size="lg" tooltip="Consumo de MP">
-                  <TestTube2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400 shrink-0" />
-                  <div className="flex flex-col leading-tight min-w-0">
-                    <span className="font-bold text-sm truncate">Consumo de MP</span>
-                    <span className="text-xs text-muted-foreground truncate">{perfil.nome}</span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <div className="flex items-center px-3 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+              <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span className="ml-1.5 text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 group-data-[collapsible=icon]:hidden">
+                Gestão Industrial
+              </span>
+            </div>
           </SidebarHeader>
+
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase px-2">
-                <TestTube2 className="h-3 w-3 shrink-0" />
-                Laboratório
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton isActive tooltip="Consumo de MP" size="sm">
-                      <TestTube2 className="h-3.5 w-3.5 shrink-0" />
-                      <span>Consumo de MP</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
+              <button
+                onClick={() => toggleGroup('laboratorio')}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              >
+                <span className="flex items-center gap-1.5">
+                  <TestTube2 className="h-3 w-3 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden">Laboratório</span>
+                </span>
+                <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('laboratorio') && '-rotate-90')} />
+              </button>
+              {openGroups.has('laboratorio') && (
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'consumo_mp'}
+                        tooltip="Consumo de MP"
+                        onClick={() => goToTab('consumo_mp')}
+                        size="sm"
+                      >
+                        <TestTube2 className="h-3.5 w-3.5 shrink-0" />
+                        <span>Consumo de MP</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              )}
             </SidebarGroup>
           </SidebarContent>
+
           <SidebarFooter className="border-t">
             <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
             <SidebarMenu>
@@ -538,19 +548,25 @@ export default function Index() {
             </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset className="overflow-x-hidden">
-          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
+
+        <SidebarInset className="overflow-x-hidden flex flex-col">
+          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
             <SidebarTrigger />
-            <span className="font-semibold text-sm">Consumo de MP</span>
-            <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
+            {activeTab === 'consumo_mp' && <span className="font-semibold text-sm">Consumo de MP</span>}
           </header>
-          <main className="p-3 sm:p-6 overflow-x-hidden">
-            <ErrorBoundary>
-              <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-                <ConsumoMP perfilNome={perfil.nome} />
-              </Suspense>
-            </ErrorBoundary>
-          </main>
+          {activeTab !== 'consumo_mp' ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+              Selecione uma opção no menu
+            </div>
+          ) : (
+            <main className="p-3 sm:p-6 overflow-x-hidden">
+              <ErrorBoundary>
+                <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+                  <ConsumoMP perfilNome={perfil.nome} />
+                </Suspense>
+              </ErrorBoundary>
+            </main>
+          )}
         </SidebarInset>
       </SidebarProvider>
     );
