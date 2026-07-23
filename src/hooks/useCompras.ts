@@ -25,12 +25,12 @@ export type LinhaPrevisao = LinhaMP & {
 };
 
 export type AvisoCobertura = {
-  sem_formula: number;
-  sem_batelada: number;
-  sem_itens: number;
+  sem_formula: number;      // OPs sem formula_id cadastrado
+  sem_itens: number;        // OPs cujo formula_id não tem linhas na tabela formulas
   total_ops: number;
   ops_calculadas: number;
-  fallback_quantidade: number;
+  kg_excluidos: number;     // kg (qtd_op) das OPs que ficaram fora do cálculo
+  fallback_quantidade: number; // OPs que usaram quantidade no lugar de quantidade_real
 };
 
 export type ResultadoCompras = {
@@ -64,19 +64,6 @@ const STATUS_NAO_INICIADA = new Set([
 
 // ── Batch helpers ─────────────────────────────────────────────────────────────
 
-async function fetchOrdensFormulaBatch(ids: string[]): Promise<any[]> {
-  const rows: any[] = [];
-  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    const chunk = ids.slice(i, i + BATCH_SIZE);
-    const { data } = await (supabase as any)
-      .from("ordens_formula")
-      .select("ordem_id, sequencia, materia_prima, quantidade_kg")
-      .in("ordem_id", chunk);
-    if (data) rows.push(...data);
-  }
-  return rows;
-}
-
 async function fetchFormulasBatch(formulaIds: string[]): Promise<any[]> {
   const unique = [...new Set(formulaIds)];
   const rows: any[] = [];
@@ -84,7 +71,7 @@ async function fetchFormulasBatch(formulaIds: string[]): Promise<any[]> {
     const chunk = unique.slice(i, i + BATCH_SIZE);
     const { data } = await supabase
       .from("formulas")
-      .select("id, formula_id, produto, sequencia, materia_prima, fornecedor, unidade, percentual")
+      .select("formula_id, materia_prima, percentual")
       .in("formula_id", chunk);
     if (data) rows.push(...data);
   }
@@ -98,7 +85,6 @@ type OrdemInput = {
   lote: number;
   produto: string;
   formula_id: string | null;
-  tamanho_batelada: number | null;
   qtd_op: number;
   data: string;
   status?: string;
@@ -109,75 +95,43 @@ type CalcResult = {
   aviso: AvisoCobertura;
 };
 
+// Usa sempre e somente a fórmula base (tabela formulas, via formula_id).
+// os percentuais somam 100%, então a soma das MPs de uma OP = quantidade da OP.
 function calcularCompras(
   ordens: OrdemInput[],
-  ordensFormulaRows: any[],
   formulasRows: any[],
   withStatus: boolean,
 ): CalcResult {
-  // Index ordens_formula by ordem_id
-  const ofIndex = new Map<string, any[]>();
-  for (const r of ordensFormulaRows) {
-    const key = r.ordem_id;
-    if (!ofIndex.has(key)) ofIndex.set(key, []);
-    ofIndex.get(key)!.push(r);
-  }
-
   // Index formulas by formula_id
-  const fIndex = new Map<string, any[]>();
+  const fIndex = new Map<string, Array<{ materia_prima: string; fracao: number }>>();
   for (const r of formulasRows) {
     const key = r.formula_id;
     if (!fIndex.has(key)) fIndex.set(key, []);
-    fIndex.get(key)!.push(r);
+    fIndex.get(key)!.push({ materia_prima: r.materia_prima, fracao: (r.percentual ?? 0) / 100 });
   }
 
   const aviso: AvisoCobertura = {
     sem_formula: 0,
-    sem_batelada: 0,
     sem_itens: 0,
     total_ops: ordens.length,
     ops_calculadas: 0,
+    kg_excluidos: 0,
     fallback_quantidade: 0,
   };
 
   const linhasMap = new Map<string, { total_kg: number; n_ops: number; ops: OpDetalhe[]; em_producao_kg: number; nao_iniciada_kg: number }>();
 
   for (const op of ordens) {
-    // Must have formula_id
     if (!op.formula_id) {
       aviso.sem_formula++;
+      aviso.kg_excluidos += op.qtd_op;
       continue;
     }
 
-    const ofItems = ofIndex.get(op.id);
-    let items: Array<{ materia_prima: string; fracao: number }> | null = null;
-
-    if (ofItems && ofItems.length > 0) {
-      // Use ordens_formula items
-      const batelada = op.tamanho_batelada;
-      if (!batelada || batelada === 0) {
-        aviso.sem_batelada++;
-        continue;
-      }
-      items = ofItems.map((r: any) => ({
-        materia_prima: r.materia_prima,
-        fracao: (r.quantidade_kg ?? 0) / batelada,
-      }));
-    } else {
-      // Fall back to formulas table
-      const fItems = fIndex.get(op.formula_id);
-      if (!fItems || fItems.length === 0) {
-        aviso.sem_itens++;
-        continue;
-      }
-      items = fItems.map((r: any) => ({
-        materia_prima: r.materia_prima,
-        fracao: (r.percentual ?? 0) / 100,
-      }));
-    }
-
+    const items = fIndex.get(op.formula_id);
     if (!items || items.length === 0) {
       aviso.sem_itens++;
+      aviso.kg_excluidos += op.qtd_op;
       continue;
     }
 
@@ -198,22 +152,12 @@ function calcularCompras(
       entry.em_producao_kg += isEmProducao ? kg_mp : 0;
       entry.nao_iniciada_kg += isNaoIniciada ? kg_mp : 0;
 
-      // Add OP detail only once per MP (track which ops already added)
       const alreadyAdded = entry.ops.some((o) => o.id === op.id);
       if (!alreadyAdded) {
         entry.n_ops++;
-        entry.ops.push({
-          id: op.id,
-          lote: op.lote,
-          produto: op.produto,
-          data: op.data,
-          kg_mp,
-          status: op.status,
-        });
+        entry.ops.push({ id: op.id, lote: op.lote, produto: op.produto, data: op.data, kg_mp, status: op.status });
       } else {
-        // Update kg_mp for existing entry
-        const existing = entry.ops.find((o) => o.id === op.id)!;
-        existing.kg_mp += kg_mp;
+        entry.ops.find((o) => o.id === op.id)!.kg_mp += kg_mp;
       }
     }
   }
@@ -234,75 +178,45 @@ export function useComprasConsumo(
   const refetch = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch ordens concluidas no período
       const { data: ordensData } = await (supabase as any)
         .from("ordens")
-        .select("id, lote, produto, quantidade, quantidade_real, tamanho_batelada, formula_id, marca, linha, data_conclusao")
+        .select("id, lote, produto, quantidade, quantidade_real, formula_id, marca, linha, data_conclusao")
         .eq("status", "concluido")
         .gte("data_conclusao", dataInicio)
         .lte("data_conclusao", dataFim)
         .limit(2000);
 
-      if (!ordensData) {
-        setResultado(null);
-        return;
-      }
+      if (!ordensData) { setResultado(null); return; }
 
-      // Apply client-side filters
       let ordens = ordensData as any[];
-      if (filtros?.linha) {
-        ordens = ordens.filter((o) => Number(o.linha) === filtros.linha);
-      }
-      if (filtros?.marca && filtros.marca !== "") {
-        ordens = ordens.filter((o) => o.marca === filtros.marca);
-      }
+      if (filtros?.linha) ordens = ordens.filter((o) => Number(o.linha) === filtros.linha);
+      if (filtros?.marca) ordens = ordens.filter((o) => o.marca === filtros.marca);
 
-      // Count fallback_quantidade
       let fallback_quantidade = 0;
-
       const ordensMapped: OrdemInput[] = ordens.map((o) => {
         const qtd_real = o.quantidade_real;
         let qtd_op: number;
-        if (qtd_real != null && qtd_real !== 0) {
+        if (qtd_real != null && qtd_real > 0) {
           qtd_op = qtd_real;
         } else {
           qtd_op = o.quantidade ?? 0;
-          if (qtd_real == null || qtd_real === 0) fallback_quantidade++;
+          fallback_quantidade++;
         }
-        return {
-          id: o.id,
-          lote: Number(o.lote),
-          produto: o.produto,
-          formula_id: o.formula_id ?? null,
-          tamanho_batelada: o.tamanho_batelada ?? null,
-          qtd_op,
-          data: o.data_conclusao ?? "",
-          status: undefined,
-        };
+        return { id: o.id, lote: Number(o.lote), produto: o.produto, formula_id: o.formula_id ?? null, qtd_op, data: o.data_conclusao ?? "" };
       });
 
-      const ids = ordensMapped.map((o) => o.id);
-      const [ofRows, fRows] = await Promise.all([
-        fetchOrdensFormulaBatch(ids),
-        fetchFormulasBatch(ordensMapped.filter((o) => o.formula_id).map((o) => o.formula_id!)),
-      ]);
+      const fRows = await fetchFormulasBatch(
+        ordensMapped.filter((o) => o.formula_id).map((o) => o.formula_id!),
+      );
 
-      const { linhasMap, aviso } = calcularCompras(ordensMapped, ofRows, fRows, false);
+      const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, false);
       aviso.fallback_quantidade = fallback_quantidade;
 
-      // Build sorted linhas
       const linhas: LinhaMP[] = Array.from(linhasMap.entries())
-        .map(([mp, v]) => ({
-          materia_prima: mp,
-          total_kg: v.total_kg,
-          n_ops: v.n_ops,
-          ops: v.ops.sort((a, b) => b.kg_mp - a.kg_mp),
-        }))
+        .map(([mp, v]) => ({ materia_prima: mp, total_kg: v.total_kg, n_ops: v.n_ops, ops: v.ops.sort((a, b) => b.kg_mp - a.kg_mp) }))
         .sort((a, b) => b.total_kg - a.total_kg);
 
-      const total_kg = linhas.reduce((s, l) => s + l.total_kg, 0);
-
-      setResultado({ linhas, aviso, total_kg });
+      setResultado({ linhas, aviso, total_kg: linhas.reduce((s, l) => s + l.total_kg, 0) });
     } finally {
       setLoading(false);
     }
@@ -322,53 +236,32 @@ export function useComprasPrevisao(dataInicio: string, dataFim: string) {
     try {
       const { data: ordensData } = await (supabase as any)
         .from("ordens")
-        .select("id, lote, produto, quantidade, tamanho_batelada, formula_id, status, data_programacao")
+        .select("id, lote, produto, quantidade, formula_id, status, data_programacao")
         .neq("status", "concluido")
         .gte("data_programacao", dataInicio)
         .lte("data_programacao", dataFim)
         .limit(2000);
 
-      if (!ordensData) {
-        setResultado(null);
-        return;
-      }
+      if (!ordensData) { setResultado(null); return; }
 
       const ordens = ordensData as any[];
-
       const ordensMapped: OrdemInput[] = ordens.map((o) => ({
-        id: o.id,
-        lote: Number(o.lote),
-        produto: o.produto,
-        formula_id: o.formula_id ?? null,
-        tamanho_batelada: o.tamanho_batelada ?? null,
-        qtd_op: o.quantidade ?? 0,
-        data: o.data_programacao ?? "",
-        status: o.status ?? "",
+        id: o.id, lote: Number(o.lote), produto: o.produto,
+        formula_id: o.formula_id ?? null, qtd_op: o.quantidade ?? 0,
+        data: o.data_programacao ?? "", status: o.status ?? "",
       }));
 
-      const ids = ordensMapped.map((o) => o.id);
-      const [ofRows, fRows] = await Promise.all([
-        fetchOrdensFormulaBatch(ids),
-        fetchFormulasBatch(ordensMapped.filter((o) => o.formula_id).map((o) => o.formula_id!)),
-      ]);
+      const fRows = await fetchFormulasBatch(
+        ordensMapped.filter((o) => o.formula_id).map((o) => o.formula_id!),
+      );
 
-      const { linhasMap, aviso } = calcularCompras(ordensMapped, ofRows, fRows, true);
+      const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, true);
 
-      // Build sorted linhas
       const linhas: LinhaPrevisao[] = Array.from(linhasMap.entries())
-        .map(([mp, v]) => ({
-          materia_prima: mp,
-          total_kg: v.total_kg,
-          n_ops: v.n_ops,
-          ops: v.ops.sort((a, b) => b.kg_mp - a.kg_mp),
-          em_producao_kg: v.em_producao_kg,
-          nao_iniciada_kg: v.nao_iniciada_kg,
-        }))
+        .map(([mp, v]) => ({ materia_prima: mp, total_kg: v.total_kg, n_ops: v.n_ops, ops: v.ops.sort((a, b) => b.kg_mp - a.kg_mp), em_producao_kg: v.em_producao_kg, nao_iniciada_kg: v.nao_iniciada_kg }))
         .sort((a, b) => b.total_kg - a.total_kg);
 
-      const total_kg = linhas.reduce((s, l) => s + l.total_kg, 0);
-
-      setResultado({ linhas, aviso, total_kg });
+      setResultado({ linhas, aviso, total_kg: linhas.reduce((s, l) => s + l.total_kg, 0) });
     } finally {
       setLoading(false);
     }

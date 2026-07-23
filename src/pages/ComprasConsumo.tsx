@@ -285,9 +285,9 @@ export default function ComprasConsumo() {
   const aviso = resultado?.aviso;
   const temAviso = aviso && (
     aviso.sem_formula > 0 ||
-    aviso.sem_batelada > 0 ||
     aviso.sem_itens > 0 ||
-    aviso.fallback_quantidade > 0
+    aviso.fallback_quantidade > 0 ||
+    aviso.kg_excluidos > 0
   );
 
   return (
@@ -457,9 +457,9 @@ export default function ComprasConsumo() {
               <strong style={{ color: D.amber }}>Cobertura parcial:</strong>{" "}
               {aviso.ops_calculadas} de {aviso.total_ops} OPs consideradas no cálculo.
               {aviso.sem_formula > 0 && ` ${aviso.sem_formula} sem fórmula cadastrada.`}
-              {aviso.sem_batelada > 0 && ` ${aviso.sem_batelada} sem tamanho de batelada.`}
-              {aviso.sem_itens > 0 && ` ${aviso.sem_itens} sem itens na fórmula.`}
+              {aviso.sem_itens > 0 && ` ${aviso.sem_itens} com fórmula inexistente na tabela.`}
               {aviso.fallback_quantidade > 0 && ` ${aviso.fallback_quantidade} usaram quantidade no lugar de quantidade_real.`}
+              {aviso.kg_excluidos > 0 && ` Total excluído: ~${Math.round(aviso.kg_excluidos).toLocaleString("pt-BR")} kg.`}
             </div>
           </div>
         )}
