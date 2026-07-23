@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, memo, createContext, useContext } from "react";
-import { Loader2, Download, AlertTriangle, X, BarChart2 } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, memo, createContext, useContext, useRef } from "react";
+import { Loader2, Download, AlertTriangle, X, BarChart2, Search } from "lucide-react";
 import { formatKg } from "@/lib/utils";
 import { useComprasConsumo } from "@/hooks/useCompras";
 import type { LinhaMP, OpDetalhe } from "@/hooks/useCompras";
@@ -31,6 +31,13 @@ function makeCardStyle(d: Palette) {
     borderRadius: "0.75rem",
     padding: "1rem",
   };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Remove acentos e normaliza para busca case-insensitive sem acentuação */
+function normalize(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 // ── Atalhos ───────────────────────────────────────────────────────────────────
@@ -84,19 +91,26 @@ const ATALHOS: { id: Atalho; label: string }[] = [
 const SummaryCard = memo(function SummaryCard({
   label,
   value,
+  sub,
+  highlight,
 }: {
   label: string;
   value: string;
+  sub?: string;
+  highlight?: boolean;
 }) {
   const D = useContext(PaletteCtx);
   return (
-    <div style={makeCardStyle(D)}>
+    <div style={{ ...makeCardStyle(D), outline: highlight ? `2px solid ${D.cyan}` : "none" }}>
       <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
         {label}
       </p>
-      <p style={{ fontSize: 22, fontWeight: 700, color: D.text, margin: "0.25rem 0 0" }}>
+      <p style={{ fontSize: 22, fontWeight: 700, color: highlight ? D.cyan : D.text, margin: "0.25rem 0 0" }}>
         {value}
       </p>
+      {sub && (
+        <p style={{ fontSize: 11, color: D.muted, margin: "0.15rem 0 0" }}>{sub}</p>
+      )}
     </div>
   );
 });
@@ -251,6 +265,8 @@ export default function ComprasConsumo() {
   const [linhaFiltro, setLinhaFiltro] = useState<number>(0);
   const [marcaFiltro, setMarcaFiltro] = useState<string>("");
   const [modalLinha, setModalLinha] = useState<LinhaMP | null>(null);
+  const [buscaMP, setBuscaMP] = useState("");
+  const buscaRef = useRef<HTMLInputElement>(null);
 
   const filtros = useMemo(
     () => ({ linha: linhaFiltro || undefined, marca: marcaFiltro || undefined }),
@@ -264,6 +280,11 @@ export default function ComprasConsumo() {
     refetch();
   }, [refetch]);
 
+  // Reset busca when new data arrives
+  useEffect(() => {
+    setBuscaMP("");
+  }, [resultado]);
+
   const aplicarAtalho = useCallback((id: Atalho) => {
     setAtalhoAtivo(id);
     const { inicio, fim } = calcAtalho(id);
@@ -271,10 +292,29 @@ export default function ComprasConsumo() {
     setDataFim(fim);
   }, []);
 
+  // ── Filtered lines (in-memory, instant) ──────────────────────────────────────
+  const linhasFiltradas = useMemo(() => {
+    if (!resultado) return [];
+    const q = normalize(buscaMP.trim());
+    if (!q) return resultado.linhas;
+    return resultado.linhas.filter(
+      (l) =>
+        normalize(l.materia_prima).includes(q) ||
+        (l.cod_mp ? normalize(l.cod_mp).includes(q) : false),
+    );
+  }, [resultado, buscaMP]);
+
+  const buscaAtiva = buscaMP.trim().length > 0;
+
+  const totalFiltradoKg = useMemo(
+    () => linhasFiltradas.reduce((s, l) => s + l.total_kg, 0),
+    [linhasFiltradas],
+  );
+
   const exportarCSV = useCallback(() => {
-    if (!resultado) return;
+    if (linhasFiltradas.length === 0) return;
     const header = "Matéria-Prima;Cód. TID;Total kg";
-    const rows = resultado.linhas.map((l) =>
+    const rows = linhasFiltradas.map((l) =>
       `"${l.materia_prima.replace(/"/g, '""')}";${l.cod_mp ?? ""};${String(l.total_kg.toFixed(3)).replace(".", ",")}`,
     );
     const csv = "\ufeff" + [header, ...rows].join("\n");
@@ -285,7 +325,7 @@ export default function ComprasConsumo() {
     a.download = `consumo_mp_${dataInicio}_${dataFim}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [resultado, dataInicio, dataFim]);
+  }, [linhasFiltradas, dataInicio, dataFim]);
 
   const aviso = resultado?.aviso;
   const temAviso = aviso && (
@@ -293,6 +333,8 @@ export default function ComprasConsumo() {
     aviso.sem_itens > 0 ||
     aviso.kg_excluidos > 0
   );
+
+  const canExport = linhasFiltradas.length > 0;
 
   return (
     <PaletteCtx.Provider value={D}>
@@ -310,7 +352,7 @@ export default function ComprasConsumo() {
           </div>
           <button
             onClick={exportarCSV}
-            disabled={!resultado || resultado.linhas.length === 0}
+            disabled={!canExport}
             style={{
               display: "flex", alignItems: "center", gap: "0.375rem",
               padding: "0.5rem 1rem",
@@ -320,8 +362,8 @@ export default function ComprasConsumo() {
               borderRadius: "0.5rem",
               fontSize: 13,
               fontWeight: 600,
-              cursor: resultado && resultado.linhas.length > 0 ? "pointer" : "not-allowed",
-              opacity: resultado && resultado.linhas.length > 0 ? 1 : 0.5,
+              cursor: canExport ? "pointer" : "not-allowed",
+              opacity: canExport ? 1 : 0.5,
             }}
           >
             <Download size={14} />
@@ -470,8 +512,18 @@ export default function ComprasConsumo() {
         {/* Summary cards */}
         {resultado && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.25rem" }}>
-            <SummaryCard label="Total kg" value={formatKg(resultado.total_kg)} />
-            <SummaryCard label="MPs distintas" value={String(resultado.linhas.length)} />
+            <SummaryCard
+              label={buscaAtiva ? "Total filtrado (kg)" : "Total kg"}
+              value={formatKg(buscaAtiva ? totalFiltradoKg : resultado.total_kg)}
+              highlight={buscaAtiva}
+              sub={buscaAtiva ? `Período: ${formatKg(resultado.total_kg)}` : undefined}
+            />
+            <SummaryCard
+              label={buscaAtiva ? "MPs encontradas" : "MPs distintas"}
+              value={String(buscaAtiva ? linhasFiltradas.length : resultado.linhas.length)}
+              highlight={buscaAtiva}
+              sub={buscaAtiva ? `Total período: ${resultado.linhas.length}` : undefined}
+            />
             <SummaryCard label="OPs consideradas" value={String(resultado.aviso.ops_calculadas)} />
           </div>
         )}
@@ -483,8 +535,53 @@ export default function ComprasConsumo() {
           </div>
         )}
 
-        {/* Table */}
+        {/* Search bar — shown when there are results */}
         {!loading && resultado && resultado.linhas.length > 0 && (
+          <div style={{ marginBottom: "0.75rem", position: "relative", maxWidth: 360 }}>
+            <Search
+              size={14}
+              style={{
+                position: "absolute", left: "0.65rem", top: "50%",
+                transform: "translateY(-50%)", color: D.muted, pointerEvents: "none",
+              }}
+            />
+            <input
+              ref={buscaRef}
+              type="text"
+              placeholder="Buscar matéria-prima ou cód. TID…"
+              value={buscaMP}
+              onChange={(e) => setBuscaMP(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.45rem 2rem 0.45rem 2rem",
+                borderRadius: "0.5rem",
+                border: `1px solid ${buscaAtiva ? D.cyan : D.border}`,
+                background: D.card,
+                color: D.text,
+                fontSize: 13,
+                outline: "none",
+                boxSizing: "border-box",
+                transition: "border-color 0.15s",
+              }}
+            />
+            {buscaAtiva && (
+              <button
+                onClick={() => { setBuscaMP(""); buscaRef.current?.focus(); }}
+                style={{
+                  position: "absolute", right: "0.5rem", top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer",
+                  color: D.muted, padding: "0.1rem", display: "flex",
+                }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Table */}
+        {!loading && resultado && resultado.linhas.length > 0 && linhasFiltradas.length > 0 && (
           <div style={{ ...makeCardStyle(D), padding: 0, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
@@ -509,7 +606,7 @@ export default function ComprasConsumo() {
                 </tr>
               </thead>
               <tbody>
-                {resultado.linhas.map((l, i) => (
+                {linhasFiltradas.map((l, i) => (
                   <tr
                     key={l.cod_mp ?? l.materia_prima}
                     onClick={() => setModalLinha(l)}
@@ -540,6 +637,14 @@ export default function ComprasConsumo() {
           </div>
         )}
 
+        {/* Busca sem resultado */}
+        {!loading && resultado && resultado.linhas.length > 0 && linhasFiltradas.length === 0 && (
+          <div style={{ textAlign: "center", color: D.muted, padding: "3rem", fontSize: 14 }}>
+            Nenhuma matéria-prima encontrada para <strong style={{ color: D.text }}>"{buscaMP}"</strong>.
+          </div>
+        )}
+
+        {/* Período sem resultado */}
         {!loading && resultado && resultado.linhas.length === 0 && (
           <div style={{ textAlign: "center", color: D.muted, padding: "3rem", fontSize: 14 }}>
             Nenhum resultado para o período e filtros selecionados.
