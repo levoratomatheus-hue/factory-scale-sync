@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, createContext, useContext } from "react";
+import { useState, useMemo, useCallback, useEffect, memo, createContext, useContext } from "react";
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -115,7 +115,7 @@ function getClasse(produto: string | null | undefined): string {
 
 // ── Tooltips ──────────────────────────────────────────────────────────────────
 
-function TooltipFaixa({ active, payload }: any) {
+const TooltipFaixa = memo(function TooltipFaixa({ active, payload }: any) {
   const D = useContext(PaletteCtx);
   const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
@@ -129,9 +129,9 @@ function TooltipFaixa({ active, payload }: any) {
       <p style={{ margin: "2px 0 0", color: D.muted }}>{ops} OP{ops !== 1 ? "s" : ""}</p>
     </div>
   );
-}
+});
 
-function TooltipFaixaKg({ active, payload }: any) {
+const TooltipFaixaKg = memo(function TooltipFaixaKg({ active, payload }: any) {
   const D = useContext(PaletteCtx);
   const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
@@ -145,9 +145,9 @@ function TooltipFaixaKg({ active, payload }: any) {
       <p style={{ margin: "2px 0 0", color: D.muted }}>{ops} OP{ops !== 1 ? "s" : ""}</p>
     </div>
   );
-}
+});
 
-function TooltipMensal({ active, payload, label }: any) {
+const TooltipMensal = memo(function TooltipMensal({ active, payload, label }: any) {
   const D = useContext(PaletteCtx);
   const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
@@ -159,9 +159,9 @@ function TooltipMensal({ active, payload, label }: any) {
       </p>
     </div>
   );
-}
+});
 
-function TooltipProdutividade({ active, payload, label }: any) {
+const TooltipProdutividade = memo(function TooltipProdutividade({ active, payload, label }: any) {
   const D = useContext(PaletteCtx);
   const tooltipStyle = makeTooltipStyle(D);
   if (!active || !payload?.length) return null;
@@ -174,7 +174,7 @@ function TooltipProdutividade({ active, payload, label }: any) {
       </p>
     </div>
   );
-}
+});
 
 // ── CardHorasLinha ────────────────────────────────────────────────────────────
 
@@ -197,7 +197,7 @@ const BREAKDOWN_DEFS = [
   { key: "horasLimpeza",     emoji: "🧹", label: "Limpeza",        color: "#3b82f6" },
 ] as const;
 
-function CardHorasLinha(h: HorasLinha) {
+const CardHorasLinha = memo(function CardHorasLinha(h: HorasLinha) {
   const D = useContext(PaletteCtx);
   const cardStyle = makeCardStyle(D);
   const efCor = h.eficiencia >= 80 ? "#10b981" : h.eficiencia >= 60 ? "#f59e0b" : "#ef4444";
@@ -238,7 +238,7 @@ function CardHorasLinha(h: HorasLinha) {
       </div>
     </div>
   );
-}
+});
 
 // ── Atalhos ───────────────────────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ function calcAtalho(id: Atalho): { inicio: string; fim: string } {
 
 // ── Section title helper ──────────────────────────────────────────────────────
 
-function SectionTitle({ icon: Icon, children }: { icon: any; children: React.ReactNode }) {
+const SectionTitle = memo(function SectionTitle({ icon: Icon, children }: { icon: any; children: React.ReactNode }) {
   const D = useContext(PaletteCtx);
   return (
     <h3 style={{ marginBottom: "1rem", fontSize: "0.9375rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem", color: D.text }}>
@@ -287,7 +287,7 @@ function SectionTitle({ icon: Icon, children }: { icon: any; children: React.Rea
       {children}
     </h3>
   );
-}
+});
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -354,14 +354,14 @@ export default function PainelAnalises() {
   const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, hojeStr);
   const { paradas: paradasAnuaisRaw } = useParadasAnalises(inicioAnual, hojeStr);
 
-  const matchesMaterial = (o: any) => {
+  const matchesMaterial = useCallback((o: any) => {
     if (!materialFiltro) return true;
     const q = materialFiltro.toLowerCase();
     return (
       (o.produto ?? "").toLowerCase().includes(q) ||
       String(o.formula_id ?? "").toLowerCase().includes(q)
     );
-  };
+  }, [materialFiltro]);
 
   const ordens = useMemo(
     () => ordensRaw.filter((o) => (linhaFiltro === 0 || Number(o.linha) === linhaFiltro) && matchesMaterial(o) && (classeFiltro === "todas" || getClasse(o.produto) === classeFiltro)),
@@ -408,20 +408,20 @@ export default function PainelAnalises() {
     const dMap: Record<number, Set<string>> = {};
     const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
     registrosDiariosRaw.forEach((r: any) => {
+      const linhaNum = Number(r.ordens?.linha);
       const h = parseHoras(r.hora_inicio, r.hora_fim);
       if (h !== null) {
-        const linhaNum = Number(r.ordens?.linha);
-        const horasParadas = (paradasIdx.get(`${linhaNum}-${r.data}`) ?? [])
-          .filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
-          .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
+        const paradasDoDia = (paradasIdx.get(`${linhaNum}-${r.data}`) ?? []);
+        const paradasSobrepostas = paradasDoDia.filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio));
+        const horasParadas = paradasSobrepostas.reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
         hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
       }
-      const linhaNum = Number(r.ordens?.linha);
       if (linhaNum) {
         if (!dMap[linhaNum]) dMap[linhaNum] = new Set();
         dMap[linhaNum].add(r.data);
       }
     });
+
     return { horasMap: hMap, diasLinhaMap: dMap };
   }, [registrosDiariosRaw, paradasIdx]);
 
@@ -531,6 +531,7 @@ export default function PainelAnalises() {
         }
       }
     });
+
     const dadosMensais = meses.map(({ key, label }) => ({ mes: label, kg: Math.round(mapaKg[key] || 0) }));
     const dadosProdutividadeMensal = meses.map(({ key, label }) => {
       const m = mapaProd[key];
@@ -646,7 +647,7 @@ export default function PainelAnalises() {
       const diasComOP = diasLinhaMap[linha]?.size ?? 0;
       const toH = (t: string | null) => { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
       const horasTrabalhadas = (regsPorLinha.get(linha) ?? [])
-        .filter((r: any) => (!(materialFiltro || classeFiltro !== "todas") || ordensAnuaisIds.has(r.ordem_id)))
+        .filter((r: any) => !(materialFiltro || classeFiltro !== "todas") || ordensAnuaisIds.has(r.ordem_id))
         .reduce((s: number, r: any) => {
           const h = parseHoras(r.hora_inicio, r.hora_fim);
           if (h === null) return s;

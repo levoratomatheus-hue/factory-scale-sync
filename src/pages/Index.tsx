@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, ReactNode, lazy, Suspense } from 'react';
+import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2 } from 'lucide-react';
 import Login from './Login';
@@ -131,6 +131,14 @@ const manutencaoItems = [
   { id: 'ferramentas_manutencao'  as TabGestorId, label: 'Ferramentas',             icon: Hammer    },
 ] as const;
 
+// Mapa plano id→label para lookup O(1) no activeLabel
+const ALL_TAB_LABELS = new Map<TabGestorId, string>([
+  ...gruposGestor.flatMap((g) => g.items).map((i) => [i.id, i.label] as const),
+  ...manutencaoItems.map((i) => [i.id, i.label] as const),
+  ['comercial' as TabGestorId, 'Painel Comercial'],
+  ['consumo_mp' as TabGestorId, 'Consumo de MP'],
+]);
+
 function resolveLinhaNumber(balanca: string | null): number | null {
   if (!balanca) return null;
   const match = balanca.match(/^linha(\d+)$/);
@@ -166,9 +174,9 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
-function KeepAlive({ active, children }: { active: boolean; children: ReactNode }) {
+const KeepAlive = memo(function KeepAlive({ active, children }: { active: boolean; children: ReactNode }) {
   return <div style={{ display: active ? '' : 'none' }}>{children}</div>;
-}
+});
 
 const TAB_LOADING = (
   <div className="flex items-center justify-center h-64">
@@ -238,13 +246,10 @@ export default function Index() {
     goToTab('criar');
   }, [goToTab]);
 
-  const activeLabel = useMemo(() => activeTab === null
-    ? ''
-    : ([...gruposGestor.flatMap((g) => g.items), ...manutencaoItems,
-        { id: 'comercial' as TabGestorId, label: 'Painel Comercial' },
-        { id: 'consumo_mp' as TabGestorId, label: 'Consumo de MP' },
-      ].find((i) => i.id === activeTab)?.label ?? ''),
-  [activeTab]);
+  const activeLabel = useMemo(
+    () => (activeTab === null ? '' : (ALL_TAB_LABELS.get(activeTab) ?? '')),
+    [activeTab],
+  );
 
   // Acumula as abas visitadas — deve ficar antes dos early returns
   const [mountedTabs, setMountedTabs] = useState<Set<TabGestorId>>(

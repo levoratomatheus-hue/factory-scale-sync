@@ -22,7 +22,7 @@ export function useOrdens(date?: string) {
     const { data, error } = await query;
     if (!error && data) setOrdens(data);
     setLoading(false);
-  }, [today, date]);
+  }, [today]);
 
   const fetchOrdensRef = useRef(fetchOrdens);
   fetchOrdensRef.current = fetchOrdens;
@@ -275,12 +275,12 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
   const [registros, setRegistros] = useState<any[]>([]);
 
   const fetchRegistros = useCallback(async () => {
-    const { data } = await (supabase as any)
+    const { data, error } = await (supabase as any)
       .from("registros_diarios")
       .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, ordens(linha, quantidade, quantidade_real, formula_id, produto)")
       .gte("data", dataInicio)
       .lte("data", dataFim);
-    setRegistros(data ?? []);
+    if (!error && data) setRegistros(data);
   }, [dataInicio, dataFim]);
 
   useEffect(() => {

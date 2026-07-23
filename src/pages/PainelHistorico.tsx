@@ -116,7 +116,7 @@ function LabDialog({ ordem, onClose, onSalvo }: {
 type Modo = "dia" | "periodo";
 
 export default function PainelHistorico() {
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const [modo, setModo] = useState<Modo>("dia");
   const [dia, setDia] = useState(todayStr);
   const [dataInicio, setDataInicio] = useState(todayStr);
