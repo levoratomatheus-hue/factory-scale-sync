@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2 } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -25,6 +25,8 @@ const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao')
 const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
 const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
 const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
+const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
+const ComprasPrevisao           = lazy(() => import('./ComprasPrevisao'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -56,7 +58,8 @@ type TabGestorId =
   | 'comercial'
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
   | 'historico_paradas'
-  | 'consumo_mp';
+  | 'consumo_mp'
+  | 'compras_consumo' | 'compras_previsao';
 
 const gruposGestor = [
   {
@@ -137,6 +140,8 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ...manutencaoItems.map((i) => [i.id, i.label] as const),
   ['comercial' as TabGestorId, 'Painel Comercial'],
   ['consumo_mp' as TabGestorId, 'Consumo de MP'],
+  ['compras_consumo' as TabGestorId, 'Consumo de MP'],
+  ['compras_previsao' as TabGestorId, 'Previsão de Compra'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -171,6 +176,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'estoque_manutencao', 'ferramentas_manutencao',
   'historico_paradas',
   'consumo_mp',
+  'compras_consumo', 'compras_previsao',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -745,6 +751,47 @@ export default function Index() {
             </SidebarGroupContent>
             )}
           </SidebarGroup>
+
+          <SidebarGroup>
+            <button
+              onClick={() => toggleGroup('compras')}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex items-center gap-1.5">
+                <ShoppingCart className="h-3 w-3 shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">Compras</span>
+              </span>
+              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('compras') && '-rotate-90')} />
+            </button>
+            {openGroups.has('compras') && (
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'compras_consumo'}
+                    tooltip="Consumo de MP"
+                    onClick={() => goToTab('compras_consumo')}
+                    size="sm"
+                  >
+                    <BarChart2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Consumo de MP</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'compras_previsao'}
+                    tooltip="Previsão de Compra"
+                    onClick={() => goToTab('compras_previsao')}
+                    size="sm"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+                    <span>Previsão de Compra</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+            )}
+          </SidebarGroup>
         </SidebarContent>
 
         <SidebarFooter className="border-t">
@@ -918,6 +965,16 @@ export default function Index() {
                   <Suspense fallback={TAB_LOADING}>
                     <ConsumoMP perfilNome={perfil.nome} />
                   </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('compras_consumo') && (
+                <KeepAlive active={activeTab === 'compras_consumo'}>
+                  <Suspense fallback={TAB_LOADING}><ComprasConsumo /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('compras_previsao') && (
+                <KeepAlive active={activeTab === 'compras_previsao'}>
+                  <Suspense fallback={TAB_LOADING}><ComprasPrevisao /></Suspense>
                 </KeepAlive>
               )}
             </ErrorBoundary>
