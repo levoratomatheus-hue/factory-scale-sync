@@ -156,6 +156,11 @@ const Modal = memo(function Modal({
             </p>
             <p style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: "0.2rem 0 0" }}>
               {linha.materia_prima}
+              {linha.cod_mp && (
+                <span style={{ fontSize: 12, fontWeight: 400, color: D.muted, marginLeft: "0.5rem" }}>
+                  ({linha.cod_mp})
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -268,9 +273,9 @@ export default function ComprasConsumo() {
 
   const exportarCSV = useCallback(() => {
     if (!resultado) return;
-    const header = "Matéria-Prima;Total kg";
+    const header = "Matéria-Prima;Cód. TID;Total kg";
     const rows = resultado.linhas.map((l) =>
-      `"${l.materia_prima.replace(/"/g, '""')}";${String(l.total_kg.toFixed(3)).replace(".", ",")}`,
+      `"${l.materia_prima.replace(/"/g, '""')}";${l.cod_mp ?? ""};${String(l.total_kg.toFixed(3)).replace(".", ",")}`,
     );
     const csv = "\ufeff" + [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -286,7 +291,6 @@ export default function ComprasConsumo() {
   const temAviso = aviso && (
     aviso.sem_formula > 0 ||
     aviso.sem_itens > 0 ||
-    aviso.fallback_quantidade > 0 ||
     aviso.kg_excluidos > 0
   );
 
@@ -301,7 +305,7 @@ export default function ComprasConsumo() {
               Consumo de Matéria-Prima
             </h1>
             <p style={{ fontSize: 13, color: D.muted, margin: "0.25rem 0 0" }}>
-              Consumo teórico calculado pelas fórmulas das OPs concluídas
+              Consumo teórico calculado pelas fórmulas das OPs registradas no período (por data de criação)
             </p>
           </div>
           <button
@@ -458,7 +462,6 @@ export default function ComprasConsumo() {
               {aviso.ops_calculadas} de {aviso.total_ops} OPs consideradas no cálculo.
               {aviso.sem_formula > 0 && ` ${aviso.sem_formula} sem fórmula cadastrada.`}
               {aviso.sem_itens > 0 && ` ${aviso.sem_itens} com fórmula inexistente na tabela.`}
-              {aviso.fallback_quantidade > 0 && ` ${aviso.fallback_quantidade} usaram quantidade no lugar de quantidade_real.`}
               {aviso.kg_excluidos > 0 && ` Total excluído: ~${Math.round(aviso.kg_excluidos).toLocaleString("pt-BR")} kg.`}
             </div>
           </div>
@@ -486,7 +489,7 @@ export default function ComprasConsumo() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: D.cardAlt }}>
-                  {["Matéria-Prima", "Total (kg)", "Nº de OPs"].map((h, i) => (
+                  {["Matéria-Prima", "Cód. TID", "Total (kg)", "Nº de OPs"].map((h, i) => (
                     <th
                       key={h}
                       style={{
@@ -508,7 +511,7 @@ export default function ComprasConsumo() {
               <tbody>
                 {resultado.linhas.map((l, i) => (
                   <tr
-                    key={l.materia_prima}
+                    key={l.cod_mp ?? l.materia_prima}
                     onClick={() => setModalLinha(l)}
                     style={{
                       background: i % 2 === 0 ? "transparent" : D.cardAlt,
@@ -520,6 +523,9 @@ export default function ComprasConsumo() {
                   >
                     <td style={{ padding: "0.55rem 1rem", color: D.text, fontWeight: 500 }}>
                       {l.materia_prima}
+                    </td>
+                    <td style={{ padding: "0.55rem 1rem", color: D.muted, textAlign: "right", fontFamily: "monospace" }}>
+                      {l.cod_mp ?? "—"}
                     </td>
                     <td style={{ padding: "0.55rem 1rem", color: D.text, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>
                       {formatKg(l.total_kg)}
