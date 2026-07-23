@@ -27,6 +27,7 @@ const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
 const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
 const ComprasPrevisao           = lazy(() => import('./ComprasPrevisao'));
+const ComprasMediaMensal        = lazy(() => import('./ComprasMediaMensal'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -59,7 +60,7 @@ type TabGestorId =
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
   | 'historico_paradas'
   | 'consumo_mp'
-  | 'compras_consumo' | 'compras_previsao';
+  | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal';
 
 const gruposGestor = [
   {
@@ -142,6 +143,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['consumo_mp' as TabGestorId, 'Consumo de MP'],
   ['compras_consumo' as TabGestorId, 'Consumo de MP'],
   ['compras_previsao' as TabGestorId, 'Previsão de Compra'],
+  ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -176,7 +178,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'estoque_manutencao', 'ferramentas_manutencao',
   'historico_paradas',
   'consumo_mp',
-  'compras_consumo', 'compras_previsao',
+  'compras_consumo', 'compras_previsao', 'compras_media_mensal',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -788,6 +790,17 @@ export default function Index() {
                     <span>Previsão de Compra</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'compras_media_mensal'}
+                    tooltip="Consumo Médio Mensal"
+                    onClick={() => goToTab('compras_media_mensal')}
+                    size="sm"
+                  >
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                    <span>Consumo Médio Mensal</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
             )}
@@ -975,6 +988,11 @@ export default function Index() {
               {mountedTabs.has('compras_previsao') && (
                 <KeepAlive active={activeTab === 'compras_previsao'}>
                   <Suspense fallback={TAB_LOADING}><ComprasPrevisao /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('compras_media_mensal') && (
+                <KeepAlive active={activeTab === 'compras_media_mensal'}>
+                  <Suspense fallback={TAB_LOADING}><ComprasMediaMensal /></Suspense>
                 </KeepAlive>
               )}
             </ErrorBoundary>
