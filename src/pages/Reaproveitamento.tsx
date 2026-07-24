@@ -435,7 +435,7 @@ const DetalheModal = memo(function DetalheModal({
               {sdr.percentual_reaproveitado != null && (
                 <tr style={{ background: D.amberBg }}>
                   <td style={{ padding: "0.45rem 0.75rem", color: D.amber, fontWeight: 600 }}>
-                    Material reaproveitado
+                    {sdr.produto_origem ?? "Material reaproveitado"}
                     <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: D.amber, padding: "1px 5px", borderRadius: 4, border: `1px solid ${D.amberBorder}` }}>REAPR.</span>
                   </td>
                   <td style={{ padding: "0.45rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>—</td>
