@@ -1,12 +1,12 @@
 # ZanCollor Produção — Resumo Completo do Sistema
 
-> Atualizado em 26/06/2026. Descreve todas as funcionalidades, fluxos, regras de negócio, estrutura técnica e otimizações realizadas.
+> Atualizado em 24/07/2026. Descreve todas as funcionalidades, fluxos, regras de negócio, estrutura técnica e otimizações realizadas.
 
 ---
 
 ## 1. Visão Geral
 
-O sistema **ZanCollor Produção** é uma aplicação web de gestão da linha de produção fabril. Ele substitui controles manuais e planilhas, conectando em tempo real todos os pontos da fábrica: pesagem, mistura, linhas de produção, liberação de qualidade, manutenção e o setor comercial.
+O sistema **ZanCollor Produção** é uma aplicação web de gestão da linha de produção fabril. Ele substitui controles manuais e planilhas, conectando em tempo real todos os pontos da fábrica: pesagem, mistura, linhas de produção, liberação de qualidade, manutenção, comercial e o módulo de compras/consumo de matérias-primas.
 
 **Stack:** React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Supabase (PostgreSQL + Auth + Realtime)
 
@@ -412,45 +412,155 @@ Controle de ferramentas do setor de manutenção.
 
 ---
 
-## 5. Regras de Negócio
+### 4.21 Histórico de Paradas (`HistoricoParadas.tsx`)
+**Quem usa:** gestor
 
-### 5.1 Regra dos 7 Dias Úteis
+Consulta consolidada de todas as paradas de linha registradas no sistema.
+
+**Funcionalidades:**
+- Filtros: período (datas manuais com default = mês atual), linha (1–5 ou todas), motivo.
+- Tabela com paradas ordenadas por data/hora decrescente, com duração calculada.
+- Resumo por linha: total de horas paradas por linha no período.
+- Excluir paradas individuais (com confirmação).
+- Exporta CSV do período.
+
+**Motivos suportados:** `manutencao`, `sem_material`, `problema_processo`, `falta_energia`, `reuniao`, `outros`.
+
+> Complementa o registro de paradas feito no `PainelLinha` e `PainelProgramacao`. Serve para análise posterior e auditoria.
+
+---
+
+### 4.22 Consumo Real de MP — Lab (`ConsumoMP.tsx`)
+**Quem usa:** gestor / lab
+
+Módulo para registro manual de retiradas reais de matéria-prima do estoque físico (consumo real, não teórico).
+
+**Seção 1 — Lançar retirada:**
+- Busca de MP por nome com autocomplete via tabela `mp_depara`.
+- Campos: quantidade (kg), data da retirada, observação, responsável.
+- Salva em `consumo_mp`.
+- Histórico recente com opção de exclusão.
+
+**Seção 2 — Relatório:**
+- Período com atalhos (hoje, semana, mês, mês anterior, ano).
+- Totais agrupados por MP com `cod_tid` e número de retiradas.
+- Exporta CSV.
+
+> Distinto do consumo teórico calculado pelo módulo Compras. O consumo real reflete o que efetivamente saiu do estoque físico; o teórico vem das fórmulas das OPs.
+
+---
+
+## 5. Módulo Compras — Consumo de Matérias-Primas
+
+O módulo Compras centraliza o controle de consumo teórico de MP calculado a partir das fórmulas das OPs. Três telas com dados compartilhados pelo hook `useCompras.ts`.
+
+**Hook central: `useCompras.ts`**
+- `useComprasConsumo(dataInicio, dataFim, filtros?)` — busca OPs por `criado_em` (sem filtro de status). Retorna `ResultadoCompras` com `linhas`, `aviso` de cobertura e `mesesComDados`.
+- `useComprasPrevisao(dataInicio, dataFim)` — busca OPs em aberto (≠ `concluido`) por `data_programacao`. Retorna `ResultadoPrevisao` com colunas adicionais por status.
+- **Cálculo central (`calcularCompras`):** para cada OP, aplica a fórmula base (`fracao = percentual/100`) e acumula `kg_mp = fracao × qtd_op`. Agrupa por `cod_mp` (prioridade) ou nome. Rastreia OPs sem fórmula (`sem_formula`) e fórmulas inexistentes (`sem_itens`) — exibe aviso de cobertura parcial.
+- `MesesComDados`: conjunto de meses distintos (YYYY-MM) com pelo menos 1 OP no período, e contagem de OPs por mês. Usado para dividir a média corretamente.
+
+---
+
+### 5.1 Consumo de MP por Período (`ComprasConsumo.tsx`)
+**Quem usa:** gestor
+
+Total de consumo teórico de cada MP em um período.
+
+**Funcionalidades:**
+- Atalhos de período: hoje, semana, mês, mês anterior, ano.
+- Tabela: MP, Cód. TID, Total (kg), Nº de OPs — ordenada por volume.
+- Busca por nome ou código TID.
+- Modal com detalhamento por OP (lote, produto, data, kg da MP).
+- Aviso de cobertura parcial quando há OPs sem fórmula.
+- Exporta CSV.
+
+---
+
+### 5.2 Previsão de Compra (`ComprasPrevisao.tsx`)
+**Quem usa:** gestor
+
+Consumo previsto de MP para as OPs em aberto, filtradas por `data_programacao`.
+
+**Funcionalidades:**
+- Período selecionável para simular janelas de compra.
+- Tabela com colunas: Total previsto (kg), Em produção (kg), Não iniciada (kg).
+  - **Em produção:** OPs com status `em_pesagem`, `aguardando_mistura`, `em_mistura`, `aguardando_linha`, `em_linha`.
+  - **Não iniciada:** OPs com status `pendente`, `aguardando_liberacao`.
+- Modal com detalhamento por OP e badge de status.
+- Exporta CSV.
+
+---
+
+### 5.3 Consumo Médio Mensal (`ComprasMediaMensal.tsx`)
+**Quem usa:** gestor
+
+Média mensal de consumo teórico por MP para apoiar decisões de compra recorrente.
+
+**Regra de cálculo:**
+```
+meses_com_dados = COUNT(DISTINCT YYYY-MM de criado_em das OPs no período)
+media_mensal = total_kg / meses_com_dados
+```
+
+> **Importante:** divide pelo número de meses que **efetivamente têm OPs**, não pelos meses do calendário entre as datas selecionadas. Isso evita que meses sem dados na base (antes da implantação do sistema) artificialmente reduzam a média.
+
+**Funcionalidades:**
+- Atalhos: últimos 3, 6, 12 meses ou este ano.
+- **Banner informativo** no topo após o cálculo: "Média sobre N meses (mmm/AAAA a mmm/AAAA) — meses considerados: mai/2026, jun/2026, jul/2026". O usuário sempre sabe a base da divisão.
+- **Alerta de mês parcial** (âmbar) em dois casos:
+  1. O mês corrente está no período (ainda em andamento — pode subestimar a média).
+  2. Algum mês tem volume de OPs < 30% da média dos demais (possivelmente incompleto).
+- Summary cards: Meses com dados, MPs distintas, OPs consideradas.
+- Busca por nome ou código TID.
+- Modal com detalhamento por OP.
+- Exporta CSV com a mesma base de divisão.
+
+---
+
+## 6. Regras de Negócio
+
+### 6.1 Regra dos 7 Dias Úteis
 - Toda OP não confirmada tem disponibilidade estimada calculada como: `data_emissao + 7 dias úteis`.
 - Dias úteis excluem sábados, domingos e feriados nacionais brasileiros (fixos + Páscoa e seus derivados: Carnaval, Sexta-feira Santa, Corpus Christi).
 - Se `diasUteis(data_emissao, data_programacao) > 7` → OP é considerada **em atraso** (alerta vermelho na programação e no painel do gestor).
 
-### 5.2 Fórmulas e Bateladas
+### 6.2 Fórmulas e Bateladas
 - A fórmula define ingredientes como `percentual` do total.
 - `quantidade_kg = (percentual / 100) × tamanho_batelada`.
 - Customizações por OP são salvas em `ordens_formula` e têm prioridade sobre a fórmula base.
 - O número de bateladas é calculado como `round(quantidade / tamanho_batelada)`.
 
-### 5.3 Posição na Fila
+### 6.3 Posição na Fila
 - Cada OP tem um campo `posicao` (inteiro) que define a ordem na fila da linha.
 - Após qualquer alteração (criação, drag-and-drop, mudança de linha), `recalcularPosicoes(linha)` é chamado para renumerar sequencialmente as OPs não concluídas daquela linha.
 
-### 5.4 Registros Diários
+### 6.4 Registros Diários
 - OPs em linha podem ter produção registrada dia a dia (permite OPs que duram múltiplos dias).
 - Cada registro em `registros_diarios` contém: data, hora início/fim, itens produzidos (bateladas × peso unitário em kg).
 - Ao registrar o dia, a `data_programacao` avança para o próximo dia útil, movendo a OP para o dia seguinte no kanban.
 
-### 5.5 Lotes e Ordens
+### 6.5 Lotes e Ordens
 - O lote é o identificador primário vindo do ERP (SAP).
 - Um lote só pode ter **uma OP ativa** no sistema.
 - Ao criar a OP, `data_emissao` é sincronizada de volta para `cadastro_lotes`.
 
-### 5.6 Marca
+### 6.6 Marca
 - Cada OP pertence a uma marca: **Pigma** ou **Zan Collor**.
 - Exibida como badge colorido nos cards e na tabela de gestor.
 
-### 5.7 Atualização de Status — Garantias
+### 6.7 Atualização de Status — Garantias
 - Ao **concluir pesagem** (`PainelBalanca`): apenas `status` é atualizado.
 - Ao **concluir mistura** (`PainelMistura`): apenas `status` e `linha` são atualizados. `data_programacao` não é tocada.
 - Ao **confirmar/desconfirmar** (`PainelProgramacao`): apenas `programacao_confirmada` é atualizado.
 
+### 6.8 Consumo Teórico vs. Real
+- **Teórico (módulo Compras):** calculado via `fracao × qtd_op` da fórmula base. Reflete o planejado.
+- **Real (ConsumoMP):** lançado manualmente pelo lab ao retirar MP do estoque físico. Salvo em `consumo_mp`. As duas visões coexistem e não são sincronizadas automaticamente.
+
 ---
 
-## 6. Estrutura do Banco de Dados
+## 7. Estrutura do Banco de Dados
 
 ### Tabela `ordens`
 | Campo | Tipo | Descrição |
@@ -541,7 +651,7 @@ Controle de ferramentas do setor de manutenção.
 |---|---|---|
 | `linha` | INTEGER | Linha afetada |
 | `data` | DATE | Data da parada |
-| `motivo` | TEXT | `manutencao`, `sem_material`, `problema_processo`, `falta_energia` |
+| `motivo` | TEXT | `manutencao`, `sem_material`, `problema_processo`, `falta_energia`, `reuniao`, `outros` |
 | `hora_inicio` | TIME | Início da parada |
 | `hora_fim` | TIME | Fim da parada |
 
@@ -597,9 +707,39 @@ Ordens de Serviço de manutenção.
 | `papel` | TEXT | `gestor`, `operador`, `tecnico`, `comercial` |
 | `balanca` | TEXT | Estação do operador |
 
+### Tabela `mp_depara`
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `cod_excel` | TEXT | Código da MP na planilha Excel do lab |
+| `cod_tid` | TEXT | Código TID correspondente |
+| `tipo` | TEXT | Tipo da MP (opcional) |
+| `descricao` | TEXT | Nome/descrição da MP |
+
+### Tabela `formulas_excel`
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `formula_id` | TEXT | ID da fórmula |
+| `sequencia` | INTEGER | Ordem do item na fórmula |
+| `cod_mp_excel` | TEXT | Código Excel da MP |
+| `materia_prima` | TEXT | Nome da MP |
+| `percentual` | NUMERIC | % na fórmula |
+| `produto_chave` | TEXT | Chave do produto (ex.: `MBG-10-3593-1`) |
+
+### Tabela `consumo_mp`
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID | PK |
+| `cod_mp_excel` | TEXT | Código Excel da MP retirada |
+| `materia_prima` | TEXT | Nome da MP |
+| `quantidade_kg` | NUMERIC | Quantidade retirada |
+| `data_retirada` | DATE | Data da retirada física |
+| `observacao` | TEXT | Observação opcional |
+| `retirado_por` | TEXT | Nome do responsável |
+| `criado_em` | TIMESTAMP | Criação do registro |
+
 ---
 
-## 7. Funcionalidades em Tempo Real
+## 8. Funcionalidades em Tempo Real
 
 | Painel | Canal | Debounce |
 |---|---|---|
@@ -615,26 +755,26 @@ Ordens de Serviço de manutenção.
 
 ---
 
-## 8. Navegação e Layout (`Index.tsx`)
+## 9. Navegação e Layout (`Index.tsx`)
 
 O `Index.tsx` é o shell principal. Após autenticação, roteia o usuário para o layout correto conforme o `papel`:
 
 - **operador:** layout fixo para a estação atribuída (sem sidebar de navegação).
 - **tecnico:** sidebar com 3 abas (Painel de Manutenção, Abrir OS, Ferramentas).
 - **comercial:** sidebar com 1 aba (Painel Comercial).
-- **gestor:** sidebar completa com grupos colapsáveis (Produção, Manutenção, Comercial).
+- **gestor:** sidebar completa com grupos colapsáveis (Produção, Manutenção, Comercial, Compras).
 
 ### Keep-Alive de Abas (gestor)
 
 Painéis com fetch de dados montam apenas na **primeira visita** e ficam no DOM com `display: none` nas demais, evitando re-fetch ao trocar de aba.
 
-Abas com keep-alive: Gestor, Programação, Programação Balanças, Histórico, Liberação, Análises, Consulta Fórmula, Comercial, Balanças 1 e 2, Mistura, Linhas 1–5, todos os painéis de Manutenção.
+Abas com keep-alive: Gestor, Programação, Programação Balanças, Histórico, Liberação, Análises, Consulta Fórmula, Comercial, Balanças 1 e 2, Mistura, Linhas 1–5, todos os painéis de Manutenção, Compras (Consumo, Previsão, Média Mensal).
 
 Abas que sempre remontam (formulários/one-shot): Nova Ordem, Importar, Abrir OS.
 
 ---
 
-## 9. Dark Mode
+## 10. Dark Mode
 
 Suporte completo a dark mode via Tailwind (`dark:` classes) em todas as páginas e via paleta dinâmica (`buildPalette(dark)`) nos painéis com gráficos Recharts.
 
@@ -644,12 +784,13 @@ Páginas com suporte a dark mode implementado:
 - `PainelAnaliseManutencao.tsx`
 - `PainelProgramacao.tsx` (cards Kanban via `SortableCard`)
 - `PaginaInicial.tsx` (landing page)
+- `ComprasConsumo.tsx`, `ComprasPrevisao.tsx`, `ComprasMediaMensal.tsx` (buildPalette)
 
 A detecção do tema usa `MutationObserver` no `document.documentElement` observando mudanças na classe `dark`.
 
 ---
 
-## 10. Utilitários e Funções Principais
+## 11. Utilitários e Funções Principais
 
 | Arquivo | Função | O que faz |
 |---|---|---|
@@ -659,13 +800,14 @@ A detecção do tema usa `MutationObserver` no `document.documentElement` observ
 | `lib/recalcularPosicoes.ts` | `recalcularPosicoes(linha)` | Renumera a fila de uma linha |
 | `lib/printEtiqueta.ts` | `printEtiqueta(ordem, itens)` | Gera e imprime a etiqueta da OP |
 | `lib/obsUtils.ts` | `parseObsItems(obs)` | Decodifica o JSON de adições para mistura |
+| `lib/compararFormulas.ts` | `compararFormulas(...)` | Compara fórmula TID vs. Excel com suporte à variante -1 |
 | `lib/utils.ts` | `sortOrdens(ordens)` | Ordena OPs: concluídas/em liberação no topo, depois por posição |
 | `lib/utils.ts` | `formatKg(valor)` | Formata número como kg (3 casas, pt-BR) |
 | `lib/utils.ts` | `parseHoras(inicio, fim)` | Calcula horas entre dois horários HH:MM |
 
 ---
 
-## 11. Componentes Reutilizáveis
+## 12. Componentes Reutilizáveis
 
 | Componente | Descrição |
 |---|---|
@@ -678,7 +820,7 @@ A detecção do tema usa `MutationObserver` no `document.documentElement` observ
 
 ---
 
-## 12. Estrutura de Arquivos
+## 13. Estrutura de Arquivos
 
 ```
 src/
@@ -695,6 +837,7 @@ src/
 │   ├── PainelLinha.tsx               # Linha de produção
 │   ├── PainelLiberacao.tsx           # Liberação/qualidade
 │   ├── PainelHistorico.tsx           # Histórico de OPs concluídas
+│   ├── HistoricoParadas.tsx          # Histórico de paradas por linha
 │   ├── PainelAnalises.tsx            # Dashboard analítico de produção
 │   ├── PainelAnaliseManutencao.tsx   # Dashboard analítico de manutenção
 │   ├── PainelComercial.tsx           # Consulta de disponibilidade
@@ -704,7 +847,12 @@ src/
 │   ├── CadastroEquipamentos.tsx      # CRUD de equipamentos
 │   ├── EstoqueManutencao.tsx         # Estoque de manutenção
 │   ├── FerramentasManutencao.tsx     # Ferramentas de manutenção
-│   └── ImportarProgramacao.tsx       # Importação de CSV
+│   ├── ImportarProgramacao.tsx       # Importação TXT (lotes + fórmulas TID)
+│   ├── ImportarExcelLab.tsx          # Importação Excel do lab (MPs + fórmulas)
+│   ├── ConsumoMP.tsx                 # Registro de retiradas reais de MP (lab)
+│   ├── ComprasConsumo.tsx            # Consumo teórico de MP por período
+│   ├── ComprasPrevisao.tsx           # Previsão de consumo (OPs em aberto)
+│   └── ComprasMediaMensal.tsx        # Média mensal de consumo de MP
 ├── components/
 │   ├── StatusBadge.tsx
 │   ├── MarcaBadge.tsx
@@ -714,17 +862,20 @@ src/
 │   ├── ErrorBoundary.tsx
 │   └── ui/                           # Componentes shadcn/ui
 ├── hooks/
-│   ├── useAuth.ts
-│   ├── useTheme.ts
-│   ├── useOrdens.ts
-│   ├── useFormula.ts
-│   └── use-toast.ts
+│   ├── useAuth.ts                    # Autenticação e perfil do usuário
+│   ├── useTheme.ts                   # Tema dark/light
+│   ├── useOrdens.ts                  # Busca e atualização de OPs
+│   ├── useFormula.ts                 # Busca de fórmulas
+│   ├── useCompras.ts                 # Consumo e previsão de MP (módulo Compras)
+│   └── use-toast.ts                  # Sistema de notificações
 ├── lib/
-│   ├── diasUteis.ts
-│   ├── recalcularPosicoes.ts
-│   ├── obsUtils.ts
-│   ├── printEtiqueta.ts
-│   └── utils.ts
+│   ├── diasUteis.ts                  # Cálculo de dias úteis e feriados
+│   ├── recalcularPosicoes.ts         # Reordenação da fila por linha
+│   ├── obsUtils.ts                   # Parse do JSON de adições para mistura
+│   ├── printEtiqueta.ts              # Geração e impressão de etiqueta
+│   ├── compararFormulas.ts           # Comparador TID × Excel
+│   ├── antonFont.ts                  # Fonte Anton (usada na etiqueta impressa)
+│   └── utils.ts                      # sortOrdens, formatKg, parseHoras
 └── integrations/supabase/
     ├── client.ts
     └── types.ts
@@ -734,7 +885,7 @@ supabase/migrations/                  # Histórico de alterações no banco
 
 ---
 
-## 13. Otimizações de Performance Realizadas (Jun/2026)
+## 14. Otimizações de Performance Realizadas (Jun/2026)
 
 ### `use-toast.ts`
 - Corrigido dep array `[state]` → `[]` no `useEffect` do listener. Antes, o listener era re-registrado a cada toast disparado.
@@ -769,7 +920,7 @@ supabase/migrations/                  # Histórico de alterações no banco
 
 ---
 
-## 14. Histórico de Mudanças na Base de Dados
+## 15. Histórico de Mudanças na Base de Dados e Sistema
 
 ### Jul/2026 — Importador Excel e comparador TID × Excel
 
@@ -798,3 +949,18 @@ supabase/migrations/                  # Histórico de alterações no banco
 - **Limpeza realizada:** removidas 4.486 fórmulas duplicadas do import antigo (IDs com ponto de milhar, ex: `"1.000"` vs `"1000"`) e 35 registros inválidos de 1 item.
 - **453 OPs** e o `cadastro_lotes` tiveram `formula_id` normalizado (ponto removido) sem perda de histórico.
 - **Regra permanente:** `formula_id` deve sempre ser gravado sem formatação de milhar. O parser de `ImportarProgramacao.tsx` aplica `.replace(/\./g, '')` tanto na importação de lotes quanto na de fórmulas. Importações futuras do TID mantêm essa normalização automaticamente.
+
+---
+
+### Jul/2026 — Módulo Compras e telas de consumo de MP
+
+**Novos módulos:**
+- `hooks/useCompras.ts`: hook central com `useComprasConsumo` e `useComprasPrevisao`. Cálculo de consumo teórico via `fracao × qtd_op` da fórmula base. Tipo `MesesComDados` para rastreamento de meses com OPs.
+- `ComprasConsumo.tsx`: consumo total de MP por período com detalhamento por OP.
+- `ComprasPrevisao.tsx`: previsão de consumo para OPs em aberto, segmentado por status.
+- `ComprasMediaMensal.tsx`: média mensal por MP, dividida por meses com dados reais (não por calendário).
+- `ConsumoMP.tsx`: registro manual de retiradas físicas de MP pelo lab. Tabela `consumo_mp`.
+- `HistoricoParadas.tsx`: consulta consolidada de paradas por linha e período com resumo de horas.
+
+**Regra de média mensal (implementada em Jul/2026):**
+A divisão usa `COUNT(DISTINCT YYYY-MM de criado_em)` no período — apenas meses que efetivamente têm OPs. Meses anteriores à implantação do sistema não contam, evitando redução artificial da média. O usuário vê no banner quais meses entraram no cálculo, e recebe alerta se o mês corrente estiver em andamento ou se algum mês tiver volume muito abaixo dos demais.
