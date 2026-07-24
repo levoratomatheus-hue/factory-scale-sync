@@ -1012,7 +1012,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                   )}
                 </div>
 
-                <div style={{ overflowX: "auto" }}>
+                <div style={{ overflow: "visible" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: D.cardAlt }}>
