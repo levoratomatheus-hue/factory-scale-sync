@@ -999,8 +999,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
               </div>
 
               {/* Fórmula */}
-              <div style={makeCard(D, { padding: 0, overflow: "hidden" })}>
-                <div style={{ padding: "0.75rem 1rem", borderBottom: `1px solid ${D.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={makeCard(D, { padding: 0, overflow: "visible" })}>
+                <div style={{ padding: "0.75rem 1rem", borderBottom: `1px solid ${D.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", borderRadius: "0.75rem 0.75rem 0 0" }}>
                   <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Fórmula do reaproveitamento</p>
                   {!isUtilizadoEdit && (
                     <button
