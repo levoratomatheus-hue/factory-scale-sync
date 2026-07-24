@@ -284,7 +284,7 @@ function MpInput({
       const { data } = await (supabase as any)
         .from("mp_depara")
         .select("cod_excel, cod_tid, descricao")
-        .or(`descricao.ilike.%${v.trim()}%,cod_excel.ilike.%${v.trim()}%,cod_tid.ilike.%${v.trim()}%`)
+        .or(`descricao.ilike.%${v.trim()}%,cod_excel.ilike.%${v.trim()}%`)
         .order("descricao")
         .limit(15);
       setSugestoes(data ?? []);
