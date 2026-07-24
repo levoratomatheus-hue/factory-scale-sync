@@ -71,7 +71,7 @@ type Reaprov = {
   formula_id_destino: string | null;
   produto_origem: string | null;
   formula_id_origem: string | null;
-  quantidade_kg: number;
+  quantidade_material: number;
   quantidade_utilizada: number | null;
   percentual_reaproveitado: number | null;
   status: "pendente" | "utilizado";
@@ -112,8 +112,8 @@ function fmtDate(iso: string | null): string {
 }
 
 /** Produção final = quantidade_utilizada ÷ (percentual_reaproveitado / 100) */
-function calcProducaoPrevista(sdr: Pick<Reaprov, "quantidade_kg" | "quantidade_utilizada" | "percentual_reaproveitado">): number | null {
-  const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_kg;
+function calcProducaoPrevista(sdr: Pick<Reaprov, "quantidade_material" | "quantidade_utilizada" | "percentual_reaproveitado">): number | null {
+  const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_material;
   const pct = sdr.percentual_reaproveitado;
   if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
   return qtd / (pct / 100);
@@ -362,8 +362,8 @@ const DetalheModal = memo(function DetalheModal({
 }) {
   const D = useContext(PaletteCtx);
   const producao = calcProducaoPrevista(sdr);
-  const usandoParte = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_kg;
-  const qtdUtil = sdr.quantidade_utilizada ?? sdr.quantidade_kg;
+  const usandoParte = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_material;
+  const qtdUtil = sdr.quantidade_utilizada ?? sdr.quantidade_material;
   const somaItens = sdr.itens.reduce((s, i) => s + i.percentual, 0);
   const somaTotal = (sdr.percentual_reaproveitado ?? 0) + somaItens;
 
@@ -401,7 +401,7 @@ const DetalheModal = memo(function DetalheModal({
             {sdr.formula_id_destino && <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>Fórmula destino: {sdr.formula_id_destino}</p>}
             <p style={{ fontSize: 11, color: D.muted, margin: "0.25rem 0 0" }}>
               Material: <strong style={{ color: D.text }}>
-                {usandoParte ? `${formatKg(qtdUtil)} de ${formatKg(sdr.quantidade_kg)}` : formatKg(sdr.quantidade_kg)}
+                {usandoParte ? `${formatKg(qtdUtil)} de ${formatKg(sdr.quantidade_material)}` : formatKg(sdr.quantidade_material)}
               </strong>
               {sdr.percentual_reaproveitado && (
                 <> · entra a <strong style={{ color: D.text }}>{sdr.percentual_reaproveitado}%</strong></>
@@ -662,7 +662,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     const pendentes = lista.filter((r) => r.status === "pendente");
     return {
       qtdPendentes: pendentes.length,
-      kgPendentes: pendentes.reduce((s, r) => s + r.quantidade_kg, 0),
+      kgPendentes: pendentes.reduce((s, r) => s + r.quantidade_material, 0),
     };
   }, [lista]);
 
@@ -721,8 +721,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     setFFormulaIdOrigem(sdr.formula_id_origem ?? null);
     setFProdutoDestino(sdr.produto_destino);
     setFFormulaIdDestino(sdr.formula_id_destino ?? null);
-    setFQtdKg(String(sdr.quantidade_kg));
-    const parcial = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_kg;
+    setFQtdKg(String(sdr.quantidade_material));
+    const parcial = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_material;
     setFUsoOpcao(parcial ? "parte" : "tudo");
     setFQtdUtilizada(sdr.quantidade_utilizada !== null ? String(sdr.quantidade_utilizada) : "");
     setFPercReaprov(sdr.percentual_reaproveitado !== null ? String(sdr.percentual_reaproveitado) : "");
@@ -775,7 +775,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       formula_id_destino: fFormulaIdDestino ?? null,
       produto_origem: fProdutoOrigem.trim() || null,
       formula_id_origem: fFormulaIdOrigem ?? null,
-      quantidade_kg: qtd,
+      quantidade_material: qtd,
       quantidade_utilizada: qtdUtil,
       percentual_reaproveitado: percReaprov,
       observacao: fObs.trim() || null,
@@ -824,14 +824,14 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     const header = "Código;Produto origem;Fórmula origem;Produto destino;Fórmula destino;Material total (kg);Qtd. utilizada (kg);% na fórmula;Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
     const rows = listaFiltrada.map((r) => {
       const prod = calcProducaoPrevista(r);
-      const qtdUtil = r.quantidade_utilizada ?? r.quantidade_kg;
+      const qtdUtil = r.quantidade_utilizada ?? r.quantidade_material;
       return [
         r.codigo,
         `"${(r.produto_origem ?? "").replace(/"/g, '""')}"`,
         r.formula_id_origem ?? "",
         `"${r.produto_destino.replace(/"/g, '""')}"`,
         r.formula_id_destino ?? "",
-        r.quantidade_kg.toFixed(3).replace(".", ","),
+        r.quantidade_material.toFixed(3).replace(".", ","),
         qtdUtil.toFixed(3).replace(".", ","),
         r.percentual_reaproveitado !== null ? String(r.percentual_reaproveitado).replace(".", ",") : "",
         prod !== null ? prod.toFixed(3).replace(".", ",") : "",
@@ -1219,8 +1219,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                     <tbody>
                       {listaFiltrada.map((r, i) => {
                         const producao = calcProducaoPrevista(r);
-                        const qtdUtil = r.quantidade_utilizada ?? r.quantidade_kg;
-                        const usandoParte = r.quantidade_utilizada !== null && r.quantidade_utilizada < r.quantidade_kg;
+                        const qtdUtil = r.quantidade_utilizada ?? r.quantidade_material;
+                        const usandoParte = r.quantidade_utilizada !== null && r.quantidade_utilizada < r.quantidade_material;
                         return (
                           <tr
                             key={r.id}
@@ -1240,10 +1240,10 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                             </td>
                             <td style={{ padding: "0.55rem 1rem", textAlign: "right", fontFamily: "monospace" }}>
                               <span style={{ color: D.text }}>
-                                {usandoParte ? `${formatKg(qtdUtil)}` : formatKg(r.quantidade_kg)}
+                                {usandoParte ? `${formatKg(qtdUtil)}` : formatKg(r.quantidade_material)}
                               </span>
                               {usandoParte && (
-                                <span style={{ display: "block", fontSize: 10, color: D.muted }}>de {formatKg(r.quantidade_kg)}</span>
+                                <span style={{ display: "block", fontSize: 10, color: D.muted }}>de {formatKg(r.quantidade_material)}</span>
                               )}
                             </td>
                             <td style={{ padding: "0.55rem 1rem", color: D.text, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>
