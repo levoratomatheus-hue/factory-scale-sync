@@ -67,8 +67,10 @@ function inputStyle(D: Palette, extra?: React.CSSProperties): React.CSSPropertie
 type Reaprov = {
   id: string;
   codigo: string;
-  produto: string;
-  formula_id: string | null;
+  produto_destino: string;
+  formula_id_destino: string | null;
+  produto_origem: string | null;
+  formula_id_origem: string | null;
   quantidade_kg: number;
   status: "pendente" | "utilizado";
   observacao: string | null;
@@ -382,8 +384,16 @@ const DetalheModal = memo(function DetalheModal({
               <p style={{ fontSize: 18, fontWeight: 700, color: D.text, margin: 0 }}>{sdr.codigo}</p>
               <StatusBadgeInline status={sdr.status} />
             </div>
-            <p style={{ fontSize: 13, color: D.text, margin: "0.2rem 0 0", fontWeight: 500 }}>{sdr.produto}</p>
-            {sdr.formula_id && <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>Fórmula: {sdr.formula_id}</p>}
+            {sdr.produto_origem && (
+              <p style={{ fontSize: 12, color: D.muted, margin: "0.2rem 0 0" }}>
+                <span style={{ fontWeight: 600, color: D.text }}>Origem:</span> {sdr.produto_origem}
+                {sdr.formula_id_origem && <span style={{ fontSize: 10, color: D.muted, marginLeft: 4 }}>({sdr.formula_id_origem})</span>}
+              </p>
+            )}
+            <p style={{ fontSize: 13, color: D.text, margin: "0.2rem 0 0", fontWeight: 500 }}>
+              <span style={{ fontSize: 11, color: D.muted, fontWeight: 400 }}>Destino: </span>{sdr.produto_destino}
+            </p>
+            {sdr.formula_id_destino && <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>Fórmula destino: {sdr.formula_id_destino}</p>}
             <p style={{ fontSize: 11, color: D.muted, margin: "0.25rem 0 0" }}>
               Material: <strong style={{ color: D.text }}>{formatKg(sdr.quantidade_kg)}</strong>
               {producao !== null && <> · Produção prevista: <strong style={{ color: D.text }}>{formatKg(producao)}</strong></>}
@@ -582,8 +592,10 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   // ── Form state ──────────────────────────────────────────────────────────────
   const [view, setView] = useState<"list" | "form">("list");
   const [editando, setEditando] = useState<ReaprovFull | null>(null); // null = novo
-  const [fProduto, setFProduto] = useState("");
-  const [fFormulaId, setFFormulaId] = useState<string | null>(null);
+  const [fProdutoOrigem, setFProdutoOrigem] = useState("");
+  const [fFormulaIdOrigem, setFFormulaIdOrigem] = useState<string | null>(null);
+  const [fProdutoDestino, setFProdutoDestino] = useState("");
+  const [fFormulaIdDestino, setFFormulaIdDestino] = useState<string | null>(null);
   const [fQtdKg, setFQtdKg] = useState("");
   const [fObs, setFObs] = useState("");
   const [fItens, setFItens] = useState<ItemForm[]>([newItem()]);
@@ -611,7 +623,11 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     if (filtro === "pendentes") l = l.filter((r) => r.status === "pendente");
     else if (filtro === "utilizados") l = l.filter((r) => r.status === "utilizado");
     const q = busca.trim().toLowerCase();
-    if (q) l = l.filter((r) => r.codigo.toLowerCase().includes(q) || r.produto.toLowerCase().includes(q));
+    if (q) l = l.filter((r) =>
+      r.codigo.toLowerCase().includes(q) ||
+      r.produto_destino.toLowerCase().includes(q) ||
+      (r.produto_origem ?? "").toLowerCase().includes(q),
+    );
     return l;
   }, [lista, filtro, busca]);
 
@@ -664,7 +680,9 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   // ── Open form ────────────────────────────────────────────────────────────────
   function abrirNovo() {
     setEditando(null);
-    setFProduto(""); setFFormulaId(null); setFQtdKg(""); setFObs("");
+    setFProdutoOrigem(""); setFFormulaIdOrigem(null);
+    setFProdutoDestino(""); setFFormulaIdDestino(null);
+    setFQtdKg(""); setFObs("");
     setFItens([newItem()]);
     setView("form");
   }
@@ -672,8 +690,10 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   function abrirEditar(sdr: ReaprovFull) {
     setDetalhe(null);
     setEditando(sdr);
-    setFProduto(sdr.produto);
-    setFFormulaId(sdr.formula_id);
+    setFProdutoOrigem(sdr.produto_origem ?? "");
+    setFFormulaIdOrigem(sdr.formula_id_origem ?? null);
+    setFProdutoDestino(sdr.produto_destino);
+    setFFormulaIdDestino(sdr.formula_id_destino ?? null);
     setFQtdKg(String(sdr.quantidade_kg));
     setFObs(sdr.observacao ?? "");
     setFItens(
@@ -692,7 +712,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   async function handleSalvar() {
     // Validations
     const qtd = parseFloat(fQtdKg);
-    if (!fProduto.trim()) { toast({ title: "Informe o produto", variant: "destructive" }); return; }
+    if (!fProdutoDestino.trim()) { toast({ title: "Informe o produto de destino", variant: "destructive" }); return; }
     if (!qtd || qtd <= 0) { toast({ title: "Quantidade inválida", variant: "destructive" }); return; }
     if (fItens.length === 0) { toast({ title: "Adicione pelo menos um item à fórmula", variant: "destructive" }); return; }
 
@@ -723,7 +743,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       // Update header
       const { error: errH } = await (supabase as any)
         .from("reaproveitamentos")
-        .update({ produto: fProduto.trim(), formula_id: fFormulaId ?? null, quantidade_kg: qtd, observacao: fObs.trim() || null })
+        .update({ produto_destino: fProdutoDestino.trim(), formula_id_destino: fFormulaIdDestino ?? null, produto_origem: fProdutoOrigem.trim() || null, formula_id_origem: fFormulaIdOrigem ?? null, quantidade_kg: qtd, observacao: fObs.trim() || null })
         .eq("id", editando.id);
       if (errH) { setFormSaving(false); toast({ title: "Erro ao salvar", description: errH.message, variant: "destructive" }); return; }
       // Replace items
@@ -744,7 +764,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       // Insert new
       const { data: newRec, error: errH } = await (supabase as any)
         .from("reaproveitamentos")
-        .insert({ produto: fProduto.trim(), formula_id: fFormulaId ?? null, quantidade_kg: qtd, observacao: fObs.trim() || null, criado_por: perfilNome })
+        .insert({ produto_destino: fProdutoDestino.trim(), formula_id_destino: fFormulaIdDestino ?? null, produto_origem: fProdutoOrigem.trim() || null, formula_id_origem: fFormulaIdOrigem ?? null, quantidade_kg: qtd, observacao: fObs.trim() || null, criado_por: perfilNome })
         .select("id, codigo")
         .single();
       if (errH) { setFormSaving(false); toast({ title: "Erro ao criar SDR", description: errH.message, variant: "destructive" }); return; }
@@ -768,13 +788,15 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   // ── CSV export ───────────────────────────────────────────────────────────────
   function exportarCSV() {
     if (listaFiltrada.length === 0) return;
-    const header = "Código;Produto;Fórmula ID;Material (kg);Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
+    const header = "Código;Produto origem;Fórmula origem;Produto destino;Fórmula destino;Material (kg);Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
     const rows = listaFiltrada.map((r) => {
       const prod = calcProducaoPrevista(r.quantidade_kg, r.itens);
       return [
         r.codigo,
-        `"${r.produto.replace(/"/g, '""')}"`,
-        r.formula_id ?? "",
+        `"${(r.produto_origem ?? "").replace(/"/g, '""')}"`,
+        r.formula_id_origem ?? "",
+        `"${r.produto_destino.replace(/"/g, '""')}"`,
+        r.formula_id_destino ?? "",
         r.quantidade_kg.toFixed(3).replace(".", ","),
         prod !== null ? prod.toFixed(3).replace(".", ",") : "",
         r.status,
@@ -839,13 +861,27 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem", maxWidth: 760 }}>
 
-              {/* Produto */}
+              {/* Produto de origem (opcional) */}
               <div style={makeCard(D)}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.5rem" }}>Produto</p>
+                <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.25rem" }}>
+                  Produto de origem <span style={{ fontSize: 10, fontWeight: 400, textTransform: "none" }}>(opcional)</span>
+                </p>
+                <p style={{ fontSize: 11, color: D.muted, margin: "0 0 0.5rem" }}>Produto do qual o material é proveniente</p>
                 {isUtilizadoEdit ? (
-                  <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{fProduto}</p>
+                  <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{fProdutoOrigem || <span style={{ color: D.muted, fontStyle: "italic" }}>Não informado</span>}</p>
                 ) : (
-                  <ProdutoInput value={fProduto} formulaId={fFormulaId} onChange={(p, f) => { setFProduto(p); setFFormulaId(f); }} />
+                  <ProdutoInput value={fProdutoOrigem} formulaId={fFormulaIdOrigem} onChange={(p, f) => { setFProdutoOrigem(p); setFFormulaIdOrigem(f); }} />
+                )}
+              </div>
+
+              {/* Produto de destino */}
+              <div style={makeCard(D)}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.25rem" }}>Produto de destino</p>
+                <p style={{ fontSize: 11, color: D.muted, margin: "0 0 0.5rem" }}>Produto que será produzido com este material reaproveitado</p>
+                {isUtilizadoEdit ? (
+                  <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{fProdutoDestino}</p>
+                ) : (
+                  <ProdutoInput value={fProdutoDestino} formulaId={fFormulaIdDestino} onChange={(p, f) => { setFProdutoDestino(p); setFFormulaIdDestino(f); }} />
                 )}
               </div>
 
@@ -1103,8 +1139,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: D.cardAlt }}>
-                        {["Código", "Produto", "Material (kg)", "Produção prevista (kg)", "Status", "Criado em", "Utilizado em", ""].map((h, i) => (
-                          <th key={i} style={{ padding: "0.6rem 1rem", textAlign: i >= 2 && i <= 4 ? "right" : i === 5 || i === 6 ? "center" : "left", fontWeight: 600, color: D.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: `1px solid ${D.border}`, whiteSpace: "nowrap" }}>
+                        {["Código", "Produto origem", "Produto destino", "Material (kg)", "Produção prevista (kg)", "Status", "Criado em", "Utilizado em", ""].map((h, i) => (
+                          <th key={i} style={{ padding: "0.6rem 1rem", textAlign: i >= 3 && i <= 5 ? "right" : i === 6 || i === 7 ? "center" : "left", fontWeight: 600, color: D.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: `1px solid ${D.border}`, whiteSpace: "nowrap" }}>
                             {h}
                           </th>
                         ))}
@@ -1124,8 +1160,11 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                             <td style={{ padding: "0.55rem 1rem", color: D.cyan, fontWeight: 700, fontFamily: "monospace", whiteSpace: "nowrap" }}>
                               {r.codigo}
                             </td>
+                            <td style={{ padding: "0.55rem 1rem", color: D.muted, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>
+                              {r.produto_origem ?? <span style={{ fontStyle: "italic" }}>—</span>}
+                            </td>
                             <td style={{ padding: "0.55rem 1rem", color: D.text, fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {r.produto}
+                              {r.produto_destino}
                             </td>
                             <td style={{ padding: "0.55rem 1rem", color: D.text, textAlign: "right", fontFamily: "monospace" }}>
                               {formatKg(r.quantidade_kg)}
