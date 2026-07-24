@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp, Recycle } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -28,6 +28,7 @@ const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
 const ComprasPrevisao           = lazy(() => import('./ComprasPrevisao'));
 const ComprasMediaMensal        = lazy(() => import('./ComprasMediaMensal'));
+const Reaproveitamento          = lazy(() => import('./Reaproveitamento'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -60,7 +61,8 @@ type TabGestorId =
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
   | 'historico_paradas'
   | 'consumo_mp'
-  | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal';
+  | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal'
+  | 'reaproveitamento';
 
 const gruposGestor = [
   {
@@ -144,6 +146,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['compras_consumo' as TabGestorId, 'Consumo de MP'],
   ['compras_previsao' as TabGestorId, 'Previsão de Compra'],
   ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
+  ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -179,6 +182,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'historico_paradas',
   'consumo_mp',
   'compras_consumo', 'compras_previsao', 'compras_media_mensal',
+  'reaproveitamento',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -537,6 +541,17 @@ export default function Index() {
                         <span>Consumo de MP</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'reaproveitamento'}
+                        tooltip="Reaproveitamento"
+                        onClick={() => goToTab('reaproveitamento')}
+                        size="sm"
+                      >
+                        <Recycle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Reaproveitamento</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -566,8 +581,9 @@ export default function Index() {
           <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
             <SidebarTrigger />
             {activeTab === 'consumo_mp' && <span className="font-semibold text-sm">Consumo de MP</span>}
+            {activeTab === 'reaproveitamento' && <span className="font-semibold text-sm">Reaproveitamento</span>}
           </header>
-          {activeTab !== 'consumo_mp' ? (
+          {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Selecione uma opção no menu
             </div>
@@ -575,7 +591,8 @@ export default function Index() {
             <main className="p-3 sm:p-6 overflow-x-hidden">
               <ErrorBoundary>
                 <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-                  <ConsumoMP perfilNome={perfil.nome} />
+                  {activeTab === 'consumo_mp' && <ConsumoMP perfilNome={perfil.nome} />}
+                  {activeTab === 'reaproveitamento' && <Reaproveitamento perfilNome={perfil.nome} />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -747,6 +764,17 @@ export default function Index() {
                   >
                     <TestTube2 className="h-3.5 w-3.5 shrink-0" />
                     <span>Consumo de MP</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'reaproveitamento'}
+                    tooltip="Reaproveitamento"
+                    onClick={() => goToTab('reaproveitamento')}
+                    size="sm"
+                  >
+                    <Recycle className="h-3.5 w-3.5 shrink-0" />
+                    <span>Reaproveitamento</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -993,6 +1021,13 @@ export default function Index() {
               {mountedTabs.has('compras_media_mensal') && (
                 <KeepAlive active={activeTab === 'compras_media_mensal'}>
                   <Suspense fallback={TAB_LOADING}><ComprasMediaMensal /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('reaproveitamento') && (
+                <KeepAlive active={activeTab === 'reaproveitamento'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <Reaproveitamento perfilNome={perfil.nome} />
+                  </Suspense>
                 </KeepAlive>
               )}
             </ErrorBoundary>
