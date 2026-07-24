@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo, createContext, useCont
 import { Loader2, Download, AlertTriangle, X, CalendarDays, Search } from "lucide-react";
 import { formatKg } from "@/lib/utils";
 import { useComprasConsumo } from "@/hooks/useCompras";
-import type { LinhaMP, OpDetalhe } from "@/hooks/useCompras";
+import type { LinhaMP, OpDetalhe, MesesComDados } from "@/hooks/useCompras";
 
 // ── Theme palette ─────────────────────────────────────────────────────────────
 
@@ -43,12 +43,12 @@ function toStr(d: Date): string {
   return d.toISOString().split("T")[0];
 }
 
-/** Conta meses de calendário distintos entre duas datas YYYY-MM-DD (inclusive). */
-function calcNMeses(dataInicio: string, dataFim: string): number {
-  if (!dataInicio || !dataFim) return 1;
-  const [iy, im] = dataInicio.split("-").map(Number);
-  const [fy, fm] = dataFim.split("-").map(Number);
-  return Math.max(1, (fy - iy) * 12 + (fm - im) + 1);
+const MESES_PT = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+
+/** Formata YYYY-MM como "mmm/AAAA" em português */
+function formatMes(yyyyMM: string): string {
+  const [y, m] = yyyyMM.split("-").map(Number);
+  return `${MESES_PT[m - 1]}/${y}`;
 }
 
 // ── Atalhos ───────────────────────────────────────────────────────────────────
@@ -255,8 +255,24 @@ export default function ComprasMediaMensal() {
     setDataFim(fim);
   }, []);
 
-  // Número de meses do período
-  const nMeses = useMemo(() => calcNMeses(dataInicio, dataFim), [dataInicio, dataFim]);
+  // Meses com dados reais (OPs no período) — base da divisão da média
+  const mesesComDados = useMemo<MesesComDados>(
+    () => resultado?.mesesComDados ?? { meses: [], opsPorMes: {} },
+    [resultado],
+  );
+  const nMeses = useMemo(() => Math.max(1, mesesComDados.meses.length), [mesesComDados]);
+
+  // Alertas de mês parcial
+  const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const temMesAtual = mesesComDados.meses.includes(mesAtual);
+  const mesesBaixoVolume = useMemo(() => {
+    const vals = Object.values(mesesComDados.opsPorMes);
+    if (vals.length < 2) return [];
+    const media = vals.reduce((s, v) => s + v, 0) / vals.length;
+    return mesesComDados.meses.filter(
+      (m) => m !== mesAtual && mesesComDados.opsPorMes[m] < media * 0.3,
+    );
+  }, [mesesComDados, mesAtual]);
 
   // Filtro em memória
   const linhasFiltradas = useMemo(() => {
@@ -385,12 +401,6 @@ export default function ComprasMediaMensal() {
             {loading && <Loader2 size={13} className="animate-spin" />}
             Calcular
           </button>
-          {/* Período em meses (preview) */}
-          {dataInicio && dataFim && (
-            <span style={{ fontSize: 12, color: D.muted }}>
-              ({nMeses} {nMeses === 1 ? "mês" : "meses"} no período)
-            </span>
-          )}
         </div>
 
         {/* Aviso de cobertura */}
@@ -411,13 +421,67 @@ export default function ComprasMediaMensal() {
           </div>
         )}
 
+        {/* Banner: meses que entraram no cálculo */}
+        {resultado && mesesComDados.meses.length > 0 && (
+          <div style={{
+            marginBottom: "0.75rem", padding: "0.6rem 1rem",
+            borderRadius: "0.5rem", background: D.cardAlt, border: `1px solid ${D.border}`,
+            fontSize: 12, color: D.muted, display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap",
+          }}>
+            <CalendarDays size={13} style={{ color: D.cyan, flexShrink: 0 }} />
+            <span>
+              Média sobre{" "}
+              <strong style={{ color: D.text }}>
+                {nMeses} {nMeses === 1 ? "mês" : "meses"}
+              </strong>
+              {" "}(
+              {nMeses === 1
+                ? formatMes(mesesComDados.meses[0])
+                : `${formatMes(mesesComDados.meses[0])} a ${formatMes(mesesComDados.meses[nMeses - 1])}`}
+              ) — meses considerados:{" "}
+              {mesesComDados.meses.map(formatMes).join(", ")}
+            </span>
+          </div>
+        )}
+
+        {/* Alerta de mês parcial */}
+        {resultado && (temMesAtual || mesesBaixoVolume.length > 0) && (
+          <div style={{
+            marginBottom: "0.75rem", padding: "0.6rem 1rem",
+            borderRadius: "0.5rem", background: D.amberBg, border: `1px solid ${D.amberBorder}`,
+            display: "flex", alignItems: "flex-start", gap: "0.5rem",
+          }}>
+            <AlertTriangle size={14} style={{ color: D.amber, flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: 12, color: D.text, margin: 0 }}>
+              {temMesAtual && (
+                <span>
+                  O mês corrente (<strong>{formatMes(mesAtual)}</strong>) ainda está em andamento — pode subestimar a média.
+                </span>
+              )}
+              {temMesAtual && mesesBaixoVolume.length > 0 && " "}
+              {mesesBaixoVolume.length > 0 && (
+                <span>
+                  {mesesBaixoVolume.map(formatMes).join(", ")}{" "}
+                  {mesesBaixoVolume.length === 1 ? "apresenta" : "apresentam"} volume muito abaixo dos demais e pode{mesesBaixoVolume.length > 1 ? "m" : ""} estar incompleto{mesesBaixoVolume.length > 1 ? "s" : ""}.
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
         {/* Summary cards */}
         {resultado && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.25rem" }}>
             <SummaryCard
-              label="Meses no período"
+              label="Meses com dados"
               value={String(nMeses)}
-              sub={`${dataInicio.split("-").reverse().slice(1).join("/")} → ${dataFim.split("-").reverse().slice(1).join("/")}`}
+              sub={
+                nMeses >= 2
+                  ? `${formatMes(mesesComDados.meses[0])} → ${formatMes(mesesComDados.meses[nMeses - 1])}`
+                  : nMeses === 1
+                    ? formatMes(mesesComDados.meses[0])
+                    : undefined
+              }
             />
             <SummaryCard
               label={buscaAtiva ? "MPs encontradas" : "MPs distintas"}
@@ -555,7 +619,7 @@ export default function ComprasMediaMensal() {
 
         {/* Footer */}
         <p style={{ marginTop: "1.5rem", fontSize: 11, color: D.muted, fontStyle: "italic" }}>
-          * Consumo teórico com base nas fórmulas cadastradas dividido pelo número de meses do período. Não considera perdas, sobras ou ajustes de produção.
+          * Consumo teórico com base nas fórmulas cadastradas dividido pelo número de meses distintos com OPs registradas no período. Não considera perdas, sobras ou ajustes de produção.
         </p>
       </div>
 

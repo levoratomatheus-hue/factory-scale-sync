@@ -33,10 +33,16 @@ export type AvisoCobertura = {
   kg_excluidos: number;  // soma de quantidade das OPs que ficaram fora
 };
 
+export type MesesComDados = {
+  meses: string[];                    // YYYY-MM ordenados com pelo menos 1 OP
+  opsPorMes: Record<string, number>;  // contagem de OPs por mês (base para alerta de volume)
+};
+
 export type ResultadoCompras = {
   linhas: LinhaMP[];
   aviso: AvisoCobertura;
   total_kg: number;
+  mesesComDados: MesesComDados;
 };
 
 export type ResultadoPrevisao = {
@@ -248,7 +254,18 @@ export function useComprasConsumo(
       const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, false);
       const linhas = buildLinhas<LinhaMP>(linhasMap, () => ({}));
 
-      setResultado({ linhas, aviso, total_kg: linhas.reduce((s, l) => s + l.total_kg, 0) });
+      // Conta meses distintos com OPs no período (base para divisão da média)
+      const opsPorMes: Record<string, number> = {};
+      for (const o of ordens) {
+        const mes = (o.criado_em ?? "").slice(0, 7); // YYYY-MM
+        if (mes && mes.length === 7) opsPorMes[mes] = (opsPorMes[mes] ?? 0) + 1;
+      }
+      const mesesComDados: MesesComDados = {
+        meses: Object.keys(opsPorMes).sort(),
+        opsPorMes,
+      };
+
+      setResultado({ linhas, aviso, total_kg: linhas.reduce((s, l) => s + l.total_kg, 0), mesesComDados });
     } finally {
       setLoading(false);
     }
