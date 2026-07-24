@@ -89,7 +89,7 @@ type ReaprovItem = {
   materia_prima: string;
   cod_mp_excel: string | null;
   percentual: number;
-  material_reaproveitado: boolean;
+  eh_reaproveitado: boolean;
 };
 
 type ReaprovFull = Reaprov & { itens: ReaprovItem[] };
@@ -787,7 +787,6 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       materia_prima: it.materia_prima.trim(),
       cod_mp_excel: it.cod_mp_excel ?? null,
       percentual: parseFloat(it.percentual),
-      material_reaproveitado: false,
     }));
 
     setFormSaving(true);
