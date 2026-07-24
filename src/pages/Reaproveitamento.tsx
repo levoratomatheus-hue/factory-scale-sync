@@ -101,7 +101,7 @@ type ItemForm = {
   percentual: string;
 };
 
-type MpSug = { cod_excel: string; descricao: string };
+type MpSug = { cod_excel: string; cod_tid: string | null; descricao: string };
 type ProdutoSug = { formula_id: string; produto: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -283,8 +283,8 @@ function MpInput({
     debRef.current = setTimeout(async () => {
       const { data } = await (supabase as any)
         .from("mp_depara")
-        .select("cod_excel, descricao")
-        .or(`descricao.ilike.%${v.trim()}%,cod_excel.ilike.%${v.trim()}%`)
+        .select("cod_excel, cod_tid, descricao")
+        .or(`descricao.ilike.%${v.trim()}%,cod_excel.ilike.%${v.trim()}%,cod_tid.ilike.%${v.trim()}%`)
         .order("descricao")
         .limit(15);
       setSugestoes(data ?? []);
@@ -329,8 +329,10 @@ function MpInput({
               onMouseEnter={(e) => (e.currentTarget.style.background = D.cardAlt)}
               onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
             >
-              <span>{s.descricao}</span>
-              <span style={{ fontSize: 10, color: D.muted, marginLeft: 4 }}>({s.cod_excel})</span>
+              <span style={{ fontWeight: 500 }}>{s.descricao}</span>
+              <span style={{ fontSize: 10, color: D.muted, marginLeft: 6 }}>
+                {s.cod_excel}{s.cod_tid ? ` · ${s.cod_tid}` : ""}
+              </span>
             </button>
           ))}
         </div>
