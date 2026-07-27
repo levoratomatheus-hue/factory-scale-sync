@@ -289,6 +289,19 @@ export default function ComprasPrevisao() {
     URL.revokeObjectURL(url);
   }, [resultado, dataInicio, dataFim]);
 
+  const totalKg = useMemo(
+    () => resultado?.linhas.reduce((s, l) => s + l.total_kg, 0) ?? 0,
+    [resultado],
+  );
+  const totalEmProducaoKg = useMemo(
+    () => resultado?.linhas.reduce((s, l) => s + l.em_producao_kg, 0) ?? 0,
+    [resultado],
+  );
+  const totalNaoIniciadaKg = useMemo(
+    () => resultado?.linhas.reduce((s, l) => s + l.nao_iniciada_kg, 0) ?? 0,
+    [resultado],
+  );
+
   const aviso = resultado?.aviso;
   const temAviso = aviso && (
     aviso.sem_formula > 0 ||
@@ -508,6 +521,23 @@ export default function ComprasPrevisao() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={{ background: D.cardAlt, borderTop: `2px solid ${D.border}` }}>
+                  <td style={{ padding: "0.6rem 1rem", fontWeight: 700, color: D.text, fontSize: 12 }}>
+                    {`Total (${resultado.linhas.length} MPs)`}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: D.cyan, fontSize: 13 }}>
+                    {formatKg(totalKg)}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: D.blue, fontSize: 13 }}>
+                    {formatKg(totalEmProducaoKg)}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: D.muted, fontSize: 13 }}>
+                    {formatKg(totalNaoIniciadaKg)}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem" }} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

@@ -633,6 +633,18 @@ export default function ComprasConsumo() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={{ background: D.cardAlt, borderTop: `2px solid ${D.border}` }}>
+                  <td style={{ padding: "0.6rem 1rem", fontWeight: 700, color: D.text, fontSize: 12 }}>
+                    {buscaAtiva ? `Total (${linhasFiltradas.length} MPs filtradas)` : `Total (${linhasFiltradas.length} MPs)`}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem" }} />
+                  <td style={{ padding: "0.6rem 1rem", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: D.cyan, fontSize: 13 }}>
+                    {formatKg(totalFiltradoKg)}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem" }} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
