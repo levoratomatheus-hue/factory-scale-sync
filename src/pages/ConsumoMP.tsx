@@ -54,6 +54,13 @@ interface Props {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Formata porcentagem com 3 casas decimais; valores > 0 mas < 0,0005 exibem "<0,001%". */
+function fmtPct(v: number): string {
+  if (v === 0) return '0,000%';
+  if (v < 0.0005) return '<0,001%';
+  return v.toFixed(3).replace('.', ',') + '%';
+}
+
 function fmt(d: string) {
   const [y, m, dd] = d.split('-');
   return `${dd}/${m}/${y}`;
@@ -414,7 +421,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
         t.cod_mp_excel,
         t.cod_tid ?? '',
         t.total_kg.toFixed(3).replace('.', ','),
-        t.pct.toFixed(2).replace('.', ',') + '%',
+        fmtPct(t.pct),
         ...(filtroSetor === 'ambos' ? [
           t.kg_lab.toFixed(3).replace('.', ','),
           t.kg_prod.toFixed(3).replace('.', ','),
@@ -856,7 +863,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                                     {t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}
                                   </td>
                                 </>}
-                                <td className="py-2 text-right text-muted-foreground text-xs font-mono">{t.pct.toFixed(1)}%</td>
+                                <td className="py-2 text-right text-muted-foreground text-xs font-mono">{fmtPct(t.pct)}</td>
                               </tr>
                             ))}
                           </tbody>
