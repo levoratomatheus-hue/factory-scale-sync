@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatKg } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -11,6 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Setor = 'laboratorio' | 'producao';
+type FiltroSetor = Setor | 'ambos';
 
 interface MpDepara {
   cod_excel: string;
@@ -27,6 +32,7 @@ interface ConsumoMpRow {
   observacao: string | null;
   retirado_por: string;
   criado_em: string;
+  setor: Setor | null;
 }
 
 interface TotalPorMp {
@@ -34,12 +40,17 @@ interface TotalPorMp {
   cod_tid: string | null;
   materia_prima: string;
   total_kg: number;
+  kg_lab: number;
+  kg_prod: number;
   num_retiradas: number;
+  pct: number;
 }
 
 interface Props {
   perfilNome: string;
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(d: string) {
   const [y, m, dd] = d.split('-');
@@ -54,8 +65,8 @@ function toInputDate(d: Date) {
 }
 
 function startOfWeek(d: Date) {
-  const day = d.getDay(); // 0=Dom
-  const diff = day === 0 ? -6 : 1 - day; // segunda-feira
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
   const r = new Date(d);
   r.setDate(d.getDate() + diff);
   return r;
@@ -67,8 +78,16 @@ function endOfWeek(d: Date) {
   return r;
 }
 
+const SETOR_LABEL: Record<Setor, string> = {
+  laboratorio: 'Laboratório',
+  producao: 'Produção',
+};
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 export default function ConsumoMP({ perfilNome }: Props) {
-  // ─── Seção 1 – Lançar retirada ───────────────────────────────────────────
+
+  // ─── Seção 1 – Lançar retirada ─────────────────────────────────────────────
   const [busca, setBusca] = useState('');
   const [sugestoes, setSugestoes] = useState<MpDepara[]>([]);
   const [showSugestoes, setShowSugestoes] = useState(false);
@@ -76,22 +95,23 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [quantidade, setQuantidade] = useState('');
   const [data, setData] = useState(toInputDate(new Date()));
   const [observacao, setObservacao] = useState('');
+  const [setor, setSetor] = useState<Setor>('laboratorio');
   const [salvando, setSalvando] = useState(false);
   const [retiradas, setRetiradas] = useState<ConsumoMpRow[]>([]);
   const [carregandoRetiradas, setCarregandoRetiradas] = useState(false);
   const buscaRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Seção 2 – Relatório ─────────────────────────────────────────────────
+  // ─── Seção 2 – Relatório ───────────────────────────────────────────────────
   const hoje = new Date();
   const [dataInicio, setDataInicio] = useState(toInputDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)));
   const [dataFim, setDataFim] = useState(toInputDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)));
+  const [filtroSetor, setFiltroSetor] = useState<FiltroSetor>('ambos');
   const [relatorio, setRelatorio] = useState<ConsumoMpRow[]>([]);
   const [carregandoRel, setCarregandoRel] = useState(false);
-  // mapa cod_excel → cod_tid, carregado uma vez
   const [deparaMap, setDeparaMap] = useState<Map<string, string | null>>(new Map());
 
-  // ── Autocomplete ──────────────────────────────────────────────────────────
+  // ── Autocomplete ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (busca.length < 2) { setSugestoes([]); setShowSugestoes(false); return; }
@@ -108,7 +128,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [busca]);
 
-  // ── Últimas retiradas ─────────────────────────────────────────────────────
+  // ── Últimas retiradas ───────────────────────────────────────────────────────
   const fetchRetiradas = useCallback(async () => {
     setCarregandoRetiradas(true);
     const { data: rows } = await supabase
@@ -116,13 +136,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
       .select('*')
       .order('criado_em', { ascending: false })
       .limit(20);
-    setRetiradas(rows ?? []);
+    setRetiradas((rows ?? []) as ConsumoMpRow[]);
     setCarregandoRetiradas(false);
   }, []);
 
   useEffect(() => { fetchRetiradas(); }, [fetchRetiradas]);
 
-  // ── Registrar retirada ────────────────────────────────────────────────────
+  // ── Registrar retirada ──────────────────────────────────────────────────────
   const handleRegistrar = async () => {
     if (!mpSelecionada) { toast({ title: 'Selecione uma matéria-prima', variant: 'destructive' }); return; }
     const qtd = parseFloat(quantidade.replace(',', '.'));
@@ -130,13 +150,14 @@ export default function ConsumoMP({ perfilNome }: Props) {
     if (!data) { toast({ title: 'Informe a data', variant: 'destructive' }); return; }
 
     setSalvando(true);
-    const { error } = await supabase.from('consumo_mp').insert({
+    const { error } = await (supabase as any).from('consumo_mp').insert({
       cod_mp_excel: mpSelecionada.cod_excel,
       materia_prima: mpSelecionada.descricao,
       quantidade_kg: qtd,
       data_retirada: data,
       observacao: observacao.trim() || null,
       retirado_por: perfilNome,
+      setor,
     });
     setSalvando(false);
 
@@ -151,13 +172,14 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setQuantidade('');
     setData(toInputDate(new Date()));
     setObservacao('');
+    // mantém setor selecionado para lançamentos em sequência
     setSugestoes([]);
     setShowSugestoes(false);
     fetchRetiradas();
     setTimeout(() => buscaRef.current?.focus(), 100);
   };
 
-  // ── Excluir retirada ──────────────────────────────────────────────────────
+  // ── Excluir retirada ────────────────────────────────────────────────────────
   const handleExcluir = async (id: string) => {
     if (!confirm('Excluir este lançamento?')) return;
     const { error } = await supabase.from('consumo_mp').delete().eq('id', id);
@@ -166,7 +188,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     fetchRetiradas();
   };
 
-  // ── Carregar mapa cod_excel → cod_tid (uma vez) ──────────────────────────
+  // ── Mapa cod_excel → cod_tid ─────────────────────────────────────────────
   useEffect(() => {
     supabase
       .from('mp_depara')
@@ -174,30 +196,36 @@ export default function ConsumoMP({ perfilNome }: Props) {
       .then(({ data }) => {
         if (!data) return;
         const m = new Map<string, string | null>();
-        for (const row of data) m.set(row.cod_excel, (row as { cod_excel: string; cod_tid: string | null }).cod_tid ?? null);
+        for (const row of data) m.set(row.cod_excel, (row as any).cod_tid ?? null);
         setDeparaMap(m);
       });
   }, []);
 
-  // ── Relatório ─────────────────────────────────────────────────────────────
+  // ── Relatório ───────────────────────────────────────────────────────────────
   const fetchRelatorio = useCallback(async () => {
     setCarregandoRel(true);
-    const { data: rows } = await supabase
+    const { data: rows } = await (supabase as any)
       .from('consumo_mp')
       .select('*')
       .gte('data_retirada', dataInicio)
       .lte('data_retirada', dataFim)
       .order('data_retirada', { ascending: false });
-    setRelatorio(rows ?? []);
+    setRelatorio((rows ?? []) as ConsumoMpRow[]);
     setCarregandoRel(false);
   }, [dataInicio, dataFim]);
 
   useEffect(() => { fetchRelatorio(); }, [fetchRelatorio]);
 
-  // ── Totais por MP ─────────────────────────────────────────────────────────
-  const totaisPorMp: TotalPorMp[] = (() => {
+  // ── Filtragem por setor (client-side) ───────────────────────────────────────
+  const relatorioFiltrado = useMemo(() => {
+    if (filtroSetor === 'ambos') return relatorio;
+    return relatorio.filter((r) => r.setor === filtroSetor);
+  }, [relatorio, filtroSetor]);
+
+  // ── Totais por MP ───────────────────────────────────────────────────────────
+  const totaisPorMp: TotalPorMp[] = useMemo(() => {
     const map = new Map<string, TotalPorMp>();
-    for (const r of relatorio) {
+    for (const r of relatorioFiltrado) {
       const key = r.cod_mp_excel;
       if (!map.has(key)) {
         map.set(key, {
@@ -205,20 +233,31 @@ export default function ConsumoMP({ perfilNome }: Props) {
           cod_tid: deparaMap.get(r.cod_mp_excel) ?? null,
           materia_prima: r.materia_prima,
           total_kg: 0,
+          kg_lab: 0,
+          kg_prod: 0,
           num_retiradas: 0,
+          pct: 0,
         });
       }
       const entry = map.get(key)!;
       entry.total_kg += r.quantidade_kg;
       entry.num_retiradas += 1;
+      if (r.setor === 'laboratorio') entry.kg_lab += r.quantidade_kg;
+      else if (r.setor === 'producao') entry.kg_prod += r.quantidade_kg;
     }
-    return Array.from(map.values()).sort((a, b) => b.total_kg - a.total_kg);
-  })();
+    const arr = Array.from(map.values()).sort((a, b) => b.total_kg - a.total_kg);
+    const total = arr.reduce((s, t) => s + t.total_kg, 0);
+    arr.forEach((t) => { t.pct = total > 0 ? (t.total_kg / total) * 100 : 0; });
+    return arr;
+  }, [relatorioFiltrado, deparaMap]);
 
-  const totalGeralKg = totaisPorMp.reduce((s, t) => s + t.total_kg, 0);
+  const totalGeralKg = useMemo(() => totaisPorMp.reduce((s, t) => s + t.total_kg, 0), [totaisPorMp]);
   const numMpDistintas = totaisPorMp.length;
 
-  // ── Atalhos de período ────────────────────────────────────────────────────
+  const totalLabKg = useMemo(() => relatorioFiltrado.filter((r) => r.setor === 'laboratorio').reduce((s, r) => s + r.quantidade_kg, 0), [relatorioFiltrado]);
+  const totalProdKg = useMemo(() => relatorioFiltrado.filter((r) => r.setor === 'producao').reduce((s, r) => s + r.quantidade_kg, 0), [relatorioFiltrado]);
+
+  // ── Atalhos de período ──────────────────────────────────────────────────────
   const aplicarAtalho = (atalho: 'hoje' | 'semana' | 'mes' | 'ano') => {
     const h = new Date();
     if (atalho === 'hoje') { setDataInicio(toInputDate(h)); setDataFim(toInputDate(h)); }
@@ -227,12 +266,32 @@ export default function ConsumoMP({ perfilNome }: Props) {
     else if (atalho === 'ano') { setDataInicio(toInputDate(new Date(h.getFullYear(), 0, 1))); setDataFim(toInputDate(new Date(h.getFullYear(), 11, 31))); }
   };
 
-  // ── Exportar CSV ──────────────────────────────────────────────────────────
+  // ── Exportar CSV ────────────────────────────────────────────────────────────
   const exportarCSV = () => {
-    const rows = [
-      ['Data', 'Cód. Excel', 'Cód. TID', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
-      ...relatorio.map(r => [
+    // Totais por MP
+    const totalRows = [
+      ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
+        ...(filtroSetor === 'ambos' ? ['Kg Laboratório', 'Kg Produção'] : [])],
+      ...totaisPorMp.map((t) => [
+        t.materia_prima,
+        t.cod_mp_excel,
+        t.cod_tid ?? '',
+        t.total_kg.toFixed(3).replace('.', ','),
+        t.pct.toFixed(2).replace('.', ',') + '%',
+        ...(filtroSetor === 'ambos' ? [
+          t.kg_lab.toFixed(3).replace('.', ','),
+          t.kg_prod.toFixed(3).replace('.', ','),
+        ] : []),
+      ]),
+    ];
+
+    const detailRows = [
+      [],
+      ['--- Histórico Detalhado ---'],
+      ['Data', 'Setor', 'Cód. Excel', 'Cód. TID', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
+      ...relatorioFiltrado.map((r) => [
         fmt(r.data_retirada),
+        r.setor ? SETOR_LABEL[r.setor] : '',
         r.cod_mp_excel,
         deparaMap.get(r.cod_mp_excel) ?? '',
         r.materia_prima,
@@ -241,15 +300,19 @@ export default function ConsumoMP({ perfilNome }: Props) {
         r.observacao ?? '',
       ]),
     ];
-    const csv = '\ufeff' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+
+    const all = [...totalRows, ...detailRows];
+    const csv = '\ufeff' + all.map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `consumo_mp_${dataInicio}_${dataFim}.csv`;
+    a.download = `consumo_mp_${filtroSetor}_${dataInicio}_${dataFim}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const mostrarColunaSetor = filtroSetor === 'ambos';
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
@@ -265,9 +328,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
           </TabsTrigger>
         </TabsList>
 
-        {/* ════════════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════
             ABA 1 – LANÇAR RETIRADA
-        ════════════════════════════════════════════════════════════ */}
+        ════════════════════════════════════════════════════════ */}
         <TabsContent value="lancar" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
@@ -284,7 +347,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     placeholder="Buscar por código ou descrição…"
                     value={mpSelecionada ? `${mpSelecionada.cod_excel} – ${mpSelecionada.descricao}` : busca}
                     onChange={e => {
-                      if (mpSelecionada) { setMpSelecionada(null); }
+                      if (mpSelecionada) setMpSelecionada(null);
                       setBusca(e.target.value);
                     }}
                     onFocus={() => { if (busca.length >= 2 && !mpSelecionada) setShowSugestoes(true); }}
@@ -345,6 +408,29 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     onChange={e => setData(e.target.value)}
                   />
                 </div>
+
+                {/* Setor */}
+                <div className="space-y-1.5">
+                  <Label>Setor *</Label>
+                  <div className="flex rounded-md border overflow-hidden h-10">
+                    {(['laboratorio', 'producao'] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSetor(s)}
+                        className={cn(
+                          'flex-1 px-3 text-sm transition-colors',
+                          s === 'producao' && 'border-l',
+                          setor === s
+                            ? 'bg-primary text-primary-foreground font-semibold'
+                            : 'bg-background text-muted-foreground hover:bg-muted',
+                        )}
+                      >
+                        {SETOR_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Observação */}
@@ -383,6 +469,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     <thead>
                       <tr className="border-b text-muted-foreground text-xs">
                         <th className="text-left pb-2 pr-3 font-medium">Data</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Setor</th>
                         <th className="text-left pb-2 pr-3 font-medium">Cód.</th>
                         <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
                         <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
@@ -395,6 +482,18 @@ export default function ConsumoMP({ perfilNome }: Props) {
                       {retiradas.map(r => (
                         <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                           <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
+                          <td className="py-2 pr-3">
+                            {r.setor ? (
+                              <Badge
+                                variant="secondary"
+                                className={cn('text-[10px] px-1.5', r.setor === 'laboratorio' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300')}
+                              >
+                                {r.setor === 'laboratorio' ? 'Lab' : 'Prod'}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
                           <td className="py-2 pr-3">{r.materia_prima}</td>
                           <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
@@ -421,14 +520,15 @@ export default function ConsumoMP({ perfilNome }: Props) {
           </Card>
         </TabsContent>
 
-        {/* ════════════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════
             ABA 2 – RELATÓRIO POR PERÍODO
-        ════════════════════════════════════════════════════════════ */}
+        ════════════════════════════════════════════════════════ */}
         <TabsContent value="relatorio" className="space-y-4">
           {/* Filtros */}
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-wrap items-end gap-3">
+                {/* Período */}
                 <div className="space-y-1.5">
                   <Label>De</Label>
                   <Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="w-36" />
@@ -444,6 +544,29 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     </Button>
                   ))}
                 </div>
+
+                {/* Setor */}
+                <div className="space-y-1.5 ml-2">
+                  <Label>Setor</Label>
+                  <div className="flex rounded-md border overflow-hidden">
+                    {(['laboratorio', 'producao', 'ambos'] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setFiltroSetor(s)}
+                        className={cn(
+                          'px-3 py-1.5 text-xs font-medium transition-colors border-l first:border-l-0',
+                          filtroSetor === s
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background text-muted-foreground hover:bg-muted',
+                        )}
+                      >
+                        {s === 'laboratorio' ? 'Laboratório' : s === 'producao' ? 'Produção' : 'Ambos'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <Button variant="outline" size="sm" onClick={exportarCSV} className="gap-1.5 ml-auto">
                   <Download className="h-4 w-4" />
                   Exportar CSV
@@ -464,6 +587,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
                   <CardContent className="pt-4 pb-3">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total no período</p>
                     <p className="text-2xl font-bold">{formatKg(totalGeralKg)} <span className="text-sm font-normal text-muted-foreground">kg</span></p>
+                    {filtroSetor === 'ambos' && (totalLabKg > 0 || totalProdKg > 0) && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <span className="text-blue-600 dark:text-blue-400 font-medium">Lab: {formatKg(totalLabKg)} kg</span>
+                        <span className="mx-1.5">·</span>
+                        <span className="text-orange-600 dark:text-orange-400 font-medium">Prod: {formatKg(totalProdKg)} kg</span>
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>
@@ -475,13 +605,18 @@ export default function ConsumoMP({ perfilNome }: Props) {
                 <Card>
                   <CardContent className="pt-4 pb-3">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Nº de retiradas</p>
-                    <p className="text-2xl font-bold">{relatorio.length}</p>
+                    <p className="text-2xl font-bold">{relatorioFiltrado.length}</p>
                   </CardContent>
                 </Card>
               </div>
 
-              {relatorio.length === 0 ? (
-                <Card><CardContent className="py-10 text-center text-muted-foreground text-sm">Nenhuma retirada no período selecionado.</CardContent></Card>
+              {relatorioFiltrado.length === 0 ? (
+                <Card>
+                  <CardContent className="py-10 text-center text-muted-foreground text-sm">
+                    Nenhuma retirada no período selecionado
+                    {filtroSetor !== 'ambos' && ` para o setor ${SETOR_LABEL[filtroSetor]}`}.
+                  </CardContent>
+                </Card>
               ) : (
                 <>
                   {/* Totais por MP */}
@@ -498,7 +633,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
                               <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
                               <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                               <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
-                              <th className="text-right pb-2 font-medium">Nº retiradas</th>
+                              {mostrarColunaSetor && <>
+                                <th className="text-right pb-2 pr-3 font-medium text-blue-600 dark:text-blue-400">Lab (kg)</th>
+                                <th className="text-right pb-2 pr-3 font-medium text-orange-600 dark:text-orange-400">Prod (kg)</th>
+                              </>}
+                              <th className="text-right pb-2 font-medium">% do total</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -508,10 +647,31 @@ export default function ConsumoMP({ perfilNome }: Props) {
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
                                 <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
-                                <td className="py-2 text-right text-muted-foreground">{t.num_retiradas}</td>
+                                {mostrarColunaSetor && <>
+                                  <td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">
+                                    {t.kg_lab > 0 ? formatKg(t.kg_lab) : <span className="text-muted-foreground">—</span>}
+                                  </td>
+                                  <td className="py-2 pr-3 text-right font-mono text-xs text-orange-600 dark:text-orange-400">
+                                    {t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}
+                                  </td>
+                                </>}
+                                <td className="py-2 text-right text-muted-foreground text-xs font-mono">
+                                  {t.pct.toFixed(1)}%
+                                </td>
                               </tr>
                             ))}
                           </tbody>
+                          <tfoot>
+                            <tr className="border-t font-semibold text-xs">
+                              <td colSpan={3} className="py-2 pr-3 text-muted-foreground">Total</td>
+                              <td className="py-2 pr-3 text-right font-mono">{formatKg(totalGeralKg)}</td>
+                              {mostrarColunaSetor && <>
+                                <td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">{formatKg(totalLabKg)}</td>
+                                <td className="py-2 pr-3 text-right font-mono text-orange-600 dark:text-orange-400">{formatKg(totalProdKg)}</td>
+                              </>}
+                              <td className="py-2 text-right text-muted-foreground">100%</td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                     </CardContent>
@@ -528,6 +688,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           <thead>
                             <tr className="border-b text-muted-foreground text-xs">
                               <th className="text-left pb-2 pr-3 font-medium">Data</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Setor</th>
                               <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
                               <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
                               <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
@@ -537,9 +698,21 @@ export default function ConsumoMP({ perfilNome }: Props) {
                             </tr>
                           </thead>
                           <tbody>
-                            {relatorio.map(r => (
+                            {relatorioFiltrado.map(r => (
                               <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                                 <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
+                                <td className="py-2 pr-3">
+                                  {r.setor ? (
+                                    <Badge
+                                      variant="secondary"
+                                      className={cn('text-[10px] px-1.5', r.setor === 'laboratorio' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300')}
+                                    >
+                                      {r.setor === 'laboratorio' ? 'Lab' : 'Prod'}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </td>
                                 <td className="py-2 pr-3">{r.materia_prima}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{deparaMap.get(r.cod_mp_excel) ?? '—'}</td>
