@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatKg } from "@/lib/utils";
 import {
   Loader2, Recycle, BarChart2, CalendarRange, AlertTriangle,
-  TrendingDown, Package, ArrowDownToLine, Download,
+  TrendingDown, ArrowDownToLine, Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,15 +69,6 @@ type Reaprov = {
   percentual_reaproveitado: number | null;
   status: "pendente" | "utilizado";
   criado_em: string;
-  itens: ReaprovItem[];
-};
-
-type ReaprovItem = {
-  id: string;
-  reaproveitamento_id: string;
-  materia_prima: string;
-  cod_mp_excel: string | null;
-  percentual: number;
 };
 
 type AtalhoId = "hoje" | "semana" | "mes" | "ano" | null;
@@ -210,10 +201,10 @@ export default function PainelAnaliseReaproveitamento() {
   const fetchLista = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
-      .select("*, reaproveitamentos_itens(*)")
+      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, criado_em")
       .order("criado_em", { ascending: false });
     if (!error) {
-      setLista((data ?? []).map((r: any) => ({ ...r, itens: r.reaproveitamentos_itens ?? [] })));
+      setLista(data ?? []);
     }
     setLoading(false);
   }, []);
@@ -328,25 +319,6 @@ export default function PainelAnaliseReaproveitamento() {
       .sort((a, b) => b.kgProducao - a.kgProducao);
   }, [periodo]);
 
-  // ── Seção 5: MPs mais usadas ───────────────────────────────────────────────
-  const rankingMps = useMemo(() => {
-    const map = new Map<string, { descricao: string; kgTotal: number; qtdSDRs: number }>();
-    periodo.forEach((r) => {
-      const producao = calcProducao(r);
-      if (!producao) return;
-      r.itens.forEach((item) => {
-        const key = item.cod_mp_excel ?? item.materia_prima;
-        if (!map.has(key)) map.set(key, { descricao: item.materia_prima, kgTotal: 0, qtdSDRs: 0 });
-        const e = map.get(key)!;
-        e.kgTotal += (item.percentual / 100) * producao;
-        e.qtdSDRs++;
-      });
-    });
-    return Array.from(map.entries())
-      .map(([cod, { descricao, kgTotal, qtdSDRs }]) => ({ cod, descricao, kgTotal, qtdSDRs }))
-      .sort((a, b) => b.kgTotal - a.kgTotal)
-      .slice(0, 20);
-  }, [periodo]);
 
   // ── CSV exports ───────────────────────────────────────────────────────────
   function exportarOrigemCSV() {
@@ -754,45 +726,6 @@ export default function PainelAnaliseReaproveitamento() {
           </div>
         )}
       </div>
-
-      {/* ── Seção 5: MPs mais usadas ── */}
-      {rankingMps.length > 0 && (
-        <div style={{ marginBottom: "1.75rem" }}>
-          <SectionTitle
-            icon={<Package style={{ width: 15, height: 15, color: D.cyan }} />}
-            title="Matérias-primas mais usadas no reaproveitamento"
-          />
-          <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-            <table style={{ width: "100%", fontSize: "0.8rem", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: D.cardAlt, borderBottom: `1px solid ${D.border}` }}>
-                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11, width: 32 }}>#</th>
-                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Matéria-prima</th>
-                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Código</th>
-                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>kg consumidos</th>
-                  <th style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>SDRs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rankingMps.map(({ cod, descricao, kgTotal, qtdSDRs }, i) => (
-                  <tr key={cod} style={{ borderBottom: `1px solid ${D.border}`, background: i % 2 === 0 ? "transparent" : D.cardAlt }}>
-                    <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{i + 1}º</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontWeight: 500, fontSize: 12 }}>{descricao}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{cod}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.violet, fontFamily: "monospace", fontSize: 12 }}>
-                      {formatKg(kgTotal)}
-                    </td>
-                    <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", color: D.muted, fontSize: 12 }}>{qtdSDRs}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: D.muted }}>
-            kg = percentual do item × produção gerada do SDR. Não inclui o próprio material reaproveitado.
-          </p>
-        </div>
-      )}
 
       {/* ── Modal: histórico de SDRs de uma origem ── */}
       <Dialog open={!!modalOrigem} onOpenChange={(o) => { if (!o) setModalOrigem(null); }}>
