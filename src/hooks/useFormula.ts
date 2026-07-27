@@ -66,5 +66,5 @@ export function useFormula(formulaId: string | null, tamanhoBatelada: number | n
     );
   };
 
-  return { itens, loading, error, setQuantidade };
+  return { itens, loading, error, setQuantidade, setItens };
 }

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, Search, AlertTriangle, PackageSearch } from 'lucide-react';
+import { Save, Loader2, Search, AlertTriangle, PackageSearch, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
@@ -25,6 +25,7 @@ interface LoteDisponivel {
 interface SdrAlerta {
   id: string;
   codigo: string;
+  produto_origem: string | null;
   quantidade_material: number;
   quantidade_utilizada: number | null;
   percentual_reaproveitado: number | null;
@@ -88,7 +89,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [comparatorLoading, setComparatorLoading] = useState(false);
   const [sdrsAlerta, setSdrsAlerta] = useState<SdrAlerta[]>([]);
 
-  const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
+  const { itens, loading: loadingFormula, error: erroFormula, setQuantidade, setItens } = useFormula(formulaId, tamanhoBatelada);
+  const [itensSdrId, setItensSdrId] = useState<string | null>(null);
+  const [copiandoSdr, setCopiandoSdr] = useState(false);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
@@ -137,6 +140,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setComparator(null);
     setComparatorLoading(false);
     setSdrsAlerta([]);
+    setItensSdrId(null);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
       supabase.from('cadastro_lotes').select('*').eq('lote', loteNum).single(),
@@ -203,11 +207,59 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     runComparison(formulaId);
   }, [formulaId, loteEncontrado, runComparison]);
 
+  // ── Copiar fórmula do SDR ────────────────────────────────────────────────
+  const copiarFormulaSdr = useCallback(async (sdr: SdrAlerta) => {
+    if (itens.length > 0 && !window.confirm('Isso vai substituir a fórmula atual da OP. Continuar?')) return;
+
+    setCopiandoSdr(true);
+    const { data: itensData, error } = await (supabase as any)
+      .from('reaproveitamentos_itens')
+      .select('id, sequencia, materia_prima, cod_mp_excel, percentual')
+      .eq('reaproveitamento_id', sdr.id)
+      .order('sequencia', { ascending: true });
+    setCopiandoSdr(false);
+
+    if (error || !itensData) return;
+
+    const batelada = tamanhoBatelada ?? 0;
+    const novosItens: import('@/hooks/useFormula').FormulaItem[] = [];
+
+    // Linha do material reaproveitado
+    if (sdr.percentual_reaproveitado && sdr.percentual_reaproveitado > 0) {
+      novosItens.push({
+        id: `sdr-reapr-${sdr.id}`,
+        sequencia: 0,
+        materia_prima: sdr.produto_origem?.trim() || 'Material reaproveitado',
+        fornecedor: null,
+        unidade: null,
+        percentual: sdr.percentual_reaproveitado,
+        quantidade_kg: parseFloat(((sdr.percentual_reaproveitado / 100) * batelada).toFixed(3)),
+      });
+    }
+
+    // Itens adicionais
+    for (const item of itensData) {
+      novosItens.push({
+        id: `sdr-item-${item.id}`,
+        sequencia: item.sequencia,
+        materia_prima: item.materia_prima,
+        fornecedor: null,
+        unidade: null,
+        percentual: item.percentual,
+        quantidade_kg: parseFloat(((item.percentual / 100) * batelada).toFixed(3)),
+      });
+    }
+
+    setItens(novosItens);
+    setNomes({});
+    setItensSdrId(sdr.id);
+  }, [itens.length, tamanhoBatelada, setItens]);
+
   useEffect(() => {
     if (!formulaId || loteEncontrado !== true) { setSdrsAlerta([]); return; }
     (supabase as any)
       .from('reaproveitamentos')
-      .select('id, codigo, quantidade_material, quantidade_utilizada, percentual_reaproveitado, criado_em')
+      .select('id, codigo, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, criado_em')
       .eq('formula_id_destino', formulaId)
       .eq('status', 'pendente')
       .order('criado_em', { ascending: true })
@@ -373,7 +425,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                   <label className="text-xs font-medium">Batelada (kg)</label>
                   <Input className="h-8 text-sm mt-1" type="number" value={tamanhoBatelada ?? ''}
                     onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) => setTamanhoBatelada(e.target.value ? Number(e.target.value) : null)} />
+                    onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); setItensSdrId(null); }} />
                 </div>
               )}
               <div>
@@ -475,20 +527,39 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                         : `Há ${sdrsAlerta.length} SDRs pendentes aguardando uso`
                       } — considere reaproveitar antes de produzir do zero.
                     </p>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {sdrsAlerta.map((sdr) => {
                         const prod = calcProducaoSdr(sdr);
                         const dias = diasParado(sdr.criado_em);
+                        const jaCopiadoEste = itensSdrId === sdr.id;
                         return (
-                          <div key={sdr.id} className="rounded border border-amber-300 dark:border-amber-700 bg-amber-100/70 dark:bg-amber-900/30 px-2 py-1.5 text-xs flex flex-wrap gap-x-3 gap-y-0.5 items-baseline">
-                            <span className="font-mono font-bold text-amber-900 dark:text-amber-200">{sdr.codigo}</span>
-                            <span className="text-amber-700 dark:text-amber-400">{formatKg(sdr.quantidade_material)} kg disponíveis</span>
-                            {prod !== null && (
-                              <span className="text-amber-700 dark:text-amber-400">produção prevista {formatKg(prod)} kg</span>
-                            )}
-                            <span className={`font-semibold ${dias > 30 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-500'}`}>
-                              {dias}d parado
-                            </span>
+                          <div key={sdr.id} className="rounded border border-amber-300 dark:border-amber-700 bg-amber-100/70 dark:bg-amber-900/30 px-2 py-2 text-xs space-y-1.5">
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 items-baseline">
+                              <span className="font-mono font-bold text-amber-900 dark:text-amber-200">{sdr.codigo}</span>
+                              <span className="text-amber-700 dark:text-amber-400">{formatKg(sdr.quantidade_material)} kg disponíveis</span>
+                              {prod !== null && (
+                                <span className="text-amber-700 dark:text-amber-400">produção prevista {formatKg(prod)} kg</span>
+                              )}
+                              <span className={`font-semibold ${dias > 30 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-500'}`}>
+                                {dias}d parado
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => copiarFormulaSdr(sdr)}
+                              disabled={copiandoSdr}
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold transition-colors disabled:opacity-50"
+                              style={jaCopiadoEste
+                                ? { background: '#d97706', borderColor: '#b45309', color: '#fff' }
+                                : { background: '#fef3c7', borderColor: '#d97706', color: '#92400e' }
+                              }
+                            >
+                              {copiandoSdr
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <Copy className="h-3 w-3" />
+                              }
+                              {jaCopiadoEste ? '✓ Fórmula copiada' : 'Copiar fórmula do reaproveitamento'}
+                            </button>
                           </div>
                         );
                       })}
@@ -542,6 +613,18 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                     </table>
                   </div>
                 )}
+
+                {/* ── Soma dos percentuais quando fórmula veio de SDR ── */}
+                {itensSdrId && itens.length > 0 && (() => {
+                  const soma = itens.reduce((s, i) => s + i.percentual, 0);
+                  const ok = Math.abs(soma - 100) <= 0.1;
+                  return (
+                    <p className={`text-xs font-medium ${ok ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {ok ? '✓' : '⚠'} Soma dos percentuais: {soma.toFixed(2)}%
+                      {!ok && ' — verifique a fórmula do SDR'}
+                    </p>
+                  );
+                })()}
 
                 {/* ── Comparador TID × Excel ── */}
                 <ComparatorPanel resultado={comparator} loading={comparatorLoading} />
