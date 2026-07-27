@@ -22,6 +22,27 @@ interface LoteDisponivel {
   quantidade: number;
 }
 
+interface SdrAlerta {
+  id: string;
+  codigo: string;
+  quantidade_material: number;
+  quantidade_utilizada: number | null;
+  percentual_reaproveitado: number | null;
+  criado_em: string;
+}
+
+function calcProducaoSdr(sdr: SdrAlerta): number | null {
+  const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_material;
+  const pct = sdr.percentual_reaproveitado;
+  if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
+  return qtd / (pct / 100);
+}
+
+function diasParado(iso: string): number {
+  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00Z');
+  return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 
 const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
@@ -65,6 +86,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [buscaLote, setBuscaLote] = useState('');
   const [comparator, setComparator] = useState<ResultadoComparacao | null>(null);
   const [comparatorLoading, setComparatorLoading] = useState(false);
+  const [sdrsAlerta, setSdrsAlerta] = useState<SdrAlerta[]>([]);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade } = useFormula(formulaId, tamanhoBatelada);
 
@@ -114,6 +136,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setNomes({});
     setComparator(null);
     setComparatorLoading(false);
+    setSdrsAlerta([]);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
       supabase.from('cadastro_lotes').select('*').eq('lote', loteNum).single(),
@@ -179,6 +202,17 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     if (!formulaId || loteEncontrado !== true) return;
     runComparison(formulaId);
   }, [formulaId, loteEncontrado, runComparison]);
+
+  useEffect(() => {
+    if (!formulaId || loteEncontrado !== true) { setSdrsAlerta([]); return; }
+    (supabase as any)
+      .from('reaproveitamentos')
+      .select('id, codigo, quantidade_material, quantidade_utilizada, percentual_reaproveitado, criado_em')
+      .eq('formula_id_destino', formulaId)
+      .eq('status', 'pendente')
+      .order('criado_em', { ascending: true })
+      .then(({ data }: any) => setSdrsAlerta(data ?? []));
+  }, [formulaId, loteEncontrado]);
 
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
@@ -426,6 +460,42 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
             {/* Fórmula */}
             {loteEncontrado === true && (
               <div className="space-y-2">
+                {/* ── Alerta: SDRs pendentes para esta fórmula ── */}
+                {sdrsAlerta.length > 0 && (
+                  <div className="rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2.5 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        Material reaproveitado pendente para este produto
+                      </p>
+                    </div>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      {sdrsAlerta.length === 1
+                        ? 'Há 1 SDR pendente aguardando uso'
+                        : `Há ${sdrsAlerta.length} SDRs pendentes aguardando uso`
+                      } — considere reaproveitar antes de produzir do zero.
+                    </p>
+                    <div className="space-y-1">
+                      {sdrsAlerta.map((sdr) => {
+                        const prod = calcProducaoSdr(sdr);
+                        const dias = diasParado(sdr.criado_em);
+                        return (
+                          <div key={sdr.id} className="rounded border border-amber-300 dark:border-amber-700 bg-amber-100/70 dark:bg-amber-900/30 px-2 py-1.5 text-xs flex flex-wrap gap-x-3 gap-y-0.5 items-baseline">
+                            <span className="font-mono font-bold text-amber-900 dark:text-amber-200">{sdr.codigo}</span>
+                            <span className="text-amber-700 dark:text-amber-400">{formatKg(sdr.quantidade_material)} kg disponíveis</span>
+                            {prod !== null && (
+                              <span className="text-amber-700 dark:text-amber-400">produção prevista {formatKg(prod)} kg</span>
+                            )}
+                            <span className={`font-semibold ${dias > 30 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-500'}`}>
+                              {dias}d parado
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {formulaId && <p className="text-xs text-muted-foreground">Fórmula: <span className="font-medium text-foreground">{formulaId}</span></p>}
                 {loadingFormula && <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Carregando...</div>}
                 {erroFormula && <p className="text-xs text-destructive">{erroFormula}</p>}
