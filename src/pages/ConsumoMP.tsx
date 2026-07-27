@@ -9,13 +9,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Setor = 'laboratorio' | 'producao';
 type FiltroSetor = Setor | 'ambos';
+type FiltroSetorLista = Setor | 'ambos' | 'sem_setor';
 
 interface MpDepara {
   cod_excel: string;
@@ -83,6 +85,46 @@ const SETOR_LABEL: Record<Setor, string> = {
   producao: 'Produção',
 };
 
+// ── Inline setor selector ─────────────────────────────────────────────────────
+
+function SetorInline({
+  rowId,
+  setor,
+  atualizando,
+  onChange,
+}: {
+  rowId: string;
+  setor: Setor | null;
+  atualizando: boolean;
+  onChange: (s: Setor) => void;
+}) {
+  return (
+    <div className="flex gap-0.5">
+      {atualizando ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground my-auto mx-1" />
+      ) : (
+        (['laboratorio', 'producao'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => { if (setor !== s) onChange(s); }}
+            title={SETOR_LABEL[s]}
+            className={cn(
+              'px-1.5 py-0.5 text-[10px] font-semibold rounded transition-colors',
+              setor === s
+                ? s === 'laboratorio'
+                  ? 'bg-blue-600 text-white dark:bg-blue-500'
+                  : 'bg-orange-500 text-white dark:bg-orange-500'
+                : 'bg-muted text-muted-foreground hover:bg-muted/60',
+            )}
+          >
+            {s === 'laboratorio' ? 'Lab' : 'Prod'}
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function ConsumoMP({ perfilNome }: Props) {
@@ -102,6 +144,25 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const buscaRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ─── Filtros da lista de retiradas ─────────────────────────────────────────
+  const [filtroSetorLista, setFiltroSetorLista] = useState<FiltroSetorLista>('ambos');
+  const [dataInicioLista, setDataInicioLista] = useState('');
+  const [dataFimLista, setDataFimLista] = useState('');
+
+  // ─── Edição ────────────────────────────────────────────────────────────────
+  const [editRow, setEditRow] = useState<ConsumoMpRow | null>(null);
+  const [editSetor, setEditSetor] = useState<Setor>('laboratorio');
+  const [editBusca, setEditBusca] = useState('');
+  const [editSugestoes, setEditSugestoes] = useState<MpDepara[]>([]);
+  const [editShowSugestoes, setEditShowSugestoes] = useState(false);
+  const [editMp, setEditMp] = useState<MpDepara | null>(null);
+  const [editQtd, setEditQtd] = useState('');
+  const [editData, setEditData] = useState('');
+  const [editObs, setEditObs] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [atualizandoSetorId, setAtualizandoSetorId] = useState<string | null>(null);
+  const editDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ─── Seção 2 – Relatório ───────────────────────────────────────────────────
   const hoje = new Date();
   const [dataInicio, setDataInicio] = useState(toInputDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)));
@@ -111,7 +172,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [carregandoRel, setCarregandoRel] = useState(false);
   const [deparaMap, setDeparaMap] = useState<Map<string, string | null>>(new Map());
 
-  // ── Autocomplete ────────────────────────────────────────────────────────────
+  // ── Autocomplete (form) ─────────────────────────────────────────────────────
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (busca.length < 2) { setSugestoes([]); setShowSugestoes(false); return; }
@@ -128,19 +189,48 @@ export default function ConsumoMP({ perfilNome }: Props) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [busca]);
 
-  // ── Últimas retiradas ───────────────────────────────────────────────────────
+  // ── Autocomplete (edit dialog) ──────────────────────────────────────────────
+  useEffect(() => {
+    if (editDebounceRef.current) clearTimeout(editDebounceRef.current);
+    if (editBusca.length < 2) { setEditSugestoes([]); setEditShowSugestoes(false); return; }
+    editDebounceRef.current = setTimeout(async () => {
+      const { data: rows } = await supabase
+        .from('mp_depara')
+        .select('cod_excel, descricao, tipo')
+        .or(`descricao.ilike.%${editBusca}%,cod_excel.ilike.%${editBusca}%`)
+        .order('descricao')
+        .limit(20);
+      setEditSugestoes(rows ?? []);
+      setEditShowSugestoes(true);
+    }, 250);
+    return () => { if (editDebounceRef.current) clearTimeout(editDebounceRef.current); };
+  }, [editBusca]);
+
+  // ── Últimas retiradas (com filtros de data) ─────────────────────────────────
   const fetchRetiradas = useCallback(async () => {
     setCarregandoRetiradas(true);
-    const { data: rows } = await supabase
+    let q = (supabase as any)
       .from('consumo_mp')
       .select('*')
       .order('criado_em', { ascending: false })
-      .limit(20);
+      .limit(500);
+    if (dataInicioLista) q = q.gte('data_retirada', dataInicioLista);
+    if (dataFimLista) q = q.lte('data_retirada', dataFimLista);
+    const { data: rows } = await q;
     setRetiradas((rows ?? []) as ConsumoMpRow[]);
     setCarregandoRetiradas(false);
-  }, []);
+  }, [dataInicioLista, dataFimLista]);
 
   useEffect(() => { fetchRetiradas(); }, [fetchRetiradas]);
+
+  // ── Filtro de setor na lista (client-side) ──────────────────────────────────
+  const retiradasFiltradas = useMemo(() => {
+    if (filtroSetorLista === 'ambos') return retiradas;
+    if (filtroSetorLista === 'sem_setor') return retiradas.filter((r) => r.setor === null);
+    return retiradas.filter((r) => r.setor === filtroSetorLista);
+  }, [retiradas, filtroSetorLista]);
+
+  const contSemSetor = useMemo(() => retiradas.filter((r) => r.setor === null).length, [retiradas]);
 
   // ── Registrar retirada ──────────────────────────────────────────────────────
   const handleRegistrar = async () => {
@@ -172,7 +262,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setQuantidade('');
     setData(toInputDate(new Date()));
     setObservacao('');
-    // mantém setor selecionado para lançamentos em sequência
     setSugestoes([]);
     setShowSugestoes(false);
     fetchRetiradas();
@@ -186,19 +275,68 @@ export default function ConsumoMP({ perfilNome }: Props) {
     if (error) { toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Lançamento excluído' });
     fetchRetiradas();
+    fetchRelatorio();
+  };
+
+  // ── Atualizar setor inline ──────────────────────────────────────────────────
+  const handleAtualizarSetor = useCallback(async (id: string, novoSetor: Setor) => {
+    setAtualizandoSetorId(id);
+    const { error } = await (supabase as any)
+      .from('consumo_mp')
+      .update({ setor: novoSetor })
+      .eq('id', id);
+    setAtualizandoSetorId(null);
+    if (error) { toast({ title: 'Erro ao atualizar setor', variant: 'destructive' }); return; }
+    toast({ title: `Setor → ${SETOR_LABEL[novoSetor]}` });
+    setRetiradas((prev) => prev.map((r) => r.id === id ? { ...r, setor: novoSetor } : r));
+    setRelatorio((prev) => prev.map((r) => r.id === id ? { ...r, setor: novoSetor } : r));
+  }, []);
+
+  // ── Abrir edição ────────────────────────────────────────────────────────────
+  const abrirEdicao = useCallback((row: ConsumoMpRow) => {
+    setEditRow(row);
+    setEditSetor(row.setor ?? 'laboratorio');
+    setEditQtd(String(row.quantidade_kg).replace('.', ','));
+    setEditData(row.data_retirada);
+    setEditObs(row.observacao ?? '');
+    setEditMp({ cod_excel: row.cod_mp_excel, descricao: row.materia_prima, tipo: null });
+    setEditBusca('');
+    setEditSugestoes([]);
+    setEditShowSugestoes(false);
+  }, []);
+
+  // ── Salvar edição ───────────────────────────────────────────────────────────
+  const handleSalvarEdicao = async () => {
+    if (!editRow) return;
+    if (!editMp) { toast({ title: 'Selecione uma matéria-prima', variant: 'destructive' }); return; }
+    const qtd = parseFloat(editQtd.replace(',', '.'));
+    if (isNaN(qtd) || qtd <= 0) { toast({ title: 'Quantidade inválida', variant: 'destructive' }); return; }
+    if (!editData) { toast({ title: 'Informe a data', variant: 'destructive' }); return; }
+    setSalvandoEdicao(true);
+    const { error } = await (supabase as any).from('consumo_mp').update({
+      setor: editSetor,
+      cod_mp_excel: editMp.cod_excel,
+      materia_prima: editMp.descricao,
+      quantidade_kg: qtd,
+      data_retirada: editData,
+      observacao: editObs.trim() || null,
+    }).eq('id', editRow.id);
+    setSalvandoEdicao(false);
+    if (error) { toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Lançamento atualizado com sucesso!' });
+    setEditRow(null);
+    fetchRetiradas();
+    fetchRelatorio();
   };
 
   // ── Mapa cod_excel → cod_tid ─────────────────────────────────────────────
   useEffect(() => {
-    supabase
-      .from('mp_depara')
-      .select('cod_excel, cod_tid')
-      .then(({ data }) => {
-        if (!data) return;
-        const m = new Map<string, string | null>();
-        for (const row of data) m.set(row.cod_excel, (row as any).cod_tid ?? null);
-        setDeparaMap(m);
-      });
+    supabase.from('mp_depara').select('cod_excel, cod_tid').then(({ data }) => {
+      if (!data) return;
+      const m = new Map<string, string | null>();
+      for (const row of data) m.set(row.cod_excel, (row as any).cod_tid ?? null);
+      setDeparaMap(m);
+    });
   }, []);
 
   // ── Relatório ───────────────────────────────────────────────────────────────
@@ -268,7 +406,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
 
   // ── Exportar CSV ────────────────────────────────────────────────────────────
   const exportarCSV = () => {
-    // Totais por MP
     const totalRows = [
       ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
         ...(filtroSetor === 'ambos' ? ['Kg Laboratório', 'Kg Produção'] : [])],
@@ -314,6 +451,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
 
   const mostrarColunaSetor = filtroSetor === 'ambos';
 
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
       <Tabs defaultValue="lancar">
@@ -387,7 +525,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Quantidade */}
                 <div className="space-y-1.5">
                   <Label>Quantidade (kg) *</Label>
                   <Input
@@ -398,18 +535,10 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     onChange={e => setQuantidade(e.target.value)}
                   />
                 </div>
-
-                {/* Data */}
                 <div className="space-y-1.5">
                   <Label>Data *</Label>
-                  <Input
-                    type="date"
-                    value={data}
-                    onChange={e => setData(e.target.value)}
-                  />
+                  <Input type="date" value={data} onChange={e => setData(e.target.value)} />
                 </div>
-
-                {/* Setor */}
                 <div className="space-y-1.5">
                   <Label>Setor *</Label>
                   <div className="flex rounded-md border overflow-hidden h-10">
@@ -433,7 +562,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
                 </div>
               </div>
 
-              {/* Observação */}
               <div className="space-y-1.5">
                 <Label>Observação (opcional)</Label>
                 <Textarea
@@ -451,18 +579,90 @@ export default function ConsumoMP({ perfilNome }: Props) {
             </CardContent>
           </Card>
 
-          {/* Últimas retiradas */}
+          {/* ── Gerenciar Retiradas ─────────────────────────────────────────── */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Últimas 20 Retiradas</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base">Retiradas Registradas</CardTitle>
+                {contSemSetor > 0 && (
+                  <button
+                    onClick={() => setFiltroSetorLista('sem_setor')}
+                    className="text-xs text-amber-600 dark:text-amber-400 font-medium hover:underline"
+                  >
+                    {contSemSetor} sem setor definido
+                  </button>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
+              {/* Filtros da lista */}
+              <div className="flex flex-wrap items-end gap-3 pb-3 border-b">
+                <div className="space-y-1">
+                  <Label className="text-xs">De</Label>
+                  <Input
+                    type="date"
+                    value={dataInicioLista}
+                    onChange={e => setDataInicioLista(e.target.value)}
+                    className="w-32 h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Até</Label>
+                  <Input
+                    type="date"
+                    value={dataFimLista}
+                    onChange={e => setDataFimLista(e.target.value)}
+                    className="w-32 h-8 text-sm"
+                  />
+                </div>
+                {(dataInicioLista || dataFimLista) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs self-end"
+                    onClick={() => { setDataInicioLista(''); setDataFimLista(''); }}
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Limpar datas
+                  </Button>
+                )}
+                <div className="flex rounded-md border overflow-hidden self-end">
+                  {([
+                    { id: 'laboratorio', label: 'Lab' },
+                    { id: 'producao', label: 'Prod' },
+                    { id: 'ambos', label: 'Ambos' },
+                    { id: 'sem_setor', label: 'Sem setor' },
+                  ] as const).map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setFiltroSetorLista(id)}
+                      className={cn(
+                        'px-2.5 py-1.5 text-xs font-medium transition-colors border-l first:border-l-0',
+                        filtroSetorLista === id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background text-muted-foreground hover:bg-muted',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground self-end ml-auto">
+                  {retiradasFiltradas.length} registro{retiradasFiltradas.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
               {carregandoRetiradas ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ) : retiradas.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">Nenhuma retirada registrada ainda.</p>
+              ) : retiradasFiltradas.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  {retiradas.length === 0
+                    ? 'Nenhuma retirada registrada ainda.'
+                    : 'Nenhuma retirada para os filtros selecionados.'}
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -475,40 +675,47 @@ export default function ConsumoMP({ perfilNome }: Props) {
                         <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
                         <th className="text-left pb-2 pr-3 font-medium">Retirado por</th>
                         <th className="text-left pb-2 pr-3 font-medium">Obs.</th>
-                        <th className="pb-2" />
+                        <th className="pb-2 text-right pr-1 font-medium">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {retiradas.map(r => (
+                      {retiradasFiltradas.map(r => (
                         <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                           <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
                           <td className="py-2 pr-3">
-                            {r.setor ? (
-                              <Badge
-                                variant="secondary"
-                                className={cn('text-[10px] px-1.5', r.setor === 'laboratorio' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300')}
-                              >
-                                {r.setor === 'laboratorio' ? 'Lab' : 'Prod'}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
+                            <SetorInline
+                              rowId={r.id}
+                              setor={r.setor}
+                              atualizando={atualizandoSetorId === r.id}
+                              onChange={(s) => handleAtualizarSetor(r.id, s)}
+                            />
                           </td>
                           <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
                           <td className="py-2 pr-3">{r.materia_prima}</td>
                           <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
                           <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
-                          <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[160px] truncate">{r.observacao ?? '—'}</td>
-                          <td className="py-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive/60 hover:text-destructive"
-                              onClick={() => handleExcluir(r.id)}
-                              title="Excluir lançamento"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[140px] truncate">{r.observacao ?? '—'}</td>
+                          <td className="py-2 text-right">
+                            <div className="flex gap-0.5 justify-end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => abrirEdicao(r)}
+                                title="Editar lançamento"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive/60 hover:text-destructive"
+                                onClick={() => handleExcluir(r.id)}
+                                title="Excluir lançamento"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -524,11 +731,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
             ABA 2 – RELATÓRIO POR PERÍODO
         ════════════════════════════════════════════════════════ */}
         <TabsContent value="relatorio" className="space-y-4">
-          {/* Filtros */}
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-wrap items-end gap-3">
-                {/* Período */}
                 <div className="space-y-1.5">
                   <Label>De</Label>
                   <Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="w-36" />
@@ -544,8 +749,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     </Button>
                   ))}
                 </div>
-
-                {/* Setor */}
                 <div className="space-y-1.5 ml-2">
                   <Label>Setor</Label>
                   <div className="flex rounded-md border overflow-hidden">
@@ -566,7 +769,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     ))}
                   </div>
                 </div>
-
                 <Button variant="outline" size="sm" onClick={exportarCSV} className="gap-1.5 ml-auto">
                   <Download className="h-4 w-4" />
                   Exportar CSV
@@ -581,7 +783,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
             </div>
           ) : (
             <>
-              {/* Resumo */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Card className="col-span-2">
                   <CardContent className="pt-4 pb-3">
@@ -655,9 +856,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                                     {t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}
                                   </td>
                                 </>}
-                                <td className="py-2 text-right text-muted-foreground text-xs font-mono">
-                                  {t.pct.toFixed(1)}%
-                                </td>
+                                <td className="py-2 text-right text-muted-foreground text-xs font-mono">{t.pct.toFixed(1)}%</td>
                               </tr>
                             ))}
                           </tbody>
@@ -694,7 +893,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
                               <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                               <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
                               <th className="text-left pb-2 pr-3 font-medium">Retirado por</th>
-                              <th className="text-left pb-2 font-medium">Observação</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Observação</th>
+                              <th className="pb-2 text-right pr-1 font-medium">Ações</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -702,23 +902,41 @@ export default function ConsumoMP({ perfilNome }: Props) {
                               <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                                 <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
                                 <td className="py-2 pr-3">
-                                  {r.setor ? (
-                                    <Badge
-                                      variant="secondary"
-                                      className={cn('text-[10px] px-1.5', r.setor === 'laboratorio' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300')}
-                                    >
-                                      {r.setor === 'laboratorio' ? 'Lab' : 'Prod'}
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">—</span>
-                                  )}
+                                  <SetorInline
+                                    rowId={r.id}
+                                    setor={r.setor}
+                                    atualizando={atualizandoSetorId === r.id}
+                                    onChange={(s) => handleAtualizarSetor(r.id, s)}
+                                  />
                                 </td>
                                 <td className="py-2 pr-3">{r.materia_prima}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{deparaMap.get(r.cod_mp_excel) ?? '—'}</td>
                                 <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
                                 <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
-                                <td className="py-2 text-xs text-muted-foreground max-w-[180px] truncate">{r.observacao ?? '—'}</td>
+                                <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[160px] truncate">{r.observacao ?? '—'}</td>
+                                <td className="py-2 text-right">
+                                  <div className="flex gap-0.5 justify-end">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                      onClick={() => abrirEdicao(r)}
+                                      title="Editar lançamento"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive/60 hover:text-destructive"
+                                      onClick={() => handleExcluir(r.id)}
+                                      title="Excluir lançamento"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -732,6 +950,128 @@ export default function ConsumoMP({ perfilNome }: Props) {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ════════════════════════════════════════════════════════
+          MODAL DE EDIÇÃO
+      ════════════════════════════════════════════════════════ */}
+      <Dialog open={!!editRow} onOpenChange={(open) => { if (!open) setEditRow(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Lançamento</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Setor */}
+            <div className="space-y-1.5">
+              <Label>Setor *</Label>
+              <div className="flex rounded-md border overflow-hidden h-10">
+                {(['laboratorio', 'producao'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setEditSetor(s)}
+                    className={cn(
+                      'flex-1 px-3 text-sm transition-colors',
+                      s === 'producao' && 'border-l',
+                      editSetor === s
+                        ? 'bg-primary text-primary-foreground font-semibold'
+                        : 'bg-background text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    {SETOR_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Matéria-Prima */}
+            <div className="space-y-1.5 relative">
+              <Label>Matéria-Prima *</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Buscar por código ou descrição…"
+                  value={editMp ? `${editMp.cod_excel} – ${editMp.descricao}` : editBusca}
+                  onChange={e => {
+                    if (editMp) setEditMp(null);
+                    setEditBusca(e.target.value);
+                  }}
+                  onFocus={() => { if (editBusca.length >= 2 && !editMp) setEditShowSugestoes(true); }}
+                  onBlur={() => setTimeout(() => setEditShowSugestoes(false), 150)}
+                  className="pl-8 pr-8"
+                />
+                {(editBusca || editMp) && (
+                  <button
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => { setEditBusca(''); setEditMp(null); setEditSugestoes([]); setEditShowSugestoes(false); }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {editShowSugestoes && editSugestoes.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                  {editSugestoes.map(mp => (
+                    <button
+                      key={mp.cod_excel}
+                      className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setEditMp(mp); setEditBusca(''); setEditShowSugestoes(false); }}
+                    >
+                      <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_excel}</span>
+                      <span className="leading-tight">{mp.descricao}</span>
+                      {mp.tipo && <Badge variant="secondary" className="ml-auto shrink-0 text-[10px]">{mp.tipo}</Badge>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {editShowSugestoes && editBusca.length >= 2 && editSugestoes.length === 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
+                  Nenhuma MP encontrada para "{editBusca}"
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Quantidade */}
+              <div className="space-y-1.5">
+                <Label>Quantidade (kg) *</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,000"
+                  value={editQtd}
+                  onChange={e => setEditQtd(e.target.value)}
+                />
+              </div>
+              {/* Data */}
+              <div className="space-y-1.5">
+                <Label>Data *</Label>
+                <Input type="date" value={editData} onChange={e => setEditData(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Observação */}
+            <div className="space-y-1.5">
+              <Label>Observação (opcional)</Label>
+              <Textarea
+                placeholder="Finalidade, experimento, etc."
+                value={editObs}
+                onChange={e => setEditObs(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditRow(null)}>Cancelar</Button>
+            <Button onClick={handleSalvarEdicao} disabled={salvandoEdicao}>
+              {salvandoEdicao && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
