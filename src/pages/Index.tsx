@@ -28,7 +28,8 @@ const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
 const ComprasPrevisao           = lazy(() => import('./ComprasPrevisao'));
 const ComprasMediaMensal        = lazy(() => import('./ComprasMediaMensal'));
-const Reaproveitamento          = lazy(() => import('./Reaproveitamento'));
+const Reaproveitamento              = lazy(() => import('./Reaproveitamento'));
+const PainelAnaliseReaproveitamento = lazy(() => import('./PainelAnaliseReaproveitamento'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -62,7 +63,8 @@ type TabGestorId =
   | 'historico_paradas'
   | 'consumo_mp'
   | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal'
-  | 'reaproveitamento';
+  | 'reaproveitamento'
+  | 'analise_reaproveitamento';
 
 const gruposGestor = [
   {
@@ -147,6 +149,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['compras_previsao' as TabGestorId, 'Previsão de Compra'],
   ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
   ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
+  ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -183,6 +186,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'consumo_mp',
   'compras_consumo', 'compras_previsao', 'compras_media_mensal',
   'reaproveitamento',
+  'analise_reaproveitamento',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -552,6 +556,17 @@ export default function Index() {
                         <span>Reaproveitamento</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'analise_reaproveitamento'}
+                        tooltip="Análise de Reaproveitamento"
+                        onClick={() => goToTab('analise_reaproveitamento')}
+                        size="sm"
+                      >
+                        <BarChart2 className="h-3.5 w-3.5 shrink-0" />
+                        <span>Análise de Reaproveitamento</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -582,6 +597,7 @@ export default function Index() {
             <SidebarTrigger />
             {activeTab === 'consumo_mp' && <span className="font-semibold text-sm">Consumo de MP</span>}
             {activeTab === 'reaproveitamento' && <span className="font-semibold text-sm">Reaproveitamento</span>}
+            {activeTab === 'analise_reaproveitamento' && <span className="font-semibold text-sm">Análise de Reaproveitamento</span>}
           </header>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
@@ -593,6 +609,7 @@ export default function Index() {
                 <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
                   {activeTab === 'consumo_mp' && <ConsumoMP perfilNome={perfil.nome} />}
                   {activeTab === 'reaproveitamento' && <Reaproveitamento perfilNome={perfil.nome} />}
+                  {activeTab === 'analise_reaproveitamento' && <PainelAnaliseReaproveitamento />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -775,6 +792,17 @@ export default function Index() {
                   >
                     <Recycle className="h-3.5 w-3.5 shrink-0" />
                     <span>Reaproveitamento</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'analise_reaproveitamento'}
+                    tooltip="Análise de Reaproveitamento"
+                    onClick={() => goToTab('analise_reaproveitamento')}
+                    size="sm"
+                  >
+                    <BarChart2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Análise de Reaproveitamento</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -1027,6 +1055,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'reaproveitamento'}>
                   <Suspense fallback={TAB_LOADING}>
                     <Reaproveitamento perfilNome={perfil.nome} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('analise_reaproveitamento') && (
+                <KeepAlive active={activeTab === 'analise_reaproveitamento'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <PainelAnaliseReaproveitamento />
                   </Suspense>
                 </KeepAlive>
               )}
