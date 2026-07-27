@@ -288,6 +288,11 @@ export default function ComprasMediaMensal() {
 
   const buscaAtiva = buscaMP.trim().length > 0;
 
+  const totalFiltrado = useMemo(
+    () => linhasFiltradas.reduce((s, l) => s + l.total_kg / nMeses, 0),
+    [linhasFiltradas, nMeses],
+  );
+
   const exportarCSV = useCallback(() => {
     if (linhasFiltradas.length === 0) return;
     const header = "Matéria-Prima;Cód. TID;Média Mensal (kg);Total Período (kg)";
@@ -593,6 +598,18 @@ export default function ComprasMediaMensal() {
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr style={{ background: D.cardAlt, borderTop: `2px solid ${D.border}` }}>
+                  <td style={{ padding: "0.6rem 1rem", fontWeight: 700, color: D.text, fontSize: 12 }}>
+                    {buscaAtiva ? `Total (${linhasFiltradas.length} MPs filtradas)` : `Total (${linhasFiltradas.length} MPs)`}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem" }} />
+                  <td style={{ padding: "0.6rem 1rem", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: D.cyan, fontSize: 13 }}>
+                    {formatKg(totalFiltrado)}
+                  </td>
+                  <td style={{ padding: "0.6rem 1rem" }} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
