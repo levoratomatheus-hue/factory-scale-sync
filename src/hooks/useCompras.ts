@@ -53,7 +53,7 @@ export type ResultadoPrevisao = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 100; // menor chunk → menos linhas por request (evita corte silencioso)
 
 const STATUS_EM_PRODUCAO = new Set([
   "em_pesagem", "aguardando_mistura", "em_mistura", "aguardando_linha", "em_linha",
@@ -70,15 +70,18 @@ function diaSeguinte(dateStr: string): string {
 }
 
 async function fetchFormulasBatch(formulaIds: string[]): Promise<any[]> {
-  const unique = [...new Set(formulaIds)];
+  // Normaliza para string para evitar falha de comparação se o tipo vier como number
+  const unique = [...new Set(formulaIds.map(String))];
   const rows: any[] = [];
   for (let i = 0; i < unique.length; i += BATCH_SIZE) {
     const chunk = unique.slice(i, i + BATCH_SIZE);
-    // cod_mp não está no types.ts mas pode existir na tabela
+    // .limit(50000) substitui o padrão silencioso de 1.000 linhas do PostgREST.
+    // Com BATCH_SIZE=100 e ~7 itens/fórmula em média → ~700 linhas/chunk, bem dentro do limite.
     const { data } = await (supabase as any)
       .from("formulas")
       .select("formula_id, materia_prima, percentual, cod_mp")
-      .in("formula_id", chunk);
+      .in("formula_id", chunk)
+      .limit(50000);
     if (data) rows.push(...data);
   }
   return rows;
@@ -118,10 +121,10 @@ function calcularCompras(
   formulasRows: any[],
   withStatus: boolean,
 ): CalcResult {
-  // Indexa fórmula base por formula_id
+  // Indexa fórmula base por formula_id (normalizado para string)
   const fIndex = new Map<string, Array<{ materia_prima: string; cod_mp: string | null; fracao: number }>>();
   for (const r of formulasRows) {
-    const key: string = r.formula_id;
+    const key: string = String(r.formula_id);
     if (!fIndex.has(key)) fIndex.set(key, []);
     fIndex.get(key)!.push({
       materia_prima: r.materia_prima,
@@ -143,7 +146,7 @@ function calcularCompras(
       aviso.kg_excluidos += op.qtd_op;
       continue;
     }
-    const items = fIndex.get(op.formula_id);
+    const items = fIndex.get(String(op.formula_id));
     if (!items || items.length === 0) {
       aviso.sem_itens++;
       aviso.kg_excluidos += op.qtd_op;
