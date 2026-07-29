@@ -30,6 +30,7 @@ const ComprasPrevisao           = lazy(() => import('./ComprasPrevisao'));
 const ComprasMediaMensal        = lazy(() => import('./ComprasMediaMensal'));
 const Reaproveitamento              = lazy(() => import('./Reaproveitamento'));
 const PainelAnaliseReaproveitamento = lazy(() => import('./PainelAnaliseReaproveitamento'));
+const ControleMPTestada             = lazy(() => import('./ControleMPTestada'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -64,7 +65,8 @@ type TabGestorId =
   | 'consumo_mp'
   | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal'
   | 'reaproveitamento'
-  | 'analise_reaproveitamento';
+  | 'analise_reaproveitamento'
+  | 'mp_testadas';
 
 const gruposGestor = [
   {
@@ -150,6 +152,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
   ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
+  ['mp_testadas' as TabGestorId, 'Controle de MP Testada'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -187,6 +190,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'compras_consumo', 'compras_previsao', 'compras_media_mensal',
   'reaproveitamento',
   'analise_reaproveitamento',
+  'mp_testadas',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -567,6 +571,17 @@ export default function Index() {
                         <span>Análise de Reaproveitamento</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'mp_testadas'}
+                        tooltip="Controle de MP Testada"
+                        onClick={() => goToTab('mp_testadas')}
+                        size="sm"
+                      >
+                        <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                        <span>MP Testada</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -598,6 +613,7 @@ export default function Index() {
             {activeTab === 'consumo_mp' && <span className="font-semibold text-sm">Consumo de MP</span>}
             {activeTab === 'reaproveitamento' && <span className="font-semibold text-sm">Reaproveitamento</span>}
             {activeTab === 'analise_reaproveitamento' && <span className="font-semibold text-sm">Análise de Reaproveitamento</span>}
+            {activeTab === 'mp_testadas' && <span className="font-semibold text-sm">Controle de MP Testada</span>}
           </header>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
@@ -610,6 +626,7 @@ export default function Index() {
                   {activeTab === 'consumo_mp' && <ConsumoMP perfilNome={perfil.nome} />}
                   {activeTab === 'reaproveitamento' && <Reaproveitamento perfilNome={perfil.nome} />}
                   {activeTab === 'analise_reaproveitamento' && <PainelAnaliseReaproveitamento />}
+                  {activeTab === 'mp_testadas' && <ControleMPTestada perfilNome={perfil.nome} />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -803,6 +820,17 @@ export default function Index() {
                   >
                     <BarChart2 className="h-3.5 w-3.5 shrink-0" />
                     <span>Análise de Reaproveitamento</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'mp_testadas'}
+                    tooltip="Controle de MP Testada"
+                    onClick={() => goToTab('mp_testadas')}
+                    size="sm"
+                  >
+                    <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                    <span>MP Testada</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -1062,6 +1090,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'analise_reaproveitamento'}>
                   <Suspense fallback={TAB_LOADING}>
                     <PainelAnaliseReaproveitamento />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('mp_testadas') && (
+                <KeepAlive active={activeTab === 'mp_testadas'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <ControleMPTestada perfilNome={perfil.nome} />
                   </Suspense>
                 </KeepAlive>
               )}
