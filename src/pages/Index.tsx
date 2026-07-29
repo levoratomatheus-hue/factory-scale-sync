@@ -167,6 +167,7 @@ const avatarColor: Record<string, string> = {
   tecnico:      '#ea580c',
   comercial:    '#7c3aed',
   desenvolvimento: '#0891b2',
+  compras:      '#059669',
 };
 const papelLabel: Record<string, string> = {
   gestor:       'Gestor',
@@ -174,6 +175,7 @@ const papelLabel: Record<string, string> = {
   tecnico:      'Técnico',
   comercial:    'Comercial',
   desenvolvimento: 'Desenvolvimento',
+  compras:      'Compras',
 };
 
 // Abas que ficam no DOM após a primeira visita (keep-alive).
@@ -505,6 +507,182 @@ export default function Index() {
               </Suspense>
             </ErrorBoundary>
           </main>
+        </SidebarInset>
+      </SidebarProvider>
+    );
+  }
+
+  if (perfil.papel === 'compras') {
+    return (
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="border-b">
+            <div className="flex items-center px-3 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+              <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span className="ml-1.5 text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 group-data-[collapsible=icon]:hidden">
+                Gestão Industrial
+              </span>
+            </div>
+          </SidebarHeader>
+
+          <SidebarContent>
+            {/* ── Grupo Compras ── */}
+            <SidebarGroup>
+              <button
+                onClick={() => toggleGroup('compras')}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ShoppingCart className="h-3 w-3 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden">Compras</span>
+                </span>
+                <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('compras') && '-rotate-90')} />
+              </button>
+              {openGroups.has('compras') && (
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'compras_consumo'}
+                        tooltip="Consumo de MP"
+                        onClick={() => goToTab('compras_consumo')}
+                        size="sm"
+                      >
+                        <BarChart2 className="h-3.5 w-3.5 shrink-0" />
+                        <span>Consumo de MP</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'compras_previsao'}
+                        tooltip="Previsão de Compra"
+                        onClick={() => goToTab('compras_previsao')}
+                        size="sm"
+                      >
+                        <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+                        <span>Previsão de Compra</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'compras_media_mensal'}
+                        tooltip="Consumo Médio Mensal"
+                        onClick={() => goToTab('compras_media_mensal')}
+                        size="sm"
+                      >
+                        <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                        <span>Consumo Médio Mensal</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              )}
+            </SidebarGroup>
+
+            {/* ── Comercial ── */}
+            <SidebarGroup>
+              <button
+                onClick={() => toggleGroup('comercial')}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="h-3 w-3 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden">Comercial</span>
+                </span>
+                <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('comercial') && '-rotate-90')} />
+              </button>
+              {openGroups.has('comercial') && (
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'comercial'}
+                        tooltip="Painel Comercial"
+                        onClick={() => goToTab('comercial')}
+                        size="sm"
+                      >
+                        <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                        <span>Painel Comercial</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              )}
+            </SidebarGroup>
+
+            {/* ── Laboratório (apenas MP Testada) ── */}
+            <SidebarGroup>
+              <button
+                onClick={() => toggleGroup('laboratorio')}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              >
+                <span className="flex items-center gap-1.5">
+                  <TestTube2 className="h-3 w-3 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden">Laboratório</span>
+                </span>
+                <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('laboratorio') && '-rotate-90')} />
+              </button>
+              {openGroups.has('laboratorio') && (
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'mp_testadas'}
+                        tooltip="Controle de MP Testada"
+                        onClick={() => goToTab('mp_testadas')}
+                        size="sm"
+                      >
+                        <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                        <span>MP Testada</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              )}
+            </SidebarGroup>
+          </SidebarContent>
+
+          <SidebarFooter className="border-t">
+            <UserProfile nome={perfil.nome} papel={perfil.papel} email={email} />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} onClick={toggleTheme}>
+                  {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                  <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Sair" onClick={logout}>
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span>Sair</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+
+        <SidebarInset className="overflow-x-hidden flex flex-col">
+          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
+            <SidebarTrigger />
+            {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
+          </header>
+          {!activeTab ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+              Selecione uma opção no menu
+            </div>
+          ) : (
+            <main className="p-3 sm:p-6 overflow-x-hidden">
+              <ErrorBoundary>
+                <Suspense fallback={TAB_LOADING}>
+                  {activeTab === 'compras_consumo'     && <ComprasConsumo />}
+                  {activeTab === 'compras_previsao'    && <ComprasPrevisao />}
+                  {activeTab === 'compras_media_mensal' && <ComprasMediaMensal />}
+                  {activeTab === 'comercial'           && <PainelComercial />}
+                  {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} />}
+                </Suspense>
+              </ErrorBoundary>
+            </main>
+          )}
         </SidebarInset>
       </SidebarProvider>
     );
