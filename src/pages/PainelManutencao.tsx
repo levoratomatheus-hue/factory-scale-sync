@@ -192,6 +192,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [avulsasPorOS, setAvulsasPorOS] = useState<Record<string, { id: string; descricao: string }[]>>({});
   const [andamentoPecasAvulsas, setAndamentoPecasAvulsas] = useState<string[]>([]);
   const [solucaoPecasAvulsas, setSolucaoPecasAvulsas] = useState<string[]>([]);
+  const [expandedAvulsas, setExpandedAvulsas] = useState<Record<string, boolean>>({});
 
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
@@ -923,12 +924,21 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                             </span>
                           </span>
                         ))}
-                        {(avulsasPorOS[os.id] ?? []).map(av => (
-                          <span key={av.id} className="text-xs text-muted-foreground flex items-center gap-1">
-                            {av.descricao}
-                            <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">avulsa</span>
-                          </span>
-                        ))}
+                        {(avulsasPorOS[os.id] ?? []).map(av => {
+                          const expanded = expandedAvulsas[av.id] ?? false;
+                          return (
+                            <span key={av.id} className="text-xs text-muted-foreground flex items-start gap-1">
+                              <span
+                                onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
+                                title={expanded ? undefined : av.descricao}
+                                className={`cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate max-w-[200px]"}`}
+                              >
+                                {av.descricao}
+                              </span>
+                              <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1110,19 +1120,28 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                         </div>
                       );
                     })}
-                    {(avulsasPorOS[os.id] ?? []).map(av => (
-                      <div key={av.id} className="flex items-center gap-2 text-sm">
-                        <span className="flex-1 text-foreground/80 min-w-0 truncate">{av.descricao}</span>
-                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
-                        <button
-                          onClick={() => removerAvulsa(av.id, os.id)}
-                          title="Remover peça avulsa"
-                          className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
+                    {(avulsasPorOS[os.id] ?? []).map(av => {
+                      const expanded = expandedAvulsas[av.id] ?? false;
+                      return (
+                        <div key={av.id} className="flex items-start gap-2 text-sm">
+                          <span
+                            onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
+                            title={expanded ? undefined : av.descricao}
+                            className={`flex-1 min-w-0 text-foreground/80 cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}
+                          >
+                            {av.descricao}
+                          </span>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                          <button
+                            onClick={() => removerAvulsa(av.id, os.id)}
+                            title="Remover peça avulsa"
+                            className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -1170,19 +1189,28 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                             </div>
                           );
                         })}
-                        {(avulsasPorOS[os.id] ?? []).map(av => (
-                          <div key={av.id} className="flex items-center gap-2 text-sm">
-                            <span className="flex-1 text-foreground/80 min-w-0 truncate">{av.descricao}</span>
-                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
-                            <button
-                              onClick={() => removerAvulsa(av.id, os.id)}
-                              title="Remover peça avulsa"
-                              className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
+                        {(avulsasPorOS[os.id] ?? []).map(av => {
+                          const expanded = expandedAvulsas[av.id] ?? false;
+                          return (
+                            <div key={av.id} className="flex items-start gap-2 text-sm">
+                              <span
+                                onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
+                                title={expanded ? undefined : av.descricao}
+                                className={`flex-1 min-w-0 text-foreground/80 cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}
+                              >
+                                {av.descricao}
+                              </span>
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                              <button
+                                onClick={() => removerAvulsa(av.id, os.id)}
+                                title="Remover peça avulsa"
+                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </>
                     )}
                   </div>
