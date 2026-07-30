@@ -189,6 +189,10 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [qtdEditadas, setQtdEditadas] = useState<Record<string, string>>({});
   const [savingMovIds, setSavingMovIds] = useState<Record<string, boolean>>({});
 
+  const [avulsasPorOS, setAvulsasPorOS] = useState<Record<string, { id: string; descricao: string }[]>>({});
+  const [andamentoPecasAvulsas, setAndamentoPecasAvulsas] = useState<string[]>([]);
+  const [solucaoPecasAvulsas, setSolucaoPecasAvulsas] = useState<string[]>([]);
+
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
   const [dataFim, setDataFim] = useState(mesAtual.fim);
@@ -261,7 +265,10 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   useEffect(() => {
     if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida" && tabAtiva !== "em_andamento") return;
-    ossFiltradas.forEach(os => recarregarMovsOS(os.id));
+    ossFiltradas.forEach(os => {
+      recarregarMovsOS(os.id);
+      recarregarAvulsasOS(os.id);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabAtiva, ossFiltradas]);
 
@@ -312,6 +319,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setAndamentoOS(os);
     setAndamentoObs(os.observacoes_andamento ?? "");
     setAndamentoPecas([]);
+    setAndamentoPecasAvulsas([]);
     const { data } = await (supabase as any)
       .from("estoque_manutencao")
       .select("id, nome, unidade, quantidade")
@@ -369,19 +377,31 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       ]);
     }
 
+    const avulsasValidas = andamentoPecasAvulsas.map(d => d.trim()).filter(Boolean);
+    for (const descricao of avulsasValidas) {
+      await (supabase as any).from("pecas_avulsas_os").insert({
+        os_id: andamentoOS.id,
+        descricao,
+        criado_por: perfilNome,
+      });
+    }
+
     const osId = andamentoOS.id;
     setSavingAndamento(false);
     toast({ title: "Andamento registrado!" });
     setAndamentoOS(null);
     setAndamentoObs("");
     setAndamentoPecas([]);
+    setAndamentoPecasAvulsas([]);
     await recarregarMovsOS(osId);
+    await recarregarAvulsasOS(osId);
   }
 
   async function abrirDialogSolucao(os: OS) {
     setSolucaoDialogOS(os);
     setSolucaoText("");
     setPecasUtilizadas([]);
+    setSolucaoPecasAvulsas([]);
     const { data } = await (supabase as any)
       .from("estoque_manutencao")
       .select("id, nome, unidade, quantidade")
@@ -445,11 +465,21 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       ]);
     }
 
+    const avulsasValidas = solucaoPecasAvulsas.map(d => d.trim()).filter(Boolean);
+    for (const descricao of avulsasValidas) {
+      await (supabase as any).from("pecas_avulsas_os").insert({
+        os_id: solucao_aplicadaDialogOS.id,
+        descricao,
+        criado_por: perfilNome,
+      });
+    }
+
     setSavingSolucao(false);
     toast({ title: "Solução registrada — aguardando aprovação do gestor" });
     setSolucaoDialogOS(null);
     setSolucaoText("");
     setPecasUtilizadas([]);
+    setSolucaoPecasAvulsas([]);
   }
 
   async function abrirEdicao(os: OS) {
@@ -628,6 +658,22 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setSavingMovIds(prev => ({ ...prev, [mov.id]: false }));
     toast({ title: "Peça removida" });
     await recarregarMovsOS(osId);
+  }
+
+  async function recarregarAvulsasOS(osId: string) {
+    const { data } = await (supabase as any)
+      .from("pecas_avulsas_os")
+      .select("id, descricao")
+      .eq("os_id", osId)
+      .order("criado_em", { ascending: true });
+    setAvulsasPorOS(prev => ({ ...prev, [osId]: data ?? [] }));
+  }
+
+  async function removerAvulsa(id: string, osId: string) {
+    if (!window.confirm("Remover esta peça avulsa da OS?")) return;
+    await (supabase as any).from("pecas_avulsas_os").delete().eq("id", id);
+    toast({ title: "Peça avulsa removida" });
+    await recarregarAvulsasOS(osId);
   }
 
   async function concluirOS(os: OS) {
@@ -863,18 +909,24 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   )}
 
                   {/* Peças utilizadas — somente leitura */}
-                  {movs && movs.length > 0 && (
+                  {(movs && movs.length > 0 || (avulsasPorOS[os.id] ?? []).length > 0) && (
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
                         <Package className="h-3 w-3" /> Peças Utilizadas
                       </p>
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5">
-                        {movs.map(mov => (
+                        {(movs ?? []).map(mov => (
                           <span key={mov.id} className="text-xs text-muted-foreground">
                             {mov.nome}{" "}
                             <span className="font-medium text-foreground tabular-nums">
                               {mov.quantidade} {mov.unidade}
                             </span>
+                          </span>
+                        ))}
+                        {(avulsasPorOS[os.id] ?? []).map(av => (
+                          <span key={av.id} className="text-xs text-muted-foreground flex items-center gap-1">
+                            {av.descricao}
+                            <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">avulsa</span>
                           </span>
                         ))}
                       </div>
@@ -1018,12 +1070,15 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 )}
 
                 {/* Peças registradas — em_andamento (editável) */}
-                {os.status === "em_andamento" && movsPorOS[os.id] !== undefined && movsPorOS[os.id].length > 0 && (
+                {os.status === "em_andamento" && (
+                  (movsPorOS[os.id] !== undefined && movsPorOS[os.id].length > 0) ||
+                  (avulsasPorOS[os.id] !== undefined && avulsasPorOS[os.id].length > 0)
+                ) && (
                   <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Package className="h-3 w-3" /> Peças registradas até agora
                     </p>
-                    {movsPorOS[os.id].map(mov => {
+                    {(movsPorOS[os.id] ?? []).map(mov => {
                       const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
                       const salvando = savingMovIds[mov.id] ?? false;
                       return (
@@ -1055,6 +1110,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                         </div>
                       );
                     })}
+                    {(avulsasPorOS[os.id] ?? []).map(av => (
+                      <div key={av.id} className="flex items-center gap-2 text-sm">
+                        <span className="flex-1 text-foreground/80 min-w-0 truncate">{av.descricao}</span>
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                        <button
+                          onClick={() => removerAvulsa(av.id, os.id)}
+                          title="Remover peça avulsa"
+                          className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -1066,41 +1134,56 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     </p>
                     {(movsPorOS[os.id] === undefined) ? (
                       <p className="text-xs text-muted-foreground">Carregando...</p>
-                    ) : (movsPorOS[os.id].length === 0) ? (
+                    ) : (movsPorOS[os.id].length === 0 && (avulsasPorOS[os.id] ?? []).length === 0) ? (
                       <p className="text-xs text-muted-foreground">Nenhuma peça registrada</p>
                     ) : (
-                      movsPorOS[os.id].map(mov => {
-                        const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
-                        const salvando = savingMovIds[mov.id] ?? false;
-                        return (
-                          <div key={mov.id} className="flex items-center gap-2 text-sm">
-                            <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
-                            <input
-                              type="number" min="0.01" step="0.01"
-                              value={qtdAtual}
-                              onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
-                              className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                            />
-                            <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
+                      <>
+                        {movsPorOS[os.id].map(mov => {
+                          const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
+                          const salvando = savingMovIds[mov.id] ?? false;
+                          return (
+                            <div key={mov.id} className="flex items-center gap-2 text-sm">
+                              <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
+                              <input
+                                type="number" min="0.01" step="0.01"
+                                value={qtdAtual}
+                                onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
+                                className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                              />
+                              <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
+                              <button
+                                onClick={() => salvarQtdMov(mov, os.id)}
+                                disabled={salvando}
+                                title="Salvar"
+                                className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
+                              >
+                                {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
+                              </button>
+                              <button
+                                onClick={() => removerMovimentacao(mov, os.id)}
+                                disabled={salvando}
+                                title="Remover peça"
+                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {(avulsasPorOS[os.id] ?? []).map(av => (
+                          <div key={av.id} className="flex items-center gap-2 text-sm">
+                            <span className="flex-1 text-foreground/80 min-w-0 truncate">{av.descricao}</span>
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
                             <button
-                              onClick={() => salvarQtdMov(mov, os.id)}
-                              disabled={salvando}
-                              title="Salvar"
-                              className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
-                            >
-                              {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
-                            </button>
-                            <button
-                              onClick={() => removerMovimentacao(mov, os.id)}
-                              disabled={salvando}
-                              title="Remover peça"
-                              className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                              onClick={() => removerAvulsa(av.id, os.id)}
+                              title="Remover peça avulsa"
+                              className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
-                        );
-                      })
+                        ))}
+                      </>
                     )}
                   </div>
                 )}
@@ -1284,7 +1367,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       </Dialog>
 
       {/* Dialog: Registrar Solução */}
-      <Dialog open={!!solucao_aplicadaDialogOS} onOpenChange={(o) => { if (!o) { setSolucaoDialogOS(null); setPecasUtilizadas([]); } }}>
+      <Dialog open={!!solucao_aplicadaDialogOS} onOpenChange={(o) => { if (!o) { setSolucaoDialogOS(null); setPecasUtilizadas([]); setSolucaoPecasAvulsas([]); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar Solução</DialogTitle>
@@ -1313,16 +1396,25 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   <Package className="h-4 w-4 text-muted-foreground" />
                   Peças / Materiais utilizados
                 </label>
-                <button
-                  type="button"
-                  onClick={adicionarPeca}
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  + Adicionar
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={adicionarPeca}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    + Do estoque
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSolucaoPecasAvulsas(prev => [...prev, ""])}
+                    className="text-xs text-orange-600 hover:underline flex items-center gap-1"
+                  >
+                    + Avulsa
+                  </button>
+                </div>
               </div>
-              {estoqueItems.length === 0 && pecasUtilizadas.length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhum item cadastrado no estoque de manutenção</p>
+              {estoqueItems.length === 0 && pecasUtilizadas.length === 0 && solucaoPecasAvulsas.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhum item no estoque de manutenção. Use "Avulsa" para registrar peças pontuais.</p>
               )}
               {pecasUtilizadas.map((peca, idx) => (
                 <div key={idx} className="flex items-center gap-2">
@@ -1347,10 +1439,22 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   <button type="button" onClick={() => removerPeca(idx)} className="text-muted-foreground hover:text-destructive text-lg leading-none">×</button>
                 </div>
               ))}
+              {solucaoPecasAvulsas.map((desc, idx) => (
+                <div key={`av-${idx}`} className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                  <Input
+                    value={desc}
+                    onChange={(e) => setSolucaoPecasAvulsas(prev => prev.map((d, i) => i === idx ? e.target.value : d))}
+                    placeholder="Nome/descrição da peça..."
+                    className="flex-1"
+                  />
+                  <button type="button" onClick={() => setSolucaoPecasAvulsas(prev => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive text-lg leading-none">×</button>
+                </div>
+              ))}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSolucaoDialogOS(null); setPecasUtilizadas([]); }}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setSolucaoDialogOS(null); setPecasUtilizadas([]); setSolucaoPecasAvulsas([]); }}>Cancelar</Button>
             <Button onClick={registrarSolucao} disabled={savingSolucao}>
               {savingSolucao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enviar para Aprovação
@@ -1360,7 +1464,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       </Dialog>
 
       {/* Dialog: Registrar Andamento */}
-      <Dialog open={!!andamentoOS} onOpenChange={(o) => { if (!o) { setAndamentoOS(null); setAndamentoPecas([]); } }}>
+      <Dialog open={!!andamentoOS} onOpenChange={(o) => { if (!o) { setAndamentoOS(null); setAndamentoPecas([]); setAndamentoPecasAvulsas([]); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar Andamento</DialogTitle>
@@ -1389,16 +1493,25 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   <Package className="h-4 w-4 text-muted-foreground" />
                   Peças / Materiais utilizados
                 </label>
-                <button
-                  type="button"
-                  onClick={adicionarAndamentoPeca}
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  + Adicionar
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={adicionarAndamentoPeca}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    + Do estoque
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAndamentoPecasAvulsas(prev => [...prev, ""])}
+                    className="text-xs text-orange-600 hover:underline flex items-center gap-1"
+                  >
+                    + Avulsa
+                  </button>
+                </div>
               </div>
-              {andamentoEstoque.length === 0 && andamentoPecas.length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhum item cadastrado no estoque de manutenção</p>
+              {andamentoEstoque.length === 0 && andamentoPecas.length === 0 && andamentoPecasAvulsas.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhum item no estoque de manutenção. Use "Avulsa" para registrar peças pontuais.</p>
               )}
               {andamentoPecas.map((peca, idx) => (
                 <div key={idx} className="flex items-center gap-2">
@@ -1423,10 +1536,22 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                   <button type="button" onClick={() => removerAndamentoPeca(idx)} className="text-muted-foreground hover:text-destructive text-lg leading-none">×</button>
                 </div>
               ))}
+              {andamentoPecasAvulsas.map((desc, idx) => (
+                <div key={`av-${idx}`} className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                  <Input
+                    value={desc}
+                    onChange={(e) => setAndamentoPecasAvulsas(prev => prev.map((d, i) => i === idx ? e.target.value : d))}
+                    placeholder="Nome/descrição da peça..."
+                    className="flex-1"
+                  />
+                  <button type="button" onClick={() => setAndamentoPecasAvulsas(prev => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive text-lg leading-none">×</button>
+                </div>
+              ))}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setAndamentoOS(null); setAndamentoPecas([]); }}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setAndamentoOS(null); setAndamentoPecas([]); setAndamentoPecasAvulsas([]); }}>Cancelar</Button>
             <Button onClick={salvarAndamento} disabled={savingAndamento} className="gap-2">
               {savingAndamento && <Loader2 className="h-4 w-4 animate-spin" />}
               Salvar Andamento
