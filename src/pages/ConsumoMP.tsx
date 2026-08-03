@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil } from 'lucide-react';
+import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil, Save, BookOpen, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,6 +46,33 @@ interface TotalPorMp {
   kg_prod: number;
   num_retiradas: number;
   pct: number;
+}
+
+// ── Tipos de relatórios salvos ─────────────────────────────────────────────────
+
+interface RelatorioSalvo {
+  id: string;
+  titulo: string | null;
+  data_inicio: string;
+  data_fim: string;
+  setor: string;
+  total_kg: number;
+  num_mps: number;
+  criado_por: string;
+  criado_em: string;
+}
+
+interface RelatorioSalvoItem {
+  id: string;
+  relatorio_id: string;
+  materia_prima: string;
+  cod_mp_excel: string;
+  cod_tid: string | null;
+  total_kg: number;
+  kg_lab: number;
+  kg_prod: number;
+  pct: number;
+  setor: string;
 }
 
 interface Props {
@@ -87,9 +114,15 @@ function endOfWeek(d: Date) {
   return r;
 }
 
-const SETOR_LABEL: Record<Setor, string> = {
+function fmtDatetime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+const SETOR_LABEL: Record<string, string> = {
   laboratorio: 'Laboratório',
   producao: 'Produção',
+  ambos: 'Ambos',
 };
 
 // ── Inline setor selector ─────────────────────────────────────────────────────
@@ -178,6 +211,22 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [relatorio, setRelatorio] = useState<ConsumoMpRow[]>([]);
   const [carregandoRel, setCarregandoRel] = useState(false);
   const [deparaMap, setDeparaMap] = useState<Map<string, string | null>>(new Map());
+
+  // ─── Salvar relatório ──────────────────────────────────────────────────────
+  const [showSalvarDialog, setShowSalvarDialog] = useState(false);
+  const [tituloRelatorio, setTituloRelatorio] = useState('');
+  const [salvandoRelatorio, setSalvandoRelatorio] = useState(false);
+
+  // ─── Relatórios salvos ─────────────────────────────────────────────────────
+  const [relatoriosSalvos, setRelatoriosSalvos] = useState<RelatorioSalvo[]>([]);
+  const [carregandoSalvos, setCarregandoSalvos] = useState(false);
+  const [filtroSalvosSetor, setFiltroSalvosSetor] = useState<string>('todos');
+  const [filtroSalvosInicio, setFiltroSalvosInicio] = useState('');
+  const [filtroSalvosFim, setFiltroSalvosFim] = useState('');
+  const [relatorioAberto, setRelatorioAberto] = useState<RelatorioSalvo | null>(null);
+  const [itensAbertos, setItensAbertos] = useState<RelatorioSalvoItem[]>([]);
+  const [carregandoItens, setCarregandoItens] = useState(false);
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
 
   // ── Autocomplete (form) ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -411,7 +460,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     else if (atalho === 'ano') { setDataInicio(toInputDate(new Date(h.getFullYear(), 0, 1))); setDataFim(toInputDate(new Date(h.getFullYear(), 11, 31))); }
   };
 
-  // ── Exportar CSV ────────────────────────────────────────────────────────────
+  // ── Exportar CSV (relatório ao vivo) ────────────────────────────────────────
   const exportarCSV = () => {
     const totalRows = [
       ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
@@ -446,14 +495,132 @@ export default function ConsumoMP({ perfilNome }: Props) {
     ];
 
     const all = [...totalRows, ...detailRows];
-    const csv = '\ufeff' + all.map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `consumo_mp_${filtroSetor}_${dataInicio}_${dataFim}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(all, `consumo_mp_${filtroSetor}_${dataInicio}_${dataFim}.csv`);
+  };
+
+  // ── Salvar relatório ────────────────────────────────────────────────────────
+  const handleSalvarRelatorio = async () => {
+    if (totaisPorMp.length === 0) {
+      toast({ title: 'Não há dados para salvar', variant: 'destructive' });
+      return;
+    }
+    setSalvandoRelatorio(true);
+
+    // Inserir cabeçalho
+    const { data: cab, error: errCab } = await (supabase as any)
+      .from('relatorios_consumo_mp')
+      .insert({
+        titulo: tituloRelatorio.trim() || null,
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        setor: filtroSetor,
+        total_kg: totalGeralKg,
+        num_mps: numMpDistintas,
+        criado_por: perfilNome,
+      })
+      .select('id')
+      .single();
+
+    if (errCab || !cab) {
+      setSalvandoRelatorio(false);
+      toast({ title: 'Erro ao salvar relatório', description: errCab?.message, variant: 'destructive' });
+      return;
+    }
+
+    // Inserir itens congelados
+    const itens = totaisPorMp.map((t) => ({
+      relatorio_id: cab.id,
+      materia_prima: t.materia_prima,
+      cod_mp_excel: t.cod_mp_excel,
+      cod_tid: t.cod_tid ?? null,
+      total_kg: t.total_kg,
+      kg_lab: t.kg_lab,
+      kg_prod: t.kg_prod,
+      pct: t.pct,
+      setor: filtroSetor,
+    }));
+
+    const { error: errItens } = await (supabase as any)
+      .from('relatorios_consumo_mp_itens')
+      .insert(itens);
+
+    setSalvandoRelatorio(false);
+
+    if (errItens) {
+      toast({ title: 'Relatório salvo, mas houve erro nos itens', description: errItens.message, variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Relatório salvo com sucesso!' });
+    setShowSalvarDialog(false);
+    setTituloRelatorio('');
+    fetchRelatoriosSalvos();
+  };
+
+  // ── Relatórios salvos – buscar ──────────────────────────────────────────────
+  const fetchRelatoriosSalvos = useCallback(async () => {
+    setCarregandoSalvos(true);
+    let q = (supabase as any)
+      .from('relatorios_consumo_mp')
+      .select('*')
+      .order('criado_em', { ascending: false });
+    if (filtroSalvosSetor !== 'todos') q = q.eq('setor', filtroSalvosSetor);
+    if (filtroSalvosInicio) q = q.gte('criado_em', filtroSalvosInicio);
+    if (filtroSalvosFim) q = q.lte('criado_em', filtroSalvosFim + 'T23:59:59');
+    const { data: rows } = await q;
+    setRelatoriosSalvos((rows ?? []) as RelatorioSalvo[]);
+    setCarregandoSalvos(false);
+  }, [filtroSalvosSetor, filtroSalvosInicio, filtroSalvosFim]);
+
+  useEffect(() => { fetchRelatoriosSalvos(); }, [fetchRelatoriosSalvos]);
+
+  // ── Abrir relatório salvo ───────────────────────────────────────────────────
+  const abrirRelatorioSalvo = async (rel: RelatorioSalvo) => {
+    setRelatorioAberto(rel);
+    setCarregandoItens(true);
+    const { data: rows } = await (supabase as any)
+      .from('relatorios_consumo_mp_itens')
+      .select('*')
+      .eq('relatorio_id', rel.id)
+      .order('total_kg', { ascending: false });
+    setItensAbertos((rows ?? []) as RelatorioSalvoItem[]);
+    setCarregandoItens(false);
+  };
+
+  // ── Excluir relatório salvo ─────────────────────────────────────────────────
+  const handleExcluirRelatorio = async (id: string) => {
+    if (!confirm('Excluir este relatório salvo? Esta ação não pode ser desfeita.')) return;
+    setExcluindoId(id);
+    const { error } = await (supabase as any)
+      .from('relatorios_consumo_mp')
+      .delete()
+      .eq('id', id);
+    setExcluindoId(null);
+    if (error) { toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Relatório excluído' });
+    fetchRelatoriosSalvos();
+  };
+
+  // ── Exportar relatório salvo em CSV ─────────────────────────────────────────
+  const exportarRelatorioSalvoCSV = (rel: RelatorioSalvo, itens: RelatorioSalvoItem[]) => {
+    const mostrarSetores = rel.setor === 'ambos';
+    const rows = [
+      ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
+        ...(mostrarSetores ? ['Kg Laboratório', 'Kg Produção'] : [])],
+      ...itens.map((t) => [
+        t.materia_prima,
+        t.cod_mp_excel,
+        t.cod_tid ?? '',
+        t.total_kg.toFixed(3).replace('.', ','),
+        fmtPct(t.pct),
+        ...(mostrarSetores ? [
+          t.kg_lab.toFixed(3).replace('.', ','),
+          t.kg_prod.toFixed(3).replace('.', ','),
+        ] : []),
+      ]),
+    ];
+    const setor_label = SETOR_LABEL[rel.setor] ?? rel.setor;
+    downloadCsv(rows, `relatorio_${setor_label}_${rel.data_inicio}_${rel.data_fim}.csv`);
   };
 
   const mostrarColunaSetor = filtroSetor === 'ambos';
@@ -470,6 +637,10 @@ export default function ConsumoMP({ perfilNome }: Props) {
           <TabsTrigger value="relatorio" className="gap-1.5">
             <BarChart3 className="h-4 w-4" />
             Relatório por Período
+          </TabsTrigger>
+          <TabsTrigger value="salvos" className="gap-1.5">
+            <BookOpen className="h-4 w-4" />
+            Relatórios Salvos
           </TabsTrigger>
         </TabsList>
 
@@ -776,10 +947,27 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     ))}
                   </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={exportarCSV} className="gap-1.5 ml-auto">
-                  <Download className="h-4 w-4" />
-                  Exportar CSV
-                </Button>
+                <div className="flex gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportarCSV}
+                    className="gap-1.5"
+                    disabled={totaisPorMp.length === 0}
+                  >
+                    <Download className="h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowSalvarDialog(true)}
+                    className="gap-1.5"
+                    disabled={totaisPorMp.length === 0}
+                  >
+                    <Save className="h-4 w-4" />
+                    Salvar relatório
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -956,6 +1144,169 @@ export default function ConsumoMP({ perfilNome }: Props) {
             </>
           )}
         </TabsContent>
+
+        {/* ════════════════════════════════════════════════════════
+            ABA 3 – RELATÓRIOS SALVOS
+        ════════════════════════════════════════════════════════ */}
+        <TabsContent value="salvos" className="space-y-4">
+          {/* Filtros */}
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Criado de</Label>
+                  <Input
+                    type="date"
+                    value={filtroSalvosInicio}
+                    onChange={e => setFiltroSalvosInicio(e.target.value)}
+                    className="w-36 h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Criado até</Label>
+                  <Input
+                    type="date"
+                    value={filtroSalvosFim}
+                    onChange={e => setFiltroSalvosFim(e.target.value)}
+                    className="w-36 h-8 text-sm"
+                  />
+                </div>
+                {(filtroSalvosInicio || filtroSalvosFim) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs self-end"
+                    onClick={() => { setFiltroSalvosInicio(''); setFiltroSalvosFim(''); }}
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Limpar datas
+                  </Button>
+                )}
+                <div className="flex rounded-md border overflow-hidden self-end">
+                  {([
+                    { id: 'todos', label: 'Todos' },
+                    { id: 'laboratorio', label: 'Lab' },
+                    { id: 'producao', label: 'Prod' },
+                    { id: 'ambos', label: 'Ambos' },
+                  ] as const).map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setFiltroSalvosSetor(id)}
+                      className={cn(
+                        'px-2.5 py-1.5 text-xs font-medium transition-colors border-l first:border-l-0',
+                        filtroSalvosSetor === id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background text-muted-foreground hover:bg-muted',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lista de relatórios salvos */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Histórico de Relatórios</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {carregandoSalvos ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : relatoriosSalvos.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  Nenhum relatório salvo ainda. Use o botão "Salvar relatório" na aba Relatório por Período.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground text-xs">
+                        <th className="text-left pb-2 pr-3 font-medium">Título</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Período</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Setor</th>
+                        <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
+                        <th className="text-right pb-2 pr-3 font-medium">Nº MPs</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Criado por</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Criado em</th>
+                        <th className="pb-2 text-right font-medium">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {relatoriosSalvos.map((rel) => (
+                        <tr key={rel.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
+                          <td className="py-2 pr-3 max-w-[200px]">
+                            <span className="truncate block">
+                              {rel.titulo ?? <span className="text-muted-foreground italic">Sem título</span>}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">
+                            {fmt(rel.data_inicio)} – {fmt(rel.data_fim)}
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Badge variant="secondary" className="text-[10px]">
+                              {SETOR_LABEL[rel.setor] ?? rel.setor}
+                            </Badge>
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono text-xs">{formatKg(rel.total_kg)}</td>
+                          <td className="py-2 pr-3 text-right text-xs">{rel.num_mps}</td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground">{rel.criado_por}</td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDatetime(rel.criado_em)}</td>
+                          <td className="py-2 text-right">
+                            <div className="flex gap-0.5 justify-end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => abrirRelatorioSalvo(rel)}
+                                title="Abrir relatório"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={async () => {
+                                  const { data: itens } = await (supabase as any)
+                                    .from('relatorios_consumo_mp_itens')
+                                    .select('*')
+                                    .eq('relatorio_id', rel.id)
+                                    .order('total_kg', { ascending: false });
+                                  exportarRelatorioSalvoCSV(rel, (itens ?? []) as RelatorioSalvoItem[]);
+                                }}
+                                title="Exportar CSV"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive/60 hover:text-destructive"
+                                onClick={() => handleExcluirRelatorio(rel.id)}
+                                disabled={excluindoId === rel.id}
+                                title="Excluir relatório"
+                              >
+                                {excluindoId === rel.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* ════════════════════════════════════════════════════════
@@ -1079,6 +1430,157 @@ export default function ConsumoMP({ perfilNome }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ════════════════════════════════════════════════════════
+          MODAL – SALVAR RELATÓRIO
+      ════════════════════════════════════════════════════════ */}
+      <Dialog open={showSalvarDialog} onOpenChange={(open) => { if (!open) { setShowSalvarDialog(false); setTituloRelatorio(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Salvar Relatório</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-md bg-muted px-3 py-2 text-sm space-y-0.5">
+              <p><span className="text-muted-foreground">Período:</span> {fmt(dataInicio)} – {fmt(dataFim)}</p>
+              <p><span className="text-muted-foreground">Setor:</span> {SETOR_LABEL[filtroSetor] ?? filtroSetor}</p>
+              <p><span className="text-muted-foreground">Total:</span> {formatKg(totalGeralKg)} kg · {numMpDistintas} MPs</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Título / descrição (opcional)</Label>
+              <Input
+                placeholder="Ex.: Consumo laboratório 1ª quinzena julho"
+                value={tituloRelatorio}
+                onChange={e => setTituloRelatorio(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSalvarRelatorio(); }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setShowSalvarDialog(false); setTituloRelatorio(''); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSalvarRelatorio} disabled={salvandoRelatorio}>
+              {salvandoRelatorio && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ════════════════════════════════════════════════════════
+          MODAL – VISUALIZAR RELATÓRIO SALVO
+      ════════════════════════════════════════════════════════ */}
+      <Dialog open={!!relatorioAberto} onOpenChange={(open) => { if (!open) { setRelatorioAberto(null); setItensAbertos([]); } }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {relatorioAberto?.titulo ?? 'Relatório salvo'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {relatorioAberto && (
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground mb-2">
+              <span>Período: <strong className="text-foreground">{fmt(relatorioAberto.data_inicio)} – {fmt(relatorioAberto.data_fim)}</strong></span>
+              <span>Setor: <strong className="text-foreground">{SETOR_LABEL[relatorioAberto.setor] ?? relatorioAberto.setor}</strong></span>
+              <span>Total: <strong className="text-foreground">{formatKg(relatorioAberto.total_kg)} kg</strong></span>
+              <span>MPs: <strong className="text-foreground">{relatorioAberto.num_mps}</strong></span>
+              <span>Salvo por: <strong className="text-foreground">{relatorioAberto.criado_por}</strong> em {fmtDatetime(relatorioAberto.criado_em)}</span>
+            </div>
+          )}
+
+          <div className="overflow-y-auto flex-1">
+            {carregandoItens ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b text-muted-foreground text-xs">
+                      <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                      <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
+                      <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
+                      <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
+                      {relatorioAberto?.setor === 'ambos' && <>
+                        <th className="text-right pb-2 pr-3 font-medium text-blue-600 dark:text-blue-400">Lab (kg)</th>
+                        <th className="text-right pb-2 pr-3 font-medium text-orange-600 dark:text-orange-400">Prod (kg)</th>
+                      </>}
+                      <th className="text-right pb-2 font-medium">% do total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itensAbertos.map((t, i) => (
+                      <tr key={t.id} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
+                        <td className="py-2 pr-3">{t.materia_prima}</td>
+                        <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
+                        <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
+                        <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
+                        {relatorioAberto?.setor === 'ambos' && <>
+                          <td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">
+                            {t.kg_lab > 0 ? formatKg(t.kg_lab) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono text-xs text-orange-600 dark:text-orange-400">
+                            {t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </>}
+                        <td className="py-2 text-right text-muted-foreground text-xs font-mono">{fmtPct(t.pct)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t font-semibold text-xs">
+                      <td colSpan={3} className="py-2 pr-3 text-muted-foreground">Total</td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {formatKg(relatorioAberto?.total_kg ?? 0)}
+                      </td>
+                      {relatorioAberto?.setor === 'ambos' && <>
+                        <td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">
+                          {formatKg(itensAbertos.reduce((s, t) => s + t.kg_lab, 0))}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono text-orange-600 dark:text-orange-400">
+                          {formatKg(itensAbertos.reduce((s, t) => s + t.kg_prod, 0))}
+                        </td>
+                      </>}
+                      <td className="py-2 text-right text-muted-foreground">100%</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 pt-2 border-t mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => relatorioAberto && exportarRelatorioSalvoCSV(relatorioAberto, itensAbertos)}
+              disabled={carregandoItens || itensAbertos.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              Exportar CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setRelatorioAberto(null); setItensAbertos([]); }}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+// ── Utilitário CSV ─────────────────────────────────────────────────────────────
+
+function downloadCsv(rows: (string | number)[][], filename: string) {
+  const csv = '\ufeff' + rows.map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
