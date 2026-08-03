@@ -69,10 +69,19 @@ interface RelatorioSalvoItem {
   cod_mp_excel: string;
   cod_tid: string | null;
   total_kg: number;
+  percentual: number;
+  setor: string;
+}
+
+// Linha pivotada para exibição (agrupa lab + prod de uma mesma MP)
+interface RelatorioSalvoItemDisplay {
+  cod_mp_excel: string;
+  cod_tid: string | null;
+  materia_prima: string;
+  total_kg: number;
   kg_lab: number;
   kg_prod: number;
-  pct: number;
-  setor: string;
+  percentual: number;
 }
 
 interface Props {
@@ -527,18 +536,57 @@ export default function ConsumoMP({ perfilNome }: Props) {
       return;
     }
 
-    // Inserir itens congelados
-    const itens = totaisPorMp.map((t) => ({
-      relatorio_id: cab.id,
-      materia_prima: t.materia_prima,
-      cod_mp_excel: t.cod_mp_excel,
-      cod_tid: t.cod_tid ?? null,
-      total_kg: t.total_kg,
-      kg_lab: t.kg_lab,
-      kg_prod: t.kg_prod,
-      pct: t.pct,
-      setor: filtroSetor,
-    }));
+    // Inserir itens congelados — uma linha por MP×setor
+    // Quando filtro = 'ambos', grava lab e prod separadamente (mesmo schema)
+    const itens: object[] = [];
+    for (const t of totaisPorMp) {
+      if (filtroSetor === 'ambos') {
+        if (t.kg_lab > 0) {
+          itens.push({
+            relatorio_id: cab.id,
+            materia_prima: t.materia_prima,
+            cod_mp_excel: t.cod_mp_excel,
+            cod_tid: t.cod_tid ?? null,
+            total_kg: t.kg_lab,
+            percentual: totalGeralKg > 0 ? (t.kg_lab / totalGeralKg) * 100 : 0,
+            setor: 'laboratorio',
+          });
+        }
+        if (t.kg_prod > 0) {
+          itens.push({
+            relatorio_id: cab.id,
+            materia_prima: t.materia_prima,
+            cod_mp_excel: t.cod_mp_excel,
+            cod_tid: t.cod_tid ?? null,
+            total_kg: t.kg_prod,
+            percentual: totalGeralKg > 0 ? (t.kg_prod / totalGeralKg) * 100 : 0,
+            setor: 'producao',
+          });
+        }
+        // MP sem setor definido — grava como 'ambos' para não perder
+        if (t.kg_lab === 0 && t.kg_prod === 0) {
+          itens.push({
+            relatorio_id: cab.id,
+            materia_prima: t.materia_prima,
+            cod_mp_excel: t.cod_mp_excel,
+            cod_tid: t.cod_tid ?? null,
+            total_kg: t.total_kg,
+            percentual: t.pct,
+            setor: 'ambos',
+          });
+        }
+      } else {
+        itens.push({
+          relatorio_id: cab.id,
+          materia_prima: t.materia_prima,
+          cod_mp_excel: t.cod_mp_excel,
+          cod_tid: t.cod_tid ?? null,
+          total_kg: t.total_kg,
+          percentual: t.pct,
+          setor: filtroSetor,
+        });
+      }
+    }
 
     const { error: errItens } = await (supabase as any)
       .from('relatorios_consumo_mp_itens')
@@ -604,15 +652,25 @@ export default function ConsumoMP({ perfilNome }: Props) {
   // ── Exportar relatório salvo em CSV ─────────────────────────────────────────
   const exportarRelatorioSalvoCSV = (rel: RelatorioSalvo, itens: RelatorioSalvoItem[]) => {
     const mostrarSetores = rel.setor === 'ambos';
+    const linhas = mostrarSetores ? pivotarItens(itens) : itens.map((t) => ({
+      cod_mp_excel: t.cod_mp_excel,
+      cod_tid: t.cod_tid,
+      materia_prima: t.materia_prima,
+      total_kg: t.total_kg,
+      kg_lab: 0,
+      kg_prod: 0,
+      percentual: t.percentual,
+    } as RelatorioSalvoItemDisplay));
+
     const rows = [
       ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
         ...(mostrarSetores ? ['Kg Laboratório', 'Kg Produção'] : [])],
-      ...itens.map((t) => [
+      ...linhas.map((t) => [
         t.materia_prima,
         t.cod_mp_excel,
         t.cod_tid ?? '',
         t.total_kg.toFixed(3).replace('.', ','),
-        fmtPct(t.pct),
+        fmtPct(t.percentual),
         ...(mostrarSetores ? [
           t.kg_lab.toFixed(3).replace('.', ','),
           t.kg_prod.toFixed(3).replace('.', ','),
@@ -1494,61 +1552,75 @@ export default function ConsumoMP({ perfilNome }: Props) {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background">
-                    <tr className="border-b text-muted-foreground text-xs">
-                      <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
-                      <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
-                      <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
-                      <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
-                      {relatorioAberto?.setor === 'ambos' && <>
-                        <th className="text-right pb-2 pr-3 font-medium text-blue-600 dark:text-blue-400">Lab (kg)</th>
-                        <th className="text-right pb-2 pr-3 font-medium text-orange-600 dark:text-orange-400">Prod (kg)</th>
-                      </>}
-                      <th className="text-right pb-2 font-medium">% do total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itensAbertos.map((t, i) => (
-                      <tr key={t.id} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
-                        <td className="py-2 pr-3">{t.materia_prima}</td>
-                        <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
-                        <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
-                        <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
-                        {relatorioAberto?.setor === 'ambos' && <>
-                          <td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">
-                            {t.kg_lab > 0 ? formatKg(t.kg_lab) : <span className="text-muted-foreground">—</span>}
+            ) : (() => {
+              const isAmbos = relatorioAberto?.setor === 'ambos';
+              const linhasDisplay: RelatorioSalvoItemDisplay[] = isAmbos
+                ? pivotarItens(itensAbertos)
+                : itensAbertos.map((t) => ({
+                    cod_mp_excel: t.cod_mp_excel,
+                    cod_tid: t.cod_tid,
+                    materia_prima: t.materia_prima,
+                    total_kg: t.total_kg,
+                    kg_lab: 0,
+                    kg_prod: 0,
+                    percentual: t.percentual,
+                  }));
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background">
+                      <tr className="border-b text-muted-foreground text-xs">
+                        <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
+                        <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
+                        {isAmbos && <>
+                          <th className="text-right pb-2 pr-3 font-medium text-blue-600 dark:text-blue-400">Lab (kg)</th>
+                          <th className="text-right pb-2 pr-3 font-medium text-orange-600 dark:text-orange-400">Prod (kg)</th>
+                        </>}
+                        <th className="text-right pb-2 font-medium">% do total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linhasDisplay.map((t, i) => (
+                        <tr key={t.cod_mp_excel} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
+                          <td className="py-2 pr-3">{t.materia_prima}</td>
+                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
+                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
+                          <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
+                          {isAmbos && <>
+                            <td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">
+                              {t.kg_lab > 0 ? formatKg(t.kg_lab) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono text-xs text-orange-600 dark:text-orange-400">
+                              {t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          </>}
+                          <td className="py-2 text-right text-muted-foreground text-xs font-mono">{fmtPct(t.percentual)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t font-semibold text-xs">
+                        <td colSpan={3} className="py-2 pr-3 text-muted-foreground">Total</td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatKg(relatorioAberto?.total_kg ?? 0)}
+                        </td>
+                        {isAmbos && <>
+                          <td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">
+                            {formatKg(linhasDisplay.reduce((s, t) => s + t.kg_lab, 0))}
                           </td>
-                          <td className="py-2 pr-3 text-right font-mono text-xs text-orange-600 dark:text-orange-400">
-                            {t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}
+                          <td className="py-2 pr-3 text-right font-mono text-orange-600 dark:text-orange-400">
+                            {formatKg(linhasDisplay.reduce((s, t) => s + t.kg_prod, 0))}
                           </td>
                         </>}
-                        <td className="py-2 text-right text-muted-foreground text-xs font-mono">{fmtPct(t.pct)}</td>
+                        <td className="py-2 text-right text-muted-foreground">100%</td>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t font-semibold text-xs">
-                      <td colSpan={3} className="py-2 pr-3 text-muted-foreground">Total</td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatKg(relatorioAberto?.total_kg ?? 0)}
-                      </td>
-                      {relatorioAberto?.setor === 'ambos' && <>
-                        <td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">
-                          {formatKg(itensAbertos.reduce((s, t) => s + t.kg_lab, 0))}
-                        </td>
-                        <td className="py-2 pr-3 text-right font-mono text-orange-600 dark:text-orange-400">
-                          {formatKg(itensAbertos.reduce((s, t) => s + t.kg_prod, 0))}
-                        </td>
-                      </>}
-                      <td className="py-2 text-right text-muted-foreground">100%</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
 
           <DialogFooter className="gap-2 pt-2 border-t mt-2">
@@ -1570,6 +1642,32 @@ export default function ConsumoMP({ perfilNome }: Props) {
       </Dialog>
     </div>
   );
+}
+
+// ── Pivot: agrupa linhas por MP para exibição quando setor = 'ambos' ──────────
+
+function pivotarItens(itens: RelatorioSalvoItem[]): RelatorioSalvoItemDisplay[] {
+  const map = new Map<string, RelatorioSalvoItemDisplay>();
+  for (const item of itens) {
+    const key = item.cod_mp_excel;
+    if (!map.has(key)) {
+      map.set(key, {
+        cod_mp_excel: item.cod_mp_excel,
+        cod_tid: item.cod_tid,
+        materia_prima: item.materia_prima,
+        total_kg: 0,
+        kg_lab: 0,
+        kg_prod: 0,
+        percentual: 0,
+      });
+    }
+    const entry = map.get(key)!;
+    entry.total_kg += item.total_kg;
+    entry.percentual += item.percentual;
+    if (item.setor === 'laboratorio') entry.kg_lab += item.total_kg;
+    else if (item.setor === 'producao') entry.kg_prod += item.total_kg;
+  }
+  return Array.from(map.values()).sort((a, b) => b.total_kg - a.total_kg);
 }
 
 // ── Utilitário CSV ─────────────────────────────────────────────────────────────

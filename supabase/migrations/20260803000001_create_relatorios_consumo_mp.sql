@@ -11,7 +11,8 @@ create table if not exists relatorios_consumo_mp (
   criado_em   timestamptz not null default now()
 );
 
--- Tabela de itens congelados (uma linha por MP)
+-- Tabela de itens congelados: uma linha por matéria-prima × setor
+-- Quando o relatório usa filtro 'ambos', lab e prod ficam em linhas separadas
 create table if not exists relatorios_consumo_mp_itens (
   id            uuid primary key default gen_random_uuid(),
   relatorio_id  uuid not null references relatorios_consumo_mp(id) on delete cascade,
@@ -19,10 +20,8 @@ create table if not exists relatorios_consumo_mp_itens (
   cod_mp_excel  text not null,
   cod_tid       text,
   total_kg      numeric(14,3) not null,
-  kg_lab        numeric(14,3) not null default 0,
-  kg_prod       numeric(14,3) not null default 0,
-  pct           numeric(10,6) not null,
-  setor         text not null          -- filtro usado no momento do salvamento
+  percentual    numeric(10,6) not null,
+  setor         text not null          -- setor desta linha: 'laboratorio' | 'producao' | 'ambos'
 );
 
 -- RLS: acesso público (mesma política das outras tabelas do projeto)
