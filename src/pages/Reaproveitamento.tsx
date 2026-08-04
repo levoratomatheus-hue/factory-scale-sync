@@ -64,6 +64,8 @@ function inputStyle(D: Palette, extra?: React.CSSProperties): React.CSSPropertie
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type TipoErro = "producao" | "comercial" | null;
+
 type Reaprov = {
   id: string;
   codigo: string;
@@ -75,6 +77,7 @@ type Reaprov = {
   quantidade_utilizada: number | null;
   percentual_reaproveitado: number | null;
   status: "pendente" | "utilizado";
+  tipo_erro: TipoErro;
   observacao: string | null;
   criado_por: string;
   criado_em: string;
@@ -609,6 +612,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   const [lista, setLista] = useState<ReaprovFull[]>([]);
   const [loading, setLoading] = useState(false);
   const [filtro, setFiltro] = useState<"pendentes" | "utilizados" | "todos">("pendentes");
+  const [filtroTipo, setFiltroTipo] = useState<TipoErro | "todos">("todos");
   const [busca, setBusca] = useState("");
   const [detalhe, setDetalhe] = useState<ReaprovFull | null>(null);
   const [saving, setSaving] = useState(false);
@@ -624,6 +628,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   const [fUsoOpcao, setFUsoOpcao] = useState<"tudo" | "parte">("tudo");
   const [fQtdUtilizada, setFQtdUtilizada] = useState("");
   const [fPercReaprov, setFPercReaprov] = useState("");
+  const [fTipoErro, setFTipoErro] = useState<TipoErro>(null);
   const [fObs, setFObs] = useState("");
   const [fItens, setFItens] = useState<ItemForm[]>([newItem()]);
   const [formSaving, setFormSaving] = useState(false);
@@ -649,6 +654,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     let l = lista;
     if (filtro === "pendentes") l = l.filter((r) => r.status === "pendente");
     else if (filtro === "utilizados") l = l.filter((r) => r.status === "utilizado");
+    if (filtroTipo === null) l = l.filter((r) => !r.tipo_erro);
+    else if (filtroTipo !== "todos") l = l.filter((r) => r.tipo_erro === filtroTipo);
     const q = busca.trim().toLowerCase();
     if (q) l = l.filter((r) =>
       r.codigo.toLowerCase().includes(q) ||
@@ -656,7 +663,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       (r.produto_origem ?? "").toLowerCase().includes(q),
     );
     return l;
-  }, [lista, filtro, busca]);
+  }, [lista, filtro, filtroTipo, busca]);
 
   const resumo = useMemo(() => {
     const pendentes = lista.filter((r) => r.status === "pendente");
@@ -709,7 +716,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     setEditando(null);
     setFProdutoOrigem(""); setFFormulaIdOrigem(null);
     setFProdutoDestino(""); setFFormulaIdDestino(null);
-    setFQtdKg(""); setFUsoOpcao("tudo"); setFQtdUtilizada(""); setFPercReaprov(""); setFObs("");
+    setFQtdKg(""); setFUsoOpcao("tudo"); setFQtdUtilizada(""); setFPercReaprov(""); setFTipoErro(null); setFObs("");
     setFItens([newItem()]);
     setView("form");
   }
@@ -726,6 +733,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     setFUsoOpcao(parcial ? "parte" : "tudo");
     setFQtdUtilizada(sdr.quantidade_utilizada !== null ? String(sdr.quantidade_utilizada) : "");
     setFPercReaprov(sdr.percentual_reaproveitado !== null ? String(sdr.percentual_reaproveitado) : "");
+    setFTipoErro(sdr.tipo_erro ?? null);
     setFObs(sdr.observacao ?? "");
     setFItens(
       sdr.itens.sort((a, b) => a.sequencia - b.sequencia).map((i) => ({
@@ -745,6 +753,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     const qtdUtil = fUsoOpcao === "parte" ? parseFloat(fQtdUtilizada) : qtd;
 
     if (!fProdutoDestino.trim()) { toast({ title: "Informe o produto de destino", variant: "destructive" }); return; }
+    if (!fTipoErro) { toast({ title: "Selecione o tipo de erro (Produção ou Comercial)", variant: "destructive" }); return; }
     if (!qtd || qtd <= 0) { toast({ title: "Quantidade de material inválida", variant: "destructive" }); return; }
     if (!percReaprov || percReaprov <= 0 || percReaprov > 100) { toast({ title: "Percentual na fórmula deve ser maior que 0 e até 100", variant: "destructive" }); return; }
     if (fUsoOpcao === "parte") {
@@ -755,12 +764,12 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     const itensComErro = fItens.filter((i) => !i.materia_prima.trim() || !parseFloat(i.percentual) || parseFloat(i.percentual) <= 0);
     if (itensComErro.length > 0) { toast({ title: "Todos os itens precisam de nome e percentual maior que zero", variant: "destructive" }); return; }
 
-    // Utilizado: só salva observação
+    // Utilizado: salva observação e tipo_erro
     if (editando?.status === "utilizado") {
       setFormSaving(true);
       const { error } = await (supabase as any)
         .from("reaproveitamentos")
-        .update({ observacao: fObs.trim() || null })
+        .update({ observacao: fObs.trim() || null, tipo_erro: fTipoErro })
         .eq("id", editando.id);
       setFormSaving(false);
       if (error) { toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" }); return; }
@@ -778,6 +787,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       quantidade_material: qtd,
       quantidade_utilizada: qtdUtil,
       percentual_reaproveitado: percReaprov,
+      tipo_erro: fTipoErro,
       observacao: fObs.trim() || null,
     };
 
@@ -820,12 +830,13 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   // ── CSV export ───────────────────────────────────────────────────────────────
   function exportarCSV() {
     if (listaFiltrada.length === 0) return;
-    const header = "Código;Produto origem;Fórmula origem;Produto destino;Fórmula destino;Material total (kg);Qtd. utilizada (kg);% na fórmula;Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
+    const header = "Código;Tipo de erro;Produto origem;Fórmula origem;Produto destino;Fórmula destino;Material total (kg);Qtd. utilizada (kg);% na fórmula;Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
     const rows = listaFiltrada.map((r) => {
       const prod = calcProducaoPrevista(r);
       const qtdUtil = r.quantidade_utilizada ?? r.quantidade_material;
       return [
         r.codigo,
+        r.tipo_erro === "producao" ? "Produção" : r.tipo_erro === "comercial" ? "Comercial" : "Não classificado",
         `"${(r.produto_origem ?? "").replace(/"/g, '""')}"`,
         r.formula_id_origem ?? "",
         `"${r.produto_destino.replace(/"/g, '""')}"`,
@@ -1086,6 +1097,53 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                 <ResultPanel qtdUtilizada={qtdUtilNum} percReaproveitado={percReaprovNum} itens={fItens} />
               )}
 
+              {/* Tipo de erro */}
+              <div style={makeCard(D)}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.25rem" }}>
+                  Tipo de erro <span style={{ color: D.red, fontSize: 10 }}>*</span>
+                </p>
+                <p style={{ fontSize: 11, color: D.muted, margin: "0 0 0.625rem" }}>Classifique a causa do desvio para análise por área</p>
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                  {([
+                    { value: "producao", label: "Erro de produção", color: "#0891b2", desc: "Problema gerado na fábrica" },
+                    { value: "comercial", label: "Erro comercial", color: "#7c3aed", desc: "Problema gerado no pedido" },
+                  ] as const).map((op) => {
+                    const sel = fTipoErro === op.value;
+                    return (
+                      <label
+                        key={op.value}
+                        style={{
+                          display: "flex", alignItems: "flex-start", gap: "0.5rem",
+                          padding: "0.625rem 0.875rem",
+                          borderRadius: "0.5rem",
+                          border: `2px solid ${sel ? op.color : D.border}`,
+                          background: sel ? `${op.color}18` : D.cardAlt,
+                          cursor: "pointer",
+                          flex: "1 1 180px",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <input
+                          type="radio" name="tipo_erro"
+                          checked={sel}
+                          onChange={() => setFTipoErro(op.value)}
+                          style={{ accentColor: op.color, width: 15, height: 15, marginTop: 2, flexShrink: 0 }}
+                        />
+                        <div>
+                          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: sel ? op.color : D.text }}>{op.label}</p>
+                          <p style={{ margin: "0.1rem 0 0", fontSize: 11, color: D.muted }}>{op.desc}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {!fTipoErro && (
+                  <p style={{ margin: "0.5rem 0 0", fontSize: 11, color: D.amber, display: "flex", alignItems: "center", gap: 4 }}>
+                    <AlertTriangle size={11} /> Campo obrigatório — selecione antes de salvar
+                  </p>
+                )}
+              </div>
+
               {/* Observação */}
               <div style={makeCard(D)}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.5rem" }}>Observação (opcional)</p>
@@ -1176,6 +1234,33 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                 </button>
               ))}
 
+              <span style={{ width: 1, height: 20, background: D.border, margin: "0 0.25rem" }} />
+
+              {([
+                { v: "todos", label: "Todos os tipos" },
+                { v: "producao", label: "Produção" },
+                { v: "comercial", label: "Comercial" },
+                { v: null, label: "Não classificado" },
+              ] as const).map((f) => {
+                const sel = filtroTipo === f.v;
+                const cor = f.v === "producao" ? "#0891b2" : f.v === "comercial" ? "#7c3aed" : f.v === null ? D.muted : D.muted;
+                return (
+                  <button
+                    key={String(f.v)}
+                    onClick={() => setFiltroTipo(f.v)}
+                    style={{
+                      padding: "0.3rem 0.9rem", borderRadius: "9999px", fontSize: 12, fontWeight: 600,
+                      border: `1px solid ${sel ? cor : D.border}`,
+                      background: sel ? `${cor}22` : "transparent",
+                      color: sel ? cor : D.muted,
+                      cursor: "pointer", transition: "all 0.15s",
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+
               {/* Search */}
               <div style={{ position: "relative", marginLeft: "auto" }}>
                 <Search size={13} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: D.muted, pointerEvents: "none" }} />
@@ -1208,8 +1293,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: D.cardAlt }}>
-                        {["Código", "Produto origem", "Produto destino", "Material (kg)", "Produção prevista (kg)", "Status", "Criado em", "Utilizado em", ""].map((h, i) => (
-                          <th key={i} style={{ padding: "0.6rem 1rem", textAlign: i >= 3 && i <= 5 ? "right" : i === 6 || i === 7 ? "center" : "left", fontWeight: 600, color: D.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: `1px solid ${D.border}`, whiteSpace: "nowrap" }}>
+                        {["Código", "Tipo de erro", "Produto origem", "Produto destino", "Material (kg)", "Produção prevista (kg)", "Status", "Criado em", "Utilizado em", ""].map((h, i) => (
+                          <th key={i} style={{ padding: "0.6rem 1rem", textAlign: i >= 4 && i <= 6 ? "right" : i === 7 || i === 8 ? "center" : "left", fontWeight: 600, color: D.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: `1px solid ${D.border}`, whiteSpace: "nowrap" }}>
                             {h}
                           </th>
                         ))}
@@ -1230,6 +1315,21 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                           >
                             <td style={{ padding: "0.55rem 1rem", color: D.cyan, fontWeight: 700, fontFamily: "monospace", whiteSpace: "nowrap" }}>
                               {r.codigo}
+                            </td>
+                            <td style={{ padding: "0.55rem 1rem" }}>
+                              {r.tipo_erro === "producao" ? (
+                                <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 999, fontSize: 10, fontWeight: 700, background: "#0891b218", color: "#0891b2", border: "1px solid #0891b2", whiteSpace: "nowrap" }}>
+                                  Produção
+                                </span>
+                              ) : r.tipo_erro === "comercial" ? (
+                                <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 999, fontSize: 10, fontWeight: 700, background: "#7c3aed18", color: "#7c3aed", border: "1px solid #7c3aed", whiteSpace: "nowrap" }}>
+                                  Comercial
+                                </span>
+                              ) : (
+                                <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 999, fontSize: 10, fontWeight: 600, background: `${D.cardAlt}`, color: D.muted, border: `1px solid ${D.border}`, whiteSpace: "nowrap", fontStyle: "italic" }}>
+                                  Não classificado
+                                </span>
+                              )}
                             </td>
                             <td style={{ padding: "0.55rem 1rem", color: D.muted, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>
                               {r.produto_origem ?? <span style={{ fontStyle: "italic" }}>—</span>}

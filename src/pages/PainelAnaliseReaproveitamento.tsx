@@ -59,6 +59,8 @@ let cardStyle = makeCardStyle(D);
 let tooltipStyle = makeTooltipStyle(D);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+type TipoErro = "producao" | "comercial" | null;
+
 type Reaprov = {
   id: string;
   codigo: string;
@@ -68,6 +70,7 @@ type Reaprov = {
   quantidade_utilizada: number | null;
   percentual_reaproveitado: number | null;
   status: "pendente" | "utilizado";
+  tipo_erro: TipoErro;
   criado_em: string;
 };
 
@@ -195,13 +198,15 @@ export default function PainelAnaliseReaproveitamento() {
   const [dataFim, setDataFim]       = useState(mesAtual.fim);
   const [atalhoAtivo, setAtalhoAtivo] = useState<AtalhoId>("mes");
 
+  const [filtroTipo, setFiltroTipo] = useState<TipoErro | "todos">("todos");
+
   // Modal: histórico de SDRs de uma origem
   const [modalOrigem, setModalOrigem] = useState<string | null>(null);
 
   const fetchLista = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
-      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, criado_em")
+      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em")
       .order("criado_em", { ascending: false });
     if (!error) {
       setLista(data ?? []);
@@ -225,15 +230,17 @@ export default function PainelAnaliseReaproveitamento() {
     setAtalhoAtivo(id);
   }
 
-  // SDRs filtrados por período
+  // SDRs filtrados por período e tipo de erro
   const periodo = useMemo(() => {
     return lista.filter((r) => {
       const dia = r.criado_em.split("T")[0];
       if (dataInicio && dia < dataInicio) return false;
       if (dataFim && dia > dataFim) return false;
+      if (filtroTipo === null && r.tipo_erro !== null) return false;
+      if (filtroTipo !== "todos" && filtroTipo !== null && r.tipo_erro !== filtroTipo) return false;
       return true;
     });
-  }, [lista, dataInicio, dataFim]);
+  }, [lista, dataInicio, dataFim, filtroTipo]);
 
   // ── Cards de resumo ────────────────────────────────────────────────────────
   const cards = useMemo(() => {
@@ -304,6 +311,18 @@ export default function PainelAnaliseReaproveitamento() {
       .sort((a, b) => b.dias - a.dias); // mais antigos primeiro
   }, [lista]);
 
+  // ── Divisão por tipo de erro ──────────────────────────────────────────────
+  const divisaoTipo = useMemo(() => {
+    const producao  = periodo.filter((r) => r.tipo_erro === "producao");
+    const comercial = periodo.filter((r) => r.tipo_erro === "comercial");
+    const semTipo   = periodo.filter((r) => !r.tipo_erro);
+    return {
+      producao:  { qtd: producao.length,  kg: producao.reduce((s, r) => s + r.quantidade_material, 0) },
+      comercial: { qtd: comercial.length, kg: comercial.reduce((s, r) => s + r.quantidade_material, 0) },
+      semTipo:   { qtd: semTipo.length,   kg: semTipo.reduce((s, r) => s + r.quantidade_material, 0) },
+    };
+  }, [periodo]);
+
   // ── Seção 4: Ranking por produto_destino ──────────────────────────────────
   const rankingDestino = useMemo(() => {
     const map = new Map<string, { qtd: number; kgProducao: number }>();
@@ -372,7 +391,7 @@ export default function PainelAnaliseReaproveitamento() {
         </p>
       </div>
 
-      {/* ── Filtro de período ── */}
+      {/* ── Filtro de período e tipo ── */}
       <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
           <CalendarRange style={{ width: 15, height: 15, color: D.muted, flexShrink: 0 }} />
@@ -428,6 +447,35 @@ export default function PainelAnaliseReaproveitamento() {
             />
           </div>
         </div>
+
+        {/* Filtro por tipo de erro */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.625rem", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.72rem", color: D.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Tipo de erro:</span>
+          {([
+            { v: "todos",    label: "Todos" },
+            { v: "producao", label: "Produção",       cor: "#0891b2" },
+            { v: "comercial",label: "Comercial",      cor: "#7c3aed" },
+            { v: null,       label: "Não classificado", cor: D.muted },
+          ] as const).map((f) => {
+            const sel = filtroTipo === f.v;
+            const cor = "cor" in f ? f.cor : D.muted;
+            return (
+              <button
+                key={String(f.v)}
+                onClick={() => setFiltroTipo(f.v)}
+                style={{
+                  padding: "0.2rem 0.625rem", borderRadius: "9999px", fontSize: "0.72rem", fontWeight: 600,
+                  border: `1px solid ${sel ? cor : D.border}`,
+                  background: sel ? `${cor}22` : "transparent",
+                  color: sel ? cor : D.muted,
+                  cursor: "pointer", transition: "all 0.15s",
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Cards de resumo ── */}
@@ -460,6 +508,68 @@ export default function PainelAnaliseReaproveitamento() {
           sub="utilizados / total no período"
           color={cards.taxaUtil >= 70 ? D.emerald : cards.taxaUtil >= 40 ? D.amber : D.red}
         />
+      </div>
+
+      {/* ── Card: Divisão por tipo de erro ── */}
+      <div style={{ ...cardStyle, marginBottom: "1.75rem" }}>
+        <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Divisão por tipo de erro — no período
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem" }}>
+          {/* Produção */}
+          <div style={{ padding: "0.875rem 1rem", borderRadius: "0.5rem", border: "2px solid #0891b2", background: "#0891b218" }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#0891b2", textTransform: "uppercase", letterSpacing: "0.05em" }}>Erro de produção</p>
+            <p style={{ margin: "0.35rem 0 0", fontSize: 22, fontWeight: 700, color: "#0891b2", lineHeight: 1 }}>
+              {divisaoTipo.producao.qtd} <span style={{ fontSize: 13, fontWeight: 500 }}>SDR{divisaoTipo.producao.qtd !== 1 ? "s" : ""}</span>
+            </p>
+            <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>
+              {formatKg(divisaoTipo.producao.kg)}
+            </p>
+            {cards.totalSDRs > 0 && (
+              <div style={{ marginTop: "0.625rem", height: 6, borderRadius: 999, background: D.border, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 999, background: "#0891b2", width: `${Math.round((divisaoTipo.producao.qtd / cards.totalSDRs) * 100)}%`, transition: "width 0.4s" }} />
+              </div>
+            )}
+            <p style={{ margin: "0.25rem 0 0", fontSize: 11, color: D.muted }}>
+              {cards.totalSDRs > 0 ? `${Math.round((divisaoTipo.producao.qtd / cards.totalSDRs) * 100)}% dos SDRs` : "—"}
+            </p>
+          </div>
+
+          {/* Comercial */}
+          <div style={{ padding: "0.875rem 1rem", borderRadius: "0.5rem", border: "2px solid #7c3aed", background: "#7c3aed18" }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.05em" }}>Erro comercial</p>
+            <p style={{ margin: "0.35rem 0 0", fontSize: 22, fontWeight: 700, color: "#7c3aed", lineHeight: 1 }}>
+              {divisaoTipo.comercial.qtd} <span style={{ fontSize: 13, fontWeight: 500 }}>SDR{divisaoTipo.comercial.qtd !== 1 ? "s" : ""}</span>
+            </p>
+            <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>
+              {formatKg(divisaoTipo.comercial.kg)}
+            </p>
+            {cards.totalSDRs > 0 && (
+              <div style={{ marginTop: "0.625rem", height: 6, borderRadius: 999, background: D.border, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 999, background: "#7c3aed", width: `${Math.round((divisaoTipo.comercial.qtd / cards.totalSDRs) * 100)}%`, transition: "width 0.4s" }} />
+              </div>
+            )}
+            <p style={{ margin: "0.25rem 0 0", fontSize: 11, color: D.muted }}>
+              {cards.totalSDRs > 0 ? `${Math.round((divisaoTipo.comercial.qtd / cards.totalSDRs) * 100)}% dos SDRs` : "—"}
+            </p>
+          </div>
+
+          {/* Não classificado */}
+          {divisaoTipo.semTipo.qtd > 0 && (
+            <div style={{ padding: "0.875rem 1rem", borderRadius: "0.5rem", border: `1px solid ${D.border}`, background: D.cardAlt }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Não classificado</p>
+              <p style={{ margin: "0.35rem 0 0", fontSize: 22, fontWeight: 700, color: D.muted, lineHeight: 1 }}>
+                {divisaoTipo.semTipo.qtd} <span style={{ fontSize: 13, fontWeight: 500 }}>SDR{divisaoTipo.semTipo.qtd !== 1 ? "s" : ""}</span>
+              </p>
+              <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>
+                {formatKg(divisaoTipo.semTipo.kg)}
+              </p>
+              <p style={{ margin: "0.5rem 0 0", fontSize: 11, color: D.amber, fontStyle: "italic" }}>
+                Registros antigos — classifique editando cada SDR
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Seção 1: Origem do retrabalho ── */}
