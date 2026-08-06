@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp, Recycle } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp, Recycle, Palette } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -31,6 +31,7 @@ const ComprasMediaMensal        = lazy(() => import('./ComprasMediaMensal'));
 const Reaproveitamento              = lazy(() => import('./Reaproveitamento'));
 const PainelAnaliseReaproveitamento = lazy(() => import('./PainelAnaliseReaproveitamento'));
 const ControleMPTestada             = lazy(() => import('./ControleMPTestada'));
+const ControleCor                   = lazy(() => import('./ControleCor'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -66,7 +67,8 @@ type TabGestorId =
   | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal'
   | 'reaproveitamento'
   | 'analise_reaproveitamento'
-  | 'mp_testadas';
+  | 'mp_testadas'
+  | 'controle_cor';
 
 const gruposGestor = [
   {
@@ -153,6 +155,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
   ['mp_testadas' as TabGestorId, 'Controle de MP Testada'],
+  ['controle_cor' as TabGestorId, 'Controle de Cor (CIELAB)'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -193,6 +196,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'reaproveitamento',
   'analise_reaproveitamento',
   'mp_testadas',
+  'controle_cor',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -760,6 +764,17 @@ export default function Index() {
                         <span>MP Testada</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'controle_cor'}
+                        tooltip="Controle de Cor (CIELAB)"
+                        onClick={() => goToTab('controle_cor')}
+                        size="sm"
+                      >
+                        <Palette className="h-3.5 w-3.5 shrink-0" />
+                        <span>Controle de Cor</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -792,6 +807,7 @@ export default function Index() {
             {activeTab === 'reaproveitamento' && <span className="font-semibold text-sm">Reaproveitamento</span>}
             {activeTab === 'analise_reaproveitamento' && <span className="font-semibold text-sm">Análise de Reaproveitamento</span>}
             {activeTab === 'mp_testadas' && <span className="font-semibold text-sm">Controle de MP Testada</span>}
+            {activeTab === 'controle_cor' && <span className="font-semibold text-sm">Controle de Cor (CIELAB)</span>}
           </header>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
@@ -805,6 +821,7 @@ export default function Index() {
                   {activeTab === 'reaproveitamento' && <Reaproveitamento perfilNome={perfil.nome} />}
                   {activeTab === 'analise_reaproveitamento' && <PainelAnaliseReaproveitamento />}
                   {activeTab === 'mp_testadas' && <ControleMPTestada perfilNome={perfil.nome} />}
+                  {activeTab === 'controle_cor' && <ControleCor perfilNome={perfil.nome} />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -1009,6 +1026,17 @@ export default function Index() {
                   >
                     <FlaskConical className="h-3.5 w-3.5 shrink-0" />
                     <span>MP Testada</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'controle_cor'}
+                    tooltip="Controle de Cor (CIELAB)"
+                    onClick={() => goToTab('controle_cor')}
+                    size="sm"
+                  >
+                    <Palette className="h-3.5 w-3.5 shrink-0" />
+                    <span>Controle de Cor</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -1275,6 +1303,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'mp_testadas'}>
                   <Suspense fallback={TAB_LOADING}>
                     <ControleMPTestada perfilNome={perfil.nome} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('controle_cor') && (
+                <KeepAlive active={activeTab === 'controle_cor'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <ControleCor perfilNome={perfil.nome} />
                   </Suspense>
                 </KeepAlive>
               )}
