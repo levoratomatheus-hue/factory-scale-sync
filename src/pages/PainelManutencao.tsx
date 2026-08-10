@@ -147,6 +147,22 @@ function spLocalToISO(datetimeLocal: string): string {
   return new Date(asUTC.getTime() + 3 * 60 * 60 * 1000).toISOString();
 }
 
+// Converte "YYYY-MM-DD" (data local de SP) para ISO UTC, usando meio-dia SP como horário
+function spDateToISO(dateStr: string): string {
+  return new Date(`${dateStr}T12:00:00-03:00`).toISOString();
+}
+
+// Retorna a data atual no fuso SP como "YYYY-MM-DD"
+function hojeEmSP(): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+}
+
+// Converte ISO para "YYYY-MM-DD" no fuso SP
+function isoToDateSP(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+}
+
 export default function PainelManutencao({ papel, perfilId, perfilNome }: PainelManutencaoProps) {
   const [oss, setOss] = useState<OS[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,6 +178,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   const [confirmarConclusaoOS, setConfirmarConclusaoOS] = useState<OS | null>(null);
   const [savingConclusao, setSavingConclusao] = useState(false);
+  const [dataConclusao, setDataConclusao] = useState("");
+  const [erroConclusao, setErroConclusao] = useState("");
 
   const [reprovarDialogOS, setReprovarDialogOS] = useState<OS | null>(null);
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
@@ -175,7 +193,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [savingPeca, setSavingPeca] = useState(false);
 
   const [editOS, setEditOS] = useState<OS | null>(null);
-  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "", aberta_em: "", externa: false, empresa_externa: "", contato_externo: "", prazo_retorno: "" });
+  const [editForm, setEditForm] = useState({ equipamento_id: "", descricao_problema: "", prioridade: "media", tecnico_nome: "", aberta_em: "", concluido_em: "", externa: false, empresa_externa: "", contato_externo: "", prazo_retorno: "" });
   const [editEquipamentos, setEditEquipamentos] = useState<{ id: string; nome: string; tag: string | null; linha: number | null }[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -490,6 +508,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       prioridade: os.prioridade,
       tecnico_nome: os.tecnico_nome ?? "",
       aberta_em: toDatetimeLocal(os.aberta_em),
+      concluido_em: isoToDateSP(os.concluido_em),
       externa: os.externa ?? false,
       empresa_externa: os.empresa_externa ?? "",
       contato_externo: os.contato_externo ?? "",
@@ -522,6 +541,21 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     };
     if (papel === "gestor" && editForm.aberta_em) {
       updatePayload.aberta_em = spLocalToISO(editForm.aberta_em);
+    }
+    if (papel === "gestor" && editOS.status === "concluida" && editForm.concluido_em) {
+      const hoje = hojeEmSP();
+      const aberturaSP = isoToDateSP(editOS.aberta_em);
+      if (editForm.concluido_em > hoje) {
+        toast({ title: "Data de conclusão não pode ser futura", variant: "destructive" });
+        setSavingEdit(false);
+        return;
+      }
+      if (aberturaSP && editForm.concluido_em < aberturaSP) {
+        toast({ title: "Data de conclusão não pode ser anterior à abertura da OS", variant: "destructive" });
+        setSavingEdit(false);
+        return;
+      }
+      updatePayload.concluido_em = spDateToISO(editForm.concluido_em);
     }
     const { error } = await (supabase as any).from("ordens_servico").update(updatePayload).eq("id", editOS.id);
     setSavingEdit(false);
@@ -678,14 +712,29 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }
 
   async function concluirOS(os: OS) {
+    const hoje = hojeEmSP();
+    if (!dataConclusao) {
+      setErroConclusao("Informe a data de conclusão.");
+      return;
+    }
+    if (dataConclusao > hoje) {
+      setErroConclusao("A data de conclusão não pode ser futura.");
+      return;
+    }
+    const aberturaSP = isoToDateSP(os.aberta_em);
+    if (aberturaSP && dataConclusao < aberturaSP) {
+      setErroConclusao(`A data de conclusão não pode ser anterior à abertura da OS (${aberturaSP}).`);
+      return;
+    }
+    setErroConclusao("");
     setSavingConclusao(true);
     const { error } = await (supabase as any).from("ordens_servico").update({
       status: "concluida",
-      concluido_em: new Date().toISOString(),
+      concluido_em: spDateToISO(dataConclusao),
     }).eq("id", os.id);
     setSavingConclusao(false);
     if (error) toast({ title: "Erro ao concluir OS", description: error.message, variant: "destructive" });
-    else { toast({ title: "OS concluída!" }); setConfirmarConclusaoOS(null); }
+    else { toast({ title: "OS concluída!" }); setConfirmarConclusaoOS(null); setDataConclusao(""); setErroConclusao(""); }
   }
 
   async function reprovarOS() {
@@ -1308,7 +1357,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       <Button
                         size="sm"
                         className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => setConfirmarConclusaoOS(os)}
+                        onClick={() => { setConfirmarConclusaoOS(os); setDataConclusao(hojeEmSP()); setErroConclusao(""); }}
                       >
                         <CheckCircle2 className="h-3 w-3" />
                         Aprovar e Concluir
@@ -1722,6 +1771,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 <p className="text-xs text-muted-foreground">Horário de Brasília (UTC-3)</p>
               </div>
             )}
+            {papel === "gestor" && editOS?.status === "concluida" && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Data de conclusão</label>
+                <input
+                  type="date"
+                  value={editForm.concluido_em}
+                  max={hojeEmSP()}
+                  onChange={(e) => setEditForm(f => ({ ...f, concluido_em: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">Data real de conclusão da manutenção.</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOS(null)}>Cancelar</Button>
@@ -1773,27 +1835,50 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
         </DialogContent>
       </Dialog>
 
-      {/* AlertDialog: Concluir OS */}
-      <AlertDialog open={!!confirmarConclusaoOS} onOpenChange={(o) => { if (!o) setConfirmarConclusaoOS(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Aprovar e concluir OS</AlertDialogTitle>
-            <AlertDialogDescription>
+      {/* Dialog: Concluir OS */}
+      <Dialog open={!!confirmarConclusaoOS} onOpenChange={(o) => { if (!o) { setConfirmarConclusaoOS(null); setDataConclusao(""); setErroConclusao(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Aprovar e concluir OS</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
               Confirma que a solução foi verificada e a OS pode ser marcada como concluída?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data de conclusão</label>
+              <input
+                type="date"
+                value={dataConclusao}
+                max={hojeEmSP()}
+                onChange={(e) => { setDataConclusao(e.target.value); setErroConclusao(""); }}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground">
+                Informe a data real de conclusão da manutenção (padrão: hoje).
+              </p>
+              {erroConclusao && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  {erroConclusao}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setConfirmarConclusaoOS(null); setDataConclusao(""); setErroConclusao(""); }}>
+              Cancelar
+            </Button>
+            <Button
               disabled={savingConclusao}
               onClick={() => confirmarConclusaoOS && concluirOS(confirmarConclusaoOS)}
             >
               {savingConclusao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar Conclusão
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
