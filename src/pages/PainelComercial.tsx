@@ -115,10 +115,12 @@ function CardBusca({ op, isOpen, onToggle, hj }: {
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left"
         aria-expanded={isOpen}
       >
-        <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotClass}`} />
-        <span className="flex-1 min-w-0 font-semibold text-sm leading-tight truncate">{op.produto}</span>
-        <span className="text-sm font-medium shrink-0 tabular-nums">{formatKg(op.quantidade)} kg</span>
-        <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200', isOpen && 'rotate-180')} />
+        <span className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 self-start ${dotClass}`} />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm leading-snug break-words">{op.produto}</p>
+          <p className="text-sm font-bold tabular-nums mt-0.5">{formatKg(op.quantidade)} kg</p>
+        </div>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 self-center', isOpen && 'rotate-180')} />
       </button>
 
       <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
@@ -213,12 +215,12 @@ function CardSemana({ op, isOpen, onToggle, hj }: {
         className="w-full flex items-center gap-1.5 px-2 py-2 text-left"
         aria-expanded={isOpen}
       >
-        <span className={`mt-px h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
-        <span className="flex-1 min-w-0 text-xs font-medium leading-snug break-words">{op.produto}</span>
-        <span className="text-xs font-semibold shrink-0 tabular-nums text-muted-foreground ml-1">
-          {formatKg(op.quantidade)} kg
-        </span>
-        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200', isOpen && 'rotate-180')} />
+        <span className={`mt-0.5 h-2 w-2 rounded-full shrink-0 self-start ${dotClass}`} />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium leading-snug break-words">{op.produto}</p>
+          <p className="text-xs font-bold tabular-nums mt-0.5">{formatKg(op.quantidade)} kg</p>
+        </div>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 self-center ml-1', isOpen && 'rotate-180')} />
       </button>
 
       <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
