@@ -391,7 +391,7 @@ export default function PainelComercial() {
     /* Ocupa a altura disponível entre o header do app e o fim da viewport */
     <div className="flex flex-col h-[calc(100dvh-3.75rem)] sm:h-[calc(100dvh-4.5rem)] max-w-5xl mx-auto">
 
-      {/* ── Cabeçalho fixo ───────────────────────────────────────────────── */}
+      {/* ── Cabeçalho fixo: título, busca, legenda ───────────────────────── */}
       <div className="shrink-0 pb-3 space-y-3 bg-background z-20">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Consulta de Produtos</h1>
@@ -437,12 +437,12 @@ export default function PainelComercial() {
         </div>
       </div>
 
-      {/* ── Área rolável ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
+      {/* ── Área de conteúdo ─────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 flex flex-col">
 
         {/* Erro */}
         {erro && (
-          <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive mb-3">
+          <div className="shrink-0 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive mb-3">
             <AlertCircle className="h-4 w-4 shrink-0" />
             {erro}
           </div>
@@ -450,61 +450,64 @@ export default function PainelComercial() {
 
         {/* Carregando */}
         {loading && (
-          <div className="flex justify-center py-16">
+          <div className="flex-1 flex justify-center items-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         )}
 
+        {/* ── Modo busca: lista vertical ── */}
         {!loading && modoTexto && (
-          /* ── Modo busca: lista vertical de cards colapsáveis ── */
-          resultadosBusca.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-              <PackageSearch className="h-10 w-10" />
-              <p className="text-sm">Nenhum produto encontrado</p>
-            </div>
-          ) : (
-            <div className="space-y-1.5 pb-4">
-              {resultadosBusca.map((op) => (
-                <CardBusca
-                  key={op.id}
-                  op={op}
-                  isOpen={openIds.has(op.id)}
-                  onToggle={() => toggleCard(op.id)}
-                  hj={hj}
-                />
-              ))}
-              <p className="text-xs text-muted-foreground text-right pt-1">
-                {resultadosBusca.length} produto{resultadosBusca.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          )
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {resultadosBusca.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <PackageSearch className="h-10 w-10" />
+                <p className="text-sm">Nenhum produto encontrado</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 pb-4">
+                {resultadosBusca.map((op) => (
+                  <CardBusca
+                    key={op.id}
+                    op={op}
+                    isOpen={openIds.has(op.id)}
+                    onToggle={() => toggleCard(op.id)}
+                    hj={hj}
+                  />
+                ))}
+                <p className="text-xs text-muted-foreground text-right pt-1">
+                  {resultadosBusca.length} produto{resultadosBusca.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
+        {/* ── Modo semanal ── */}
         {!loading && !modoTexto && (
-          /* ── Modo semanal: colunas por dia com header sticky ── */
-          <div className="flex gap-4 pb-4 min-w-max">
-            {diasSemana.map((dia) => {
-              const ops = ordPorDia.get(dia) ?? [];
-              const isHoje = dia === hj;
-              const nomeDia = capitalize(
-                format(new Date(dia + 'T12:00:00'), 'EEEE', { locale: ptBR })
-              );
-              const dataDia = format(new Date(dia + 'T12:00:00'), 'dd/MM');
+          /*
+           * overflow-x-auto envolve TANTO os cabeçalhos quanto os cards,
+           * garantindo que o scroll horizontal mova ambos juntos.
+           * Os cabeçalhos ficam FORA do overflow-y-auto, então nunca sobem
+           * atrás deles — sem depender de position:sticky que quebra quando
+           * overflow-x e overflow-y estão no mesmo elemento.
+           */
+          <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
 
-              return (
-                <div
-                  key={dia}
-                  className={cn(
-                    'w-[220px] shrink-0 rounded-xl border shadow-sm flex flex-col',
-                    isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
-                  )}
-                >
-                  {/* Cabeçalho da coluna — sticky dentro da área rolável */}
+            {/* Cabeçalhos dos dias — fixos (fora do scroll vertical) */}
+            <div className="shrink-0 flex gap-4 min-w-max pb-0.5">
+              {diasSemana.map((dia) => {
+                const isHoje = dia === hj;
+                const nomeDia = capitalize(
+                  format(new Date(dia + 'T12:00:00'), 'EEEE', { locale: ptBR })
+                );
+                const dataDia = format(new Date(dia + 'T12:00:00'), 'dd/MM');
+                return (
                   <div
+                    key={dia}
                     className={cn(
-                      'sticky top-0 z-10 px-3 py-2.5 border-b flex items-center justify-between gap-2 rounded-t-xl',
+                      'w-[220px] shrink-0 px-3 py-2.5 rounded-t-xl border-t border-l border-r border-b flex items-center justify-between gap-2',
                       isHoje
-                        ? 'border-primary/30 bg-primary/5'
+                        ? 'border-primary/60 bg-primary/5 border-b-primary/30'
                         : 'border-border bg-card'
                     )}
                   >
@@ -513,28 +516,46 @@ export default function PainelComercial() {
                     </span>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">{dataDia}</span>
                   </div>
+                );
+              })}
+            </div>
 
-                  {/* Lista de cards colapsáveis */}
-                  <div className="px-2 py-2 space-y-1.5 flex-1">
-                    {ops.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic px-1 py-1">
-                        Nenhum produto previsto
-                      </p>
-                    ) : (
-                      ops.map((op) => (
-                        <CardSemana
-                          key={op.id}
-                          op={op}
-                          isOpen={openIds.has(op.id)}
-                          onToggle={() => toggleCard(op.id)}
-                          hj={hj}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {/* Cards — apenas scroll vertical, sem overlap com os cabeçalhos */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="flex gap-4 pb-4 min-w-max">
+                {diasSemana.map((dia) => {
+                  const ops = ordPorDia.get(dia) ?? [];
+                  const isHoje = dia === hj;
+                  return (
+                    <div
+                      key={dia}
+                      className={cn(
+                        'w-[220px] shrink-0 rounded-b-xl border-b border-l border-r',
+                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                      )}
+                    >
+                      <div className="px-2 py-2 space-y-1.5">
+                        {ops.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic px-1 py-1">
+                            Nenhum produto previsto
+                          </p>
+                        ) : (
+                          ops.map((op) => (
+                            <CardSemana
+                              key={op.id}
+                              op={op}
+                              isOpen={openIds.has(op.id)}
+                              onToggle={() => toggleCard(op.id)}
+                              hj={hj}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>
