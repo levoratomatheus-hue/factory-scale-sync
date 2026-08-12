@@ -35,7 +35,6 @@ const ControleCor                   = lazy(() => import('./ControleCor'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
-import PaginaInicial from './PaginaInicial';
 import {
   Sidebar,
   SidebarContent,
@@ -1122,7 +1121,9 @@ export default function Index() {
           {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
         </header>
         {activeTab === null ? (
-          <PaginaInicial embedded />
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+            Selecione uma opção no menu
+          </div>
         ) : (
           <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
