@@ -669,7 +669,7 @@ const LinhaColumn = memo(function LinhaColumn({
   );
 
   return (
-    <div className={`flex flex-col ${isMobile ? "w-full h-full" : "h-full min-w-[260px] w-[260px]"}`}>
+    <div className={`flex flex-col ${isMobile ? "w-full h-full" : "h-full min-w-[200px] w-[200px]"}`}>
       {/* Cabeçalho da coluna — fica parado enquanto os cards rolam */}
       <div className="shrink-0 mb-2">
         <div className="bg-muted rounded-md py-1.5 px-2 flex items-center justify-between">
@@ -1715,7 +1715,7 @@ export default function PainelProgramacao() {
             </div>
           )}
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-            <div className={isMobile ? "flex-1 min-h-0" : "flex-1 min-h-0 flex gap-3 overflow-x-auto pb-2"}>
+            <div className={isMobile ? "flex-1 min-h-0" : "flex-1 min-h-0 flex gap-2 overflow-x-auto pb-2"}>
               {[1, 2, 3, 4, 5].map((l) => {
                 if (isMobile && l !== linhaAtivaMobile) return null;
                 return (
