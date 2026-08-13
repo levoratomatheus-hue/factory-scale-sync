@@ -197,7 +197,7 @@ function SortableCard({
         </button>
 
         {/* Indicador de status */}
-        <span className={cn('h-2 w-2 rounded-full shrink-0', dotClass)} />
+        <span className={cn('mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 self-start', dotClass)} />
 
         {/* Código/nome e quantidade */}
         <div className="flex-1 min-w-0 overflow-hidden">
