@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowRightLeft, Undo2 } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowRightLeft, Undo2, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useFormula } from "@/hooks/useFormula";
-import { formatKg, sortOrdens } from "@/lib/utils";
+import { formatKg, sortOrdens, cn } from "@/lib/utils";
 import { diasUteis } from "@/lib/diasUteis";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { EditarOrdemDialog } from "@/components/EditarOrdemDialog";
@@ -162,11 +162,17 @@ function SortableCard({
   onMoverParaBalanca: (ordem: Ordem, novaBalanca: number) => void;
   onDevolverParaFila: (ordem: Ordem) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: ordem.id });
 
   const du = ordem.data_emissao ? diasUteis(ordem.data_emissao, ordem.data_programacao) : 0;
   const atrasado = du > 7;
+
+  const dotClass =
+    atrasado ? 'bg-red-400' :
+    ordem.status === 'em_pesagem' ? 'bg-blue-500' :
+    'bg-gray-400';
 
   return (
     <div
@@ -176,78 +182,112 @@ function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={`bg-card border rounded-lg p-2.5 flex items-start gap-1.5 select-none ${atrasado ? "border-red-500" : ""}`}
-      onDoubleClick={() => onDblClick(ordem)}
+      className={cn('bg-card border rounded-lg select-none', atrasado ? 'border-red-500' : '')}
     >
-      <button
-        {...attributes}
-        {...listeners}
-        className="mt-0.5 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
+      {/* Cabeçalho colapsável — sempre visível */}
+      <div className="flex items-center gap-2 px-2.5 py-2">
+        {/* Grip de arrastar */}
+        <button
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+          className="text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
 
-      <div className="flex-1 space-y-1 overflow-hidden">
-        <p className="text-xs font-semibold leading-tight break-words">{ordem.produto}</p>
-        <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-          Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
-          <MarcaBadge marca={ordem.marca} size="sm" />
-        </p>
-        <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
-        {atrasado && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
-            <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-            {du - 7} {du - 7 === 1 ? "dia" : "dias"} em atraso
-          </span>
-        )}
+        {/* Indicador de status */}
+        <span className={cn('h-2 w-2 rounded-full shrink-0', dotClass)} />
+
+        {/* Código/nome e quantidade */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <p className="text-xs font-semibold leading-tight truncate">{ordem.produto}</p>
+          <p className="text-xs font-bold tabular-nums text-gray-700 dark:text-gray-200 mt-0.5">{formatKg(ordem.quantidade)} kg</p>
+        </div>
+
+        {/* Chevron toggle */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsOpen((v) => !v); }}
+          className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
+          aria-expanded={isOpen}
+          title={isOpen ? 'Recolher' : 'Expandir'}
+        >
+          <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')} />
+        </button>
       </div>
 
-      <button
-        onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
-        title="Editar"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-destructive shrink-0"
-        title="Excluir"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-primary shrink-0"
-        title="Reprogramar"
-      >
-        <CalendarDays className="h-3.5 w-3.5" />
-      </button>
-      {ordem.status === 'em_pesagem' && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDevolverParaFila(ordem); }}
-          className="mt-0.5 text-muted-foreground/50 hover:text-orange-500 shrink-0"
-          title="Devolver para fila"
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {ordem.balanca !== null && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onMoverParaBalanca(ordem, ordem.balanca === 1 ? 2 : 1); }}
-          className="mt-0.5 text-muted-foreground/50 hover:text-blue-600 shrink-0"
-          title={`Mover para Balança ${ordem.balanca === 1 ? 2 : 1}`}
-        >
-          <ArrowRightLeft className="h-3.5 w-3.5" />
-        </button>
-      )}
-      <button
-        onClick={(e) => { e.stopPropagation(); onAvancar(ordem); }}
-        className="mt-0.5 text-muted-foreground/50 hover:text-green-600 shrink-0"
-        title="Forçar Avanço"
-      >
-        <CheckCircle2 className="h-3.5 w-3.5" />
-      </button>
+      {/* Conteúdo expansível */}
+      <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+        <div className="overflow-hidden">
+          <div className="border-t border-black/5 dark:border-white/10 px-2.5 pb-2.5 pt-2">
+            <div className="flex items-start gap-1.5">
+              <div className="flex-1 space-y-1 overflow-hidden">
+                <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                  Lote {ordem.lote}
+                  <MarcaBadge marca={ordem.marca} size="sm" />
+                </p>
+                <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
+                {atrasado && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
+                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                    {du - 7} {du - 7 === 1 ? "dia" : "dias"} em atraso
+                  </span>
+                )}
+              </div>
+
+              {/* Ações */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
+                  className="text-muted-foreground/50 hover:text-primary"
+                  title="Editar"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
+                  className="text-muted-foreground/50 hover:text-destructive"
+                  title="Excluir"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
+                  className="text-muted-foreground/50 hover:text-primary"
+                  title="Reprogramar"
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                </button>
+                {ordem.status === 'em_pesagem' && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDevolverParaFila(ordem); }}
+                    className="text-muted-foreground/50 hover:text-orange-500"
+                    title="Devolver para fila"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {ordem.balanca !== null && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMoverParaBalanca(ordem, ordem.balanca === 1 ? 2 : 1); }}
+                    className="text-muted-foreground/50 hover:text-blue-600"
+                    title={`Mover para Balança ${ordem.balanca === 1 ? 2 : 1}`}
+                  >
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAvancar(ordem); }}
+                  className="text-muted-foreground/50 hover:text-green-600"
+                  title="Forçar Avanço"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
