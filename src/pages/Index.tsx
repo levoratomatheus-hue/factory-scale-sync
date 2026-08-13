@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp, Recycle, Palette } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp, Recycle, Palette, Inbox } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -32,6 +32,7 @@ const Reaproveitamento              = lazy(() => import('./Reaproveitamento'));
 const PainelAnaliseReaproveitamento = lazy(() => import('./PainelAnaliseReaproveitamento'));
 const ControleMPTestada             = lazy(() => import('./ControleMPTestada'));
 const ControleCor                   = lazy(() => import('./ControleCor'));
+const PreProgramacao                = lazy(() => import('./PreProgramacao'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -52,7 +53,7 @@ import {
 } from '@/components/ui/sidebar';
 
 type TabGestorId =
-  | 'gestor' | 'programacao' | 'programacao_balanca' | 'criar' | 'historico' | 'importar' | 'importar_excel'
+  | 'gestor' | 'programacao' | 'programacao_balanca' | 'pre_programacao' | 'criar' | 'historico' | 'importar' | 'importar_excel'
   | 'balanca1' | 'balanca2'
   | 'mistura'
   | 'linha1' | 'linha2' | 'linha3' | 'linha4' | 'linha5'
@@ -122,6 +123,7 @@ const gruposGestor = [
     icon: LayoutDashboard,
     items: [
       { id: 'gestor'      as TabGestorId, label: 'Painel do Gestor', icon: LayoutDashboard },
+      { id: 'pre_programacao'     as TabGestorId, label: 'Pré-Programação',       icon: Inbox },
       { id: 'programacao'         as TabGestorId, label: 'Programação',           icon: CalendarDays },
       { id: 'programacao_balanca' as TabGestorId, label: 'Programação Balanças',  icon: CalendarDays },
       { id: 'criar'               as TabGestorId, label: 'Nova Ordem',            icon: PlusCircle },
@@ -183,7 +185,7 @@ const papelLabel: Record<string, string> = {
 // Abas que ficam no DOM após a primeira visita (keep-alive).
 // Formulários/one-shot ficam de fora e sempre remontam.
 const KEEP_ALIVE_TABS = new Set<TabGestorId>([
-  'gestor', 'programacao', 'programacao_balanca', 'historico', 'liberacao',
+  'gestor', 'programacao', 'programacao_balanca', 'pre_programacao', 'historico', 'liberacao',
   'analises', 'consulta_formula', 'comercial',
   'balanca1', 'balanca2', 'mistura',
   'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
@@ -1159,6 +1161,11 @@ export default function Index() {
               {mountedTabs.has('programacao_balanca') && (
                 <KeepAlive active={activeTab === 'programacao_balanca'}>
                   <Suspense fallback={TAB_LOADING}><PainelProgramacaoBalanca /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('pre_programacao') && (
+                <KeepAlive active={activeTab === 'pre_programacao'}>
+                  <Suspense fallback={TAB_LOADING}><PreProgramacao /></Suspense>
                 </KeepAlive>
               )}
               {mountedTabs.has('balanca1') && (

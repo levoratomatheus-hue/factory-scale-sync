@@ -52,6 +52,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       .from("ordens")
       .select("id, produto, lote, quantidade, status, posicao, linha, balanca, marca, data_programacao, data_emissao")
       .neq("status", "concluido")
+      .neq("status", "pre_programacao")
       .limit(500)
       .order("data_programacao", { ascending: true })
       .order("posicao", { ascending: true, nullsFirst: false });

@@ -8,11 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, Search, AlertTriangle, PackageSearch, Copy } from 'lucide-react';
-import { format } from 'date-fns';
+import { Save, Loader2, Search, AlertTriangle, PackageSearch, Copy, Info } from 'lucide-react';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
-import { getNextPosicao } from '@/lib/recalcularPosicoes';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 
@@ -49,8 +47,6 @@ const ordemSchema = z.object({
   lote: z.string().trim().min(1, 'Lote é obrigatório').max(50),
   produto: z.string().trim().min(1, 'Produto é obrigatório').max(200),
   quantidade: z.coerce.number().positive('Quantidade deve ser positiva').max(999999),
-  linha: z.string().min(1, 'Selecione a linha'),
-  balanca: z.string().min(1, 'Selecione a balança'),
   marca: z.string().min(1, 'Selecione a marca'),
 });
 
@@ -81,7 +77,6 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [requerMistura, setRequerMistura] = useState(true);
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [dataProgramacao, setDataProgramacao] = useState<string>(new Date().toISOString().split("T")[0]);
   const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(false);
   const [buscaLote, setBuscaLote] = useState('');
@@ -95,7 +90,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
-    defaultValues: { lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' },
+    defaultValues: { lote: '', produto: '', quantidade: 0, marca: '' },
   });
 
   const fetchLotesDisponiveis = useCallback(async () => {
@@ -269,20 +264,13 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
 
-    const linhaNum = parseInt(values.linha);
-    const posicao = await getNextPosicao(linhaNum);
-
     const { data: novaOrdem, error } = await supabase
       .from('ordens')
       .insert({
         lote: values.lote,
         produto: values.produto,
         quantidade: values.quantidade,
-        linha: linhaNum,
-        balanca: parseInt(values.balanca),
-        status: 'pendente',
-        posicao,
-        data_programacao: dataProgramacao || format(new Date(), 'yyyy-MM-dd'),
+        status: 'pre_programacao',
         formula_id: formulaId,
         tamanho_batelada: tamanhoBatelada,
         marca: values.marca || null,
@@ -337,9 +325,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
 
     setSaving(false);
-    toast({ title: 'Ordem criada com sucesso!' });
+    toast({ title: 'Ordem criada com sucesso! Acesse Pré-Programação para datá-la.' });
     fetchLotesDisponiveis();
-    form.reset({ lote: '', produto: '', quantidade: 0, linha: '', balanca: '', marca: '' });
+    form.reset({ lote: '', produto: '', quantidade: 0, marca: '' });
     setLoteEncontrado(null);
     setFormulaId(null);
     setComparator(null);
@@ -363,6 +351,10 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   return (
     <div className="max-w-full space-y-6">
       <h1 className="text-2xl font-bold">Criar Nova Ordem</h1>
+      <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2.5 text-xs text-blue-800 dark:text-blue-300">
+        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+        <span>A OP criada vai para <strong>Pré-Programação</strong>. Data e linha são definidas lá, antes de entrar no kanban.</span>
+      </div>
 
       <div className="flex gap-4 items-start">
         {/* ── Coluna esquerda: formulário ── */}
@@ -411,7 +403,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
               </div>
             )}
 
-            {/* Quantidade + Batelada + Datas */}
+            {/* Quantidade + Batelada + Dt. Emissão */}
             <div className="grid grid-cols-4 gap-2">
               <FormField control={form.control} name="quantidade" render={({ field }) => (
                 <FormItem>
@@ -432,39 +424,10 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 <label className="text-xs font-medium">Dt. Emissão</label>
                 <Input className="h-8 text-sm mt-1" type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} />
               </div>
-              <div>
-                <label className="text-xs font-medium">Dt. Programação</label>
-                <Input className="h-8 text-sm mt-1" type="date" value={dataProgramacao} onChange={(e) => setDataProgramacao(e.target.value)} />
-              </div>
             </div>
 
-            {/* Linha + Balança + Marca + Requer Mistura */}
-            <div className="grid grid-cols-4 gap-2 items-end">
-              <FormField control={form.control} name="linha" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Linha</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>Linha {n}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="balanca" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Balança</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="1">Balança 1</SelectItem>
-                      <SelectItem value="2">Balança 2</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+            {/* Marca + Requer Mistura */}
+            <div className="grid grid-cols-2 gap-2 items-end">
               <FormField control={form.control} name="marca" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs">Marca</FormLabel>

@@ -15,6 +15,7 @@ import { formatKg, parseHoras } from "@/lib/utils";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 
 const STATUS_LABEL: Record<string, string> = {
+  pre_programacao: "Pré-Programação",
   pendente: "Pendente",
   em_pesagem: "Em Pesagem",
   aguardando_mistura: "Aguardando Mistura",

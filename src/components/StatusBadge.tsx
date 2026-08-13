@@ -7,6 +7,7 @@ interface StatusBadgeProps {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  pre_programacao:     { label: 'Pré-Programação',  className: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
   pendente:            { label: 'Pendente',         className: 'bg-status-open-bg text-status-open' },
   em_pesagem:          { label: 'Em Pesagem',        className: 'bg-status-weighing-bg text-status-weighing' },
   aguardando_mistura:  { label: 'Aguard. Mistura',   className: 'bg-status-mixing-bg text-status-mixing' },
