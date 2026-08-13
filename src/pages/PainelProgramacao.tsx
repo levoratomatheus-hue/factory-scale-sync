@@ -372,51 +372,50 @@ const SortableCard = memo(function SortableCard({
   );
   const atrasado = du > 7;
 
+  // Borda colorida por status — igual ao padrão do Comercial
+  const cardBorderClass =
+    ordem.motivo_reprovacao                                          ? 'border-red-300 bg-red-50/60 dark:bg-red-900/20'       :
+    ordem.status === 'concluido'                                     ? 'border-green-300 bg-green-50/60 dark:bg-green-900/20' :
+    atrasado                                                         ? 'border-red-400'                                       :
+    ordem.programacao_confirmada                                     ? 'border-green-300 bg-green-50/40 dark:bg-green-900/10' :
+    ordem.status === 'em_linha'                                      ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-900/20'    :
+    ordem.tipo_op === 'estoque'                                      ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20' :
+    'border-border';
+
   const dotClass =
+    ordem.motivo_reprovacao    ? 'bg-red-500'    :
     ordem.status === 'concluido' ? 'bg-green-500' :
-    ordem.motivo_reprovacao ? 'bg-red-500' :
-    atrasado ? 'bg-red-400' :
-    ordem.status === 'em_linha' ? 'bg-blue-500' :
-    ordem.status === 'aguardando_linha' ? 'bg-orange-400' :
-    'bg-gray-400';
+    atrasado                   ? 'bg-red-400'    :
+    ordem.programacao_confirmada ? 'bg-green-500' :
+    ordem.status === 'em_linha'  ? 'bg-blue-500'  :
+    ordem.tipo_op === 'estoque'  ? 'bg-purple-500':
+    'bg-orange-400';
 
   return (
     <div
       ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      }}
-      className={cn(
-        'bg-card dark:bg-gray-800 border dark:border-gray-700 rounded-lg select-none',
-        ordem.status === 'concluido' ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700' :
-        ordem.motivo_reprovacao ? 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700' : '',
-        atrasado ? 'border-red-500' : '',
-      )}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className={cn('rounded-xl border bg-card select-none', cardBorderClass)}
     >
-      {/* Cabeçalho colapsável — sempre visível */}
-      <div className="flex items-center gap-2 px-2.5 py-2">
-        {/* Grip de arrastar */}
+      {/* ── Cabeçalho — sempre visível ─────────────────────────── */}
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        {/* Grip */}
         <button
           {...attributes}
           {...listeners}
           onClick={(e) => e.stopPropagation()}
-          className="text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+          className="text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
         >
           <GripVertical className="h-4 w-4" />
         </button>
 
-        {/* Indicador de status */}
         <span className={cn('mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 self-start', dotClass)} />
 
-        {/* Código/nome e quantidade */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <p className={cn("text-xs font-semibold leading-tight text-gray-900 dark:text-white", !isOpen && "truncate")}>{ordem.produto}</p>
-          <p className="text-xs font-bold tabular-nums text-gray-700 dark:text-gray-200 mt-0.5">{formatKg(ordem.quantidade)} kg</p>
+        <div className="flex-1 min-w-0">
+          <p className={cn('text-xs font-semibold leading-snug', isOpen ? 'break-words' : 'truncate')}>{ordem.produto}</p>
+          <p className="text-xs font-bold tabular-nums text-muted-foreground mt-0.5">{formatKg(ordem.quantidade)} kg</p>
         </div>
 
-        {/* Botão ⋮ — mobile (sempre visível para acesso rápido) */}
         {isMobile && (
           <button
             onClick={(e) => { e.stopPropagation(); setAcoesAbertas((v) => !v); setIsOpen(true); }}
@@ -427,182 +426,145 @@ const SortableCard = memo(function SortableCard({
           </button>
         )}
 
-        {/* Chevron toggle */}
         <button
           onClick={(e) => { e.stopPropagation(); setIsOpen((v) => !v); }}
-          className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
           aria-expanded={isOpen}
-          title={isOpen ? 'Recolher' : 'Expandir'}
         >
-          <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')} />
+          <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform duration-200 self-center', isOpen && 'rotate-180')} />
         </button>
       </div>
 
-      {/* Conteúdo expansível */}
+      {/* ── Corpo expansível ────────────────────────────────────── */}
       <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
         <div className="overflow-hidden">
-          <div className="border-t border-black/5 dark:border-white/10 px-2.5 pb-2.5 pt-2">
+          <div className="px-3 pb-3 pt-1.5 space-y-1 border-t border-black/5 dark:border-white/10">
 
-            {/* Linha: conteúdo + ações desktop */}
-            <div className="flex items-stretch gap-2">
+            {/* Lote + marca */}
+            <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+              <span>Lote {ordem.lote}</span>
+              <MarcaBadge marca={ordem.marca} size="sm" />
+            </p>
 
-              {/* Conteúdo */}
-              <div className="flex-1 space-y-1 min-w-0">
-                <p className="text-xs text-muted-foreground dark:text-gray-300 flex items-center gap-1 flex-wrap leading-snug">
-                  <span>Lote {ordem.lote}</span>
-                  <MarcaBadge marca={ordem.marca} size="sm" />
-                </p>
-                {ordem.criado_em && (
-                  <p className="text-xs text-muted-foreground dark:text-gray-400">
-                    Criado: {format(new Date(ordem.criado_em), "dd/MM/yyyy")}
-                  </p>
-                )}
-                <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
-                {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded px-1 py-0 leading-4">
-                    <Clock className="h-2.5 w-2.5 shrink-0" />
-                    aguardando registro
-                  </span>
-                )}
-                {registros && registros.length > 0 && (() => {
-                  const totalKg = registros.reduce((acc: number, reg: any) => {
+            {/* Criado em */}
+            {ordem.criado_em && (
+              <p className="text-xs text-muted-foreground">
+                Criado: {format(new Date(ordem.criado_em), "dd/MM/yyyy")}
+              </p>
+            )}
+
+            {/* Status */}
+            <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
+
+            {/* Aguardando registro */}
+            {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5">
+                <Clock className="h-2.5 w-2.5 shrink-0" />
+                aguardando registro
+              </span>
+            )}
+
+            {/* Registros do dia */}
+            {registros && registros.length > 0 && (() => {
+              const totalKg = registros.reduce((acc: number, reg: any) => {
+                const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
+                return acc + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+              }, 0);
+              const exibirTotal = totalKg > 0 ? totalKg : null;
+              return (
+                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-900/20 text-[10px] font-mono text-blue-700 dark:text-blue-300 overflow-hidden">
+                  {registros.map((reg: any, i: number) => {
                     const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
-                    return acc + items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-                  }, 0);
-                  const exibirTotal = totalKg > 0 ? totalKg : null;
-                  return (
-                    <div className="rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-gray-700 text-[10px] font-mono text-blue-700 dark:text-blue-300 overflow-hidden">
-                      {registros.map((reg: any, i: number) => {
-                        const items: any[] = Array.isArray(reg.registro_producao) ? reg.registro_producao : [];
-                        const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-                        const hi = reg.hora_inicio ? String(reg.hora_inicio).slice(0, 5) : null;
-                        const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
-                        const dataFmt = reg.data ? format(new Date(reg.data + "T12:00:00"), "dd/MM") : "";
-                        return (
-                          <div key={reg.id} className={`px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200 dark:border-blue-800" : ""}`}>
-                            {/* Linha 1: data · kg · botões */}
-                            <div className="flex items-center gap-1">
-                              <span className="w-[30px] shrink-0">{dataFmt}</span>
-                              <span className="flex-1 text-right">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
-                                className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 shrink-0"
-                                title="Editar registro"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); onDeletarRegistro(ordem, reg); }}
-                                className="text-blue-300 hover:text-red-500 dark:text-blue-600 dark:hover:text-red-400 shrink-0"
-                                title="Deletar registro"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </div>
-                            {/* Linha 2: horário completo */}
-                            {hi && hf && (
-                              <div className="text-blue-500 dark:text-blue-400 mt-0.5">{hi}–{hf}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {registros.length > 1 && exibirTotal != null && (
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 border-t border-blue-300 dark:border-blue-700 bg-blue-100 dark:bg-gray-600 font-semibold text-blue-800 dark:text-gray-200">
-                          <span className="w-[30px] shrink-0">Total</span>
-                          <span className="flex-1 text-right whitespace-nowrap">{exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>
+                    const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+                    const hi = reg.hora_inicio ? String(reg.hora_inicio).slice(0, 5) : null;
+                    const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
+                    const dataFmt = reg.data ? format(new Date(reg.data + "T12:00:00"), "dd/MM") : "";
+                    return (
+                      <div key={reg.id} className={`px-1.5 py-1 ${i > 0 ? "border-t border-blue-200 dark:border-blue-800" : ""}`}>
+                        <div className="flex items-center gap-1">
+                          <span className="w-[28px] shrink-0 text-muted-foreground">{dataFmt}</span>
+                          <span className="flex-1 text-right font-semibold">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
+                          <button onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }} className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 shrink-0" title="Editar"><Pencil className="h-3 w-3" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); onDeletarRegistro(ordem, reg); }} className="text-blue-300 hover:text-red-500 dark:text-blue-600 dark:hover:text-red-400 shrink-0" title="Excluir"><Trash2 className="h-3 w-3" /></button>
                         </div>
-                      )}
+                        {hi && hf && <div className="text-blue-500 dark:text-blue-400 mt-0.5 pl-[28px]">{hi}–{hf}</div>}
+                      </div>
+                    );
+                  })}
+                  {registros.length > 1 && exibirTotal != null && (
+                    <div className="flex items-center gap-1 px-1.5 py-1 border-t border-blue-200 dark:border-blue-700 bg-blue-100/80 dark:bg-blue-900/40 font-semibold">
+                      <span className="w-[28px] shrink-0 text-muted-foreground">Tot.</span>
+                      <span className="flex-1 text-right">{exibirTotal.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg</span>
                     </div>
-                  );
-                })()}
-                {atrasado && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
-                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                    {du - 7} {du - 7 === 1 ? 'dia' : 'dias'} em atraso
-                  </span>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }}
-                  title="Clique para alternar entre Venda e Estoque"
-                  className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1 py-0 leading-4 border transition-colors ${
-                    ordem.tipo_op === 'estoque'
-                      ? 'text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100'
-                      : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
-                  }`}
-                >
-                  {ordem.tipo_op === 'estoque'
-                    ? <><Package className="h-2.5 w-2.5 shrink-0" /> Estoque</>
-                    : <><ShoppingCart className="h-2.5 w-2.5 shrink-0" /> Venda</>
-                  }
-                </button>
-              </div>
-
-              {/* Coluna de ações vertical — desktop */}
-              {!isMobile && (
-                <div className="flex flex-col items-center gap-1 shrink-0 border-l pl-1.5">
-                  <button onClick={(e) => { e.stopPropagation(); onVerDetalhes(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver detalhes"><Info className="h-3.5 w-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }} className={`${ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"}`} title={ordem.programacao_confirmada ? "Confirmado" : "Não confirmado"}>
-                    {ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); onEditar(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); onEditarEmissao(ordem); }} className={`${ordem.data_emissao ? "text-muted-foreground/70 hover:text-amber-500" : "text-muted-foreground/50 hover:text-amber-500"}`} title="Editar data de emissão"><CalendarRange className="h-3.5 w-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }} className="text-muted-foreground/50 hover:text-orange-500" title="Reprogramar"><ArrowRightLeft className="h-3.5 w-3.5" /></button>
-                  {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
-                    <button onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }} className="text-muted-foreground/50 hover:text-blue-600" title="Registrar Dia"><CalendarCheck2 className="h-3.5 w-3.5" /></button>
                   )}
-                  {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
-                    <button onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }} className="text-muted-foreground/50 hover:text-green-600" title="Forçar Conclusão"><CheckCircle2 className="h-3.5 w-3.5" /></button>
-                  )}
-                  {ordem.status === "em_linha" && (
-                    <button onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Voltar para Fila"><Undo2 className="h-3.5 w-3.5" /></button>
-                  )}
-                  {ordem.formula_id && (
-                    <button onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver fórmula"><BookOpen className="h-3.5 w-3.5" /></button>
-                  )}
-                  <button onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }} className={`${ordem.tipo_op === 'estoque' ? 'text-purple-500 hover:text-purple-600' : 'text-blue-400 hover:text-blue-600'}`} title={ordem.tipo_op === 'estoque' ? 'Destino: Estoque' : 'Destino: Venda'}>
-                    {ordem.tipo_op === 'estoque' ? <Package className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); onLab(ordem); }} className={`${ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"}`} title="Inf Lab"><FlaskConical className="h-3.5 w-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); onAddParada(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Registrar Parada"><PauseCircle className="h-3.5 w-3.5" /></button>
-                  <button onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }} className="text-muted-foreground/50 hover:text-destructive" title="Excluir"><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
-            {/* Tray de ações — mobile */}
+            {/* Atraso */}
+            {atrasado && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                {du - 7} {du - 7 === 1 ? 'dia' : 'dias'} em atraso
+              </span>
+            )}
+
+            {/* Destino */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleDestino(ordem); }}
+              title="Alternar Venda / Estoque"
+              className={cn(
+                'inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 border transition-colors',
+                ordem.tipo_op === 'estoque'
+                  ? 'text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100'
+                  : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
+              )}
+            >
+              {ordem.tipo_op === 'estoque'
+                ? <><Package className="h-2.5 w-2.5 shrink-0" /> Estoque</>
+                : <><ShoppingCart className="h-2.5 w-2.5 shrink-0" /> Venda</>}
+            </button>
+
+            {/* ── Ações desktop — linha horizontal discreta ──────── */}
+            {!isMobile && (
+              <div className="flex flex-wrap gap-1 pt-1.5 mt-0.5 border-t border-black/5 dark:border-white/10">
+                <button onClick={(e) => { e.stopPropagation(); onVerDetalhes(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver detalhes"><Info className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onToggleConfirmado(ordem); }} className={ordem.programacao_confirmada ? "text-green-500 hover:text-green-600" : "text-orange-400 hover:text-orange-500"} title={ordem.programacao_confirmada ? "Confirmado" : "Não confirmado"}>{ordem.programacao_confirmada ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}</button>
+                <button onClick={(e) => { e.stopPropagation(); onEditar(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onEditarEmissao(ordem); }} className={ordem.data_emissao ? "text-muted-foreground/70 hover:text-amber-500" : "text-muted-foreground/50 hover:text-amber-500"} title="Emissão"><CalendarRange className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }} className="text-muted-foreground/50 hover:text-orange-500" title="Reprogramar"><ArrowRightLeft className="h-3.5 w-3.5" /></button>
+                {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && <button onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }} className="text-muted-foreground/50 hover:text-blue-600" title="Registrar Dia"><CalendarCheck2 className="h-3.5 w-3.5" /></button>}
+                {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && <button onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }} className="text-muted-foreground/50 hover:text-green-600" title="Forçar Conclusão"><CheckCircle2 className="h-3.5 w-3.5" /></button>}
+                {ordem.status === "em_linha" && <button onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Voltar para Fila"><Undo2 className="h-3.5 w-3.5" /></button>}
+                {ordem.formula_id && <button onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver fórmula"><BookOpen className="h-3.5 w-3.5" /></button>}
+                <button onClick={(e) => { e.stopPropagation(); onLab(ordem); }} className={ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"} title="Lab"><FlaskConical className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onAddParada(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Parada"><PauseCircle className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }} className="text-muted-foreground/50 hover:text-destructive" title="Excluir"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            )}
+
+            {/* ── Tray de ações — mobile ─────────────────────────── */}
             {isMobile && acoesAbertas && (
-              <div
-                className="mt-2 pt-2 border-t flex flex-wrap gap-1.5"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="flex flex-wrap gap-1.5 pt-2 mt-1 border-t border-black/5 dark:border-white/10" onClick={(e) => e.stopPropagation()}>
                 {[
-                  { icon: Info, label: 'Detalhes', color: 'text-primary', action: () => { onVerDetalhes(ordem); setAcoesAbertas(false); } },
+                  { icon: Info,           label: 'Detalhes',    color: 'text-primary',       action: () => { onVerDetalhes(ordem);      setAcoesAbertas(false); } },
                   { icon: ordem.programacao_confirmada ? Lock : LockOpen, label: ordem.programacao_confirmada ? 'Desconfirmar' : 'Confirmar', color: ordem.programacao_confirmada ? 'text-green-600' : 'text-orange-500', action: () => { onToggleConfirmado(ordem); setAcoesAbertas(false); } },
-                  { icon: Pencil,        label: 'Editar',        color: 'text-foreground',     action: () => { onEditar(ordem); setAcoesAbertas(false); } },
-                  { icon: CalendarRange, label: 'Emissão',       color: 'text-amber-600',      action: () => { onEditarEmissao(ordem); setAcoesAbertas(false); } },
-                  { icon: ArrowRightLeft,label: 'Reprogramar',   color: 'text-orange-500',     action: () => { onReprogramarClick(ordem); setAcoesAbertas(false); } },
+                  { icon: Pencil,         label: 'Editar',      color: 'text-foreground',    action: () => { onEditar(ordem);           setAcoesAbertas(false); } },
+                  { icon: CalendarRange,  label: 'Emissão',     color: 'text-amber-600',     action: () => { onEditarEmissao(ordem);    setAcoesAbertas(false); } },
+                  { icon: ArrowRightLeft, label: 'Reprogramar', color: 'text-orange-500',    action: () => { onReprogramarClick(ordem); setAcoesAbertas(false); } },
                   ...(ordem.status === "em_linha" || ordem.status === "aguardando_linha" ? [
-                    { icon: CalendarCheck2, label: 'Reg. Dia',   color: 'text-blue-600',       action: () => { onRegistrarDia(ordem); setAcoesAbertas(false); } },
-                    { icon: CheckCircle2,   label: 'Concluir',   color: 'text-green-600',      action: () => { onForcarConclusao(ordem); setAcoesAbertas(false); } },
+                    { icon: CalendarCheck2, label: 'Reg. Dia', color: 'text-blue-600',  action: () => { onRegistrarDia(ordem);    setAcoesAbertas(false); } },
+                    { icon: CheckCircle2,   label: 'Concluir', color: 'text-green-600', action: () => { onForcarConclusao(ordem); setAcoesAbertas(false); } },
                   ] : []),
-                  ...(ordem.status === "em_linha" ? [
-                    { icon: Undo2, label: 'Voltar Fila', color: 'text-amber-600', action: () => { onVoltarFila(ordem); setAcoesAbertas(false); } },
-                  ] : []),
-                  ...(ordem.formula_id ? [
-                    { icon: BookOpen, label: 'Fórmula', color: 'text-primary', action: () => { onDblClick(ordem); setAcoesAbertas(false); } },
-                  ] : []),
+                  ...(ordem.status === "em_linha" ? [{ icon: Undo2, label: 'Voltar Fila', color: 'text-amber-600', action: () => { onVoltarFila(ordem); setAcoesAbertas(false); } }] : []),
+                  ...(ordem.formula_id    ? [{ icon: BookOpen, label: 'Fórmula', color: 'text-primary', action: () => { onDblClick(ordem); setAcoesAbertas(false); } }] : []),
                   { icon: ordem.tipo_op === 'estoque' ? Package : ShoppingCart, label: ordem.tipo_op === 'estoque' ? 'Estoque' : 'Venda', color: ordem.tipo_op === 'estoque' ? 'text-purple-600' : 'text-blue-600', action: () => { onToggleDestino(ordem); setAcoesAbertas(false); } },
-                  { icon: FlaskConical,  label: 'Lab',          color: ordem.obs_laboratorio ? 'text-violet-600' : 'text-muted-foreground', action: () => { onLab(ordem); setAcoesAbertas(false); } },
-                  { icon: PauseCircle,   label: 'Parada',       color: 'text-amber-600',      action: () => { onAddParada(ordem); setAcoesAbertas(false); } },
-                  { icon: Trash2,        label: 'Excluir',      color: 'text-destructive',    action: () => { onExcluir(ordem); setAcoesAbertas(false); } },
+                  { icon: FlaskConical,   label: 'Lab',         color: ordem.obs_laboratorio ? 'text-violet-600' : 'text-muted-foreground', action: () => { onLab(ordem);      setAcoesAbertas(false); } },
+                  { icon: PauseCircle,    label: 'Parada',      color: 'text-amber-600',     action: () => { onAddParada(ordem);        setAcoesAbertas(false); } },
+                  { icon: Trash2,         label: 'Excluir',     color: 'text-destructive',   action: () => { onExcluir(ordem);          setAcoesAbertas(false); } },
                 ].map(({ icon: Icon, label, color, action }) => (
-                  <button
-                    key={label}
-                    onClick={action}
-                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-muted active:bg-muted/70 text-xs font-medium min-h-[44px] ${color}`}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    {label}
+                  <button key={label} onClick={action} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-muted active:bg-muted/70 text-xs font-medium min-h-[44px] ${color}`}>
+                    <Icon className="h-3.5 w-3.5 shrink-0" />{label}
                   </button>
                 ))}
               </div>

@@ -170,9 +170,14 @@ function SortableCard({
   const atrasado = du > 7;
 
   const dotClass =
-    atrasado ? 'bg-red-400' :
+    atrasado         ? 'bg-red-400' :
     ordem.status === 'em_pesagem' ? 'bg-blue-500' :
     'bg-gray-400';
+
+  const cardBorderClass =
+    atrasado         ? 'border-red-400' :
+    ordem.status === 'em_pesagem' ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-900/20' :
+    'border-border';
 
   return (
     <div
@@ -182,10 +187,10 @@ function SortableCard({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className={cn('bg-card border rounded-lg select-none', atrasado ? 'border-red-500' : '')}
+      className={cn('rounded-xl border bg-card select-none', cardBorderClass)}
     >
       {/* Cabeçalho colapsável — sempre visível */}
-      <div className="flex items-center gap-2 px-2.5 py-2">
+      <div className="flex items-center gap-2 px-3 py-2.5">
         {/* Grip de arrastar */}
         <button
           {...attributes}
@@ -201,7 +206,7 @@ function SortableCard({
 
         {/* Código/nome e quantidade */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <p className="text-xs font-semibold leading-tight truncate">{ordem.produto}</p>
+          <p className={cn('text-xs font-semibold leading-snug', isOpen ? 'break-words' : 'truncate')}>{ordem.produto}</p>
           <p className="text-xs font-bold tabular-nums text-gray-700 dark:text-gray-200 mt-0.5">{formatKg(ordem.quantidade)} kg</p>
         </div>
 
@@ -219,71 +224,67 @@ function SortableCard({
       {/* Conteúdo expansível */}
       <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
         <div className="overflow-hidden">
-          <div className="border-t border-black/5 dark:border-white/10 px-2.5 pb-2.5 pt-2">
-            <div className="flex items-start gap-1.5">
-              <div className="flex-1 space-y-1 overflow-hidden">
-                <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-                  Lote {ordem.lote}
-                  <MarcaBadge marca={ordem.marca} size="sm" />
-                </p>
-                <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
-                {atrasado && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
-                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                    {du - 7} {du - 7 === 1 ? "dia" : "dias"} em atraso
-                  </span>
-                )}
-              </div>
+          <div className="border-t border-black/5 dark:border-white/10 px-3 pb-3 pt-1.5 space-y-1">
+            <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+              Lote {ordem.lote}
+              <MarcaBadge marca={ordem.marca} size="sm" />
+            </p>
+            <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
+            {atrasado && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0 leading-4">
+                <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                {du - 7} {du - 7 === 1 ? "dia" : "dias"} em atraso
+              </span>
+            )}
 
-              {/* Ações */}
-              <div className="flex items-center gap-1 shrink-0">
+            {/* Ações — linha horizontal */}
+            <div className="flex flex-wrap gap-1 pt-1.5 mt-0.5 border-t border-black/5 dark:border-white/10">
+              <button
+                onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/40 bg-background"
+                title="Editar"
+              >
+                <Pencil className="h-3 w-3" /> Editar
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 bg-background"
+                title="Excluir"
+              >
+                <Trash2 className="h-3 w-3" /> Excluir
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/40 bg-background"
+                title="Reprogramar"
+              >
+                <CalendarDays className="h-3 w-3" /> Reprogramar
+              </button>
+              {ordem.status === 'em_pesagem' && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onEditar(ordem); }}
-                  className="text-muted-foreground/50 hover:text-primary"
-                  title="Editar"
+                  onClick={(e) => { e.stopPropagation(); onDevolverParaFila(ordem); }}
+                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-orange-500 hover:border-orange-300 bg-background"
+                  title="Devolver para fila"
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <Undo2 className="h-3 w-3" /> Devolver
                 </button>
+              )}
+              {ordem.balanca !== null && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }}
-                  className="text-muted-foreground/50 hover:text-destructive"
-                  title="Excluir"
+                  onClick={(e) => { e.stopPropagation(); onMoverParaBalanca(ordem, ordem.balanca === 1 ? 2 : 1); }}
+                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-blue-600 hover:border-blue-300 bg-background"
+                  title={`Mover para Balança ${ordem.balanca === 1 ? 2 : 1}`}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <ArrowRightLeft className="h-3 w-3" /> Balança {ordem.balanca === 1 ? 2 : 1}
                 </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }}
-                  className="text-muted-foreground/50 hover:text-primary"
-                  title="Reprogramar"
-                >
-                  <CalendarDays className="h-3.5 w-3.5" />
-                </button>
-                {ordem.status === 'em_pesagem' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDevolverParaFila(ordem); }}
-                    className="text-muted-foreground/50 hover:text-orange-500"
-                    title="Devolver para fila"
-                  >
-                    <Undo2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {ordem.balanca !== null && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onMoverParaBalanca(ordem, ordem.balanca === 1 ? 2 : 1); }}
-                    className="text-muted-foreground/50 hover:text-blue-600"
-                    title={`Mover para Balança ${ordem.balanca === 1 ? 2 : 1}`}
-                  >
-                    <ArrowRightLeft className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onAvancar(ordem); }}
-                  className="text-muted-foreground/50 hover:text-green-600"
-                  title="Forçar Avanço"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onAvancar(ordem); }}
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-green-600 hover:border-green-300 bg-background"
+                title="Forçar Avanço"
+              >
+                <CheckCircle2 className="h-3 w-3" /> Avançar
+              </button>
             </div>
           </div>
         </div>
