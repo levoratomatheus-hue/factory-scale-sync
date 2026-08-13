@@ -377,7 +377,7 @@ const SortableCard = memo(function SortableCard({
     ordem.motivo_reprovacao                                          ? 'border-red-300 bg-red-50/60 dark:bg-red-900/20'       :
     ordem.status === 'concluido'                                     ? 'border-green-300 bg-green-50/60 dark:bg-green-900/20' :
     atrasado                                                         ? 'border-red-400'                                       :
-    ordem.programacao_confirmada                                     ? 'border-green-300 bg-green-50/40 dark:bg-green-900/10' :
+    ordem.programacao_confirmada                                     ? 'border-green-400' :
     ordem.status === 'em_linha'                                      ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-900/20'    :
     ordem.tipo_op === 'estoque'                                      ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20' :
     'border-border';
