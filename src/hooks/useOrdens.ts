@@ -279,7 +279,8 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
       .from("registros_diarios")
       .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, ordens(linha, quantidade, quantidade_real, formula_id, produto)")
       .gte("data", dataInicio)
-      .lte("data", dataFim);
+      .lte("data", dataFim)
+      .eq("reprovado", false);
     if (!error && data) setRegistros(data);
   }, [dataInicio, dataFim]);
 

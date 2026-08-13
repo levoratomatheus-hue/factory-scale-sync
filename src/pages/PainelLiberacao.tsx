@@ -103,6 +103,7 @@ export default function PainelLiberacao() {
         .from("registros_diarios")
         .select("id, ordem_id, data, hora_inicio, hora_fim, registro_producao")
         .in("ordem_id", ids)
+        .eq("reprovado", false)
         .order("data", { ascending: true });
       (regData ?? []).forEach((r: any) => {
         if (!regMap[r.ordem_id]) regMap[r.ordem_id] = [];
@@ -137,10 +138,7 @@ export default function PainelLiberacao() {
       for (const o of data) {
         if (!(o.id in next)) {
           const regs = regMap[o.id] ?? [];
-          const regsParaCalculo = o.data_reprovacao
-            ? regs.filter((r: any) => r.data > o.data_reprovacao)
-            : regs;
-          const fromRegs = calcQtdFromRegistros(regsParaCalculo);
+          const fromRegs = calcQtdFromRegistros(regs);
           if (fromRegs !== null) {
             next[o.id] = fromRegs.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
           } else {
@@ -226,15 +224,13 @@ export default function PainelLiberacao() {
       .from("registros_diarios")
       .select("id, ordem_id, data, hora_inicio, hora_fim, registro_producao")
       .eq("ordem_id", novoRegOrdem.id)
+      .eq("reprovado", false)
       .order("data", { ascending: true });
 
     const regsAtualizados = allRegs ?? [];
     setRegistrosPorOrdem((prev) => ({ ...prev, [novoRegOrdem.id]: regsAtualizados }));
 
-    const regsParaCalculo = novoRegOrdem.data_reprovacao
-      ? regsAtualizados.filter((r: any) => r.data > novoRegOrdem.data_reprovacao)
-      : regsAtualizados;
-    const total = calcQtdFromRegistros(regsParaCalculo);
+    const total = calcQtdFromRegistros(regsAtualizados);
     if (total !== null) {
       setQtdReal((prev) => ({
         ...prev,
@@ -384,10 +380,8 @@ export default function PainelLiberacao() {
         }),
       }));
 
-      // Recalculate qtdReal from updated registros, ignoring pre-reprovação records
-      const dataReprovacao = editOrdem.data_reprovacao ?? null;
+      // Recalculate qtdReal from updated registros (registros reprovados já foram excluídos do fetch)
       const allItems = editDraft.registros
-        .filter((reg) => !dataReprovacao || reg.data > dataReprovacao)
         .flatMap((reg) =>
           reg.items
             .filter((i) => i.qty.trim() !== "" || i.peso.trim() !== "")
@@ -505,6 +499,15 @@ export default function PainelLiberacao() {
         }));
       if (paradasPayload.length > 0) {
         await (supabase as any).from("paradas").insert(paradasPayload);
+      }
+
+      // Marcar todos os registros desta OP como reprovados para excluí-los dos cálculos de produção
+      const idsRegs = regs.map((r: any) => r.id).filter(Boolean);
+      if (idsRegs.length > 0) {
+        await (supabase as any)
+          .from("registros_diarios")
+          .update({ reprovado: true })
+          .in("id", idsRegs);
       }
     }
 

@@ -75,16 +75,14 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
       .from("registros_diarios")
       .select("id, data, hora_inicio, hora_fim, registro_producao")
       .eq("ordem_id", ordem.id)
+      .eq("reprovado", false)
       .order("data", { ascending: true });
 
     const regsAtualizados = todosRegistros ?? [];
     setRegistros(regsAtualizados);
 
-    const regsParaCalculo = ordem.data_reprovacao
-      ? regsAtualizados.filter((r: any) => r.data > ordem.data_reprovacao)
-      : regsAtualizados;
     let qtdReal = 0;
-    regsParaCalculo.forEach((r: any) => {
+    regsAtualizados.forEach((r: any) => {
       const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
       items.forEach((it: any) => { qtdReal += (it.qty || 0) * (it.peso || 0); });
     });
@@ -112,6 +110,7 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
       .from("registros_diarios")
       .select("id, data, hora_inicio, hora_fim, registro_producao")
       .eq("ordem_id", ordem.id)
+      .eq("reprovado", false)
       .order("data", { ascending: true })
       .then(({ data }: any) => {
         setRegistros(data ?? []);
@@ -178,17 +177,15 @@ export function EditarRegistrosDiariosModal({ ordem, onClose, onSaved }: Props) 
       return;
     }
 
-    // Recalcula quantidade_real somando registros após última reprovação
+    // Recalcula quantidade_real somando apenas registros não reprovados
     const { data: todosRegistros } = await (supabase as any)
       .from("registros_diarios")
-      .select("data, registro_producao")
-      .eq("ordem_id", ordem.id);
+      .select("registro_producao")
+      .eq("ordem_id", ordem.id)
+      .eq("reprovado", false);
 
-    const regsParaCalculo = ordem.data_reprovacao
-      ? (todosRegistros ?? []).filter((r: any) => r.data > ordem.data_reprovacao)
-      : (todosRegistros ?? []);
     let qtdReal = 0;
-    regsParaCalculo.forEach((r: any) => {
+    (todosRegistros ?? []).forEach((r: any) => {
       const items: any[] = Array.isArray(r.registro_producao)
         ? r.registro_producao
         : [];
