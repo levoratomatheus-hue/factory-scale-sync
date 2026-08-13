@@ -447,7 +447,9 @@ const SortableCard = memo(function SortableCard({
             <div className="flex items-stretch gap-2">
 
               {/* Conteúdo */}
-              <div className="flex-1 space-y-1 overflow-hidden min-w-0">
+              <div className="flex-1 space-y-1 min-w-0">
+                {/* Nome completo — sem truncate quando expandido */}
+                <p className="text-xs font-semibold leading-tight break-words text-gray-900 dark:text-white">{ordem.produto}</p>
                 <p className="text-xs text-muted-foreground dark:text-gray-300 flex items-center gap-1 flex-wrap leading-snug">
                   <span>Lote {ordem.lote}</span>
                   <MarcaBadge marca={ordem.marca} size="sm" />
@@ -479,24 +481,30 @@ const SortableCard = memo(function SortableCard({
                         const hf = reg.hora_fim ? String(reg.hora_fim).slice(0, 5) : null;
                         const dataFmt = reg.data ? format(new Date(reg.data + "T12:00:00"), "dd/MM") : "";
                         return (
-                          <div key={reg.id} className={`flex items-center gap-1 px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200 dark:border-blue-800" : ""}`}>
-                            <span className="w-[30px] shrink-0">{dataFmt}</span>
-                            <span className="flex-1 text-right whitespace-nowrap">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
-                            <span className="shrink-0 text-blue-500 dark:text-blue-400 whitespace-nowrap">{hi && hf ? `${hi}–${hf}` : ""}</span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
-                              className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 shrink-0"
-                              title="Editar registro"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onDeletarRegistro(ordem, reg); }}
-                              className="text-blue-300 hover:text-red-500 dark:text-blue-600 dark:hover:text-red-400 shrink-0"
-                              title="Deletar registro"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
+                          <div key={reg.id} className={`px-1.5 py-0.5 ${i > 0 ? "border-t border-blue-200 dark:border-blue-800" : ""}`}>
+                            {/* Linha 1: data · kg · botões */}
+                            <div className="flex items-center gap-1">
+                              <span className="w-[30px] shrink-0">{dataFmt}</span>
+                              <span className="flex-1 text-right">{kg > 0 ? `${kg.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : "—"}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onEditarRegistro(ordem, reg); }}
+                                className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 shrink-0"
+                                title="Editar registro"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onDeletarRegistro(ordem, reg); }}
+                                className="text-blue-300 hover:text-red-500 dark:text-blue-600 dark:hover:text-red-400 shrink-0"
+                                title="Deletar registro"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                            {/* Linha 2: horário completo */}
+                            {hi && hf && (
+                              <div className="text-blue-500 dark:text-blue-400 mt-0.5">{hi}–{hf}</div>
+                            )}
                           </div>
                         );
                       })}
