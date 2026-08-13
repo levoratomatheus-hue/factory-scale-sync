@@ -669,8 +669,9 @@ const LinhaColumn = memo(function LinhaColumn({
   );
 
   return (
-    <div className={`flex flex-col ${isMobile ? "w-full" : "min-w-[260px] w-[260px]"}`}>
-      <div className="mb-2">
+    <div className={`flex flex-col ${isMobile ? "w-full h-full" : "h-full min-w-[260px] w-[260px]"}`}>
+      {/* Cabeçalho da coluna — fica parado enquanto os cards rolam */}
+      <div className="shrink-0 mb-2">
         <div className="bg-muted rounded-md py-1.5 px-2 flex items-center justify-between">
           <span className="text-xs font-bold">Linha {linha}</span>
           <span className="text-xs text-muted-foreground">{ordens.length}</span>
@@ -682,8 +683,7 @@ const LinhaColumn = memo(function LinhaColumn({
       >
         <div
           ref={setNodeRef}
-          className={`flex-1 overflow-y-auto space-y-1.5 rounded-lg transition-colors ${isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}
-          style={{ maxHeight: "calc(100vh - 230px)", minHeight: "200px" }}
+          className={`flex-1 min-h-0 overflow-y-auto space-y-1.5 rounded-lg transition-colors ${isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}
         >
           {ordens.length === 0 ? (
             <div className="flex items-center justify-center h-20 rounded-lg border border-dashed text-xs text-muted-foreground">
@@ -696,7 +696,7 @@ const LinhaColumn = memo(function LinhaColumn({
           )}
         </div>
       </SortableContext>
-      <div className="mt-2 border-t pt-2">
+      <div className="shrink-0 mt-2 border-t pt-2">
         <p className="text-xs text-muted-foreground text-right">
           Total:{" "}
           <span className="font-semibold text-foreground">
@@ -1516,8 +1516,11 @@ export default function PainelProgramacao() {
   };
 
   return (
-    <div className="space-y-4 relative z-0">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col h-[calc(100svh-72px)] sm:h-[calc(100svh-96px)] relative z-0">
+
+      {/* ── Cabeçalho fixo — não rola ─────────────────────────────── */}
+      <div className="shrink-0 space-y-2 pb-2">
+      <div className="flex items-center gap-3 flex-wrap">
         <label className="text-sm font-medium text-muted-foreground">Data:</label>
         <input
           type="date"
@@ -1626,6 +1629,8 @@ export default function PainelProgramacao() {
         )}
       </div>
 
+      </div>{/* fim shrink-0 cabeçalho fixo */}
+
       {/* Modal Nova Nota */}
       <Dialog open={modalNotaAberto} onOpenChange={(open) => { if (!open) { setModalNotaAberto(false); setNotaTexto(""); setNotaCor("amarelo"); setNotaData(""); } }}>
         <DialogContent className="max-w-sm">
@@ -1680,15 +1685,17 @@ export default function PainelProgramacao() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Área de scroll das colunas ───────────────────────────── */}
+      <div className="flex-1 min-h-0 flex flex-col gap-2">
       {loading ? (
-        <div className="flex items-center justify-center h-64">
+        <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
         <>
           {/* Seletor de linha — mobile apenas */}
           {isMobile && (
-            <div className="flex gap-1 overflow-x-auto pb-1">
+            <div className="shrink-0 flex gap-1 overflow-x-auto pb-1">
               {[1, 2, 3, 4, 5].map((l) => (
                 <button
                   key={l}
@@ -1708,7 +1715,7 @@ export default function PainelProgramacao() {
             </div>
           )}
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-            <div className={isMobile ? "w-full" : "flex gap-3 w-full overflow-x-auto pb-4"}>
+            <div className={isMobile ? "flex-1 min-h-0" : "flex-1 min-h-0 flex gap-3 overflow-x-auto pb-2"}>
               {[1, 2, 3, 4, 5].map((l) => {
                 if (isMobile && l !== linhaAtivaMobile) return null;
                 return (
@@ -1741,6 +1748,7 @@ export default function PainelProgramacao() {
           </DndContext>
         </>
       )}
+      </div>{/* fim flex-1 min-h-0 área de colunas */}
 
       <Dialog
         open={!!ordemParaReprogramar}
