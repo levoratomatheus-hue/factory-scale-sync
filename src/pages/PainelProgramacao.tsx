@@ -412,7 +412,7 @@ const SortableCard = memo(function SortableCard({
 
         {/* Código/nome e quantidade */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <p className="text-xs font-semibold leading-tight truncate text-gray-900 dark:text-white">{ordem.produto}</p>
+          <p className={cn("text-xs font-semibold leading-tight text-gray-900 dark:text-white", !isOpen && "truncate")}>{ordem.produto}</p>
           <p className="text-xs font-bold tabular-nums text-gray-700 dark:text-gray-200 mt-0.5">{formatKg(ordem.quantidade)} kg</p>
         </div>
 
@@ -448,8 +448,6 @@ const SortableCard = memo(function SortableCard({
 
               {/* Conteúdo */}
               <div className="flex-1 space-y-1 min-w-0">
-                {/* Nome completo — sem truncate quando expandido */}
-                <p className="text-xs font-semibold leading-tight break-words text-gray-900 dark:text-white">{ordem.produto}</p>
                 <p className="text-xs text-muted-foreground dark:text-gray-300 flex items-center gap-1 flex-wrap leading-snug">
                   <span>Lote {ordem.lote}</span>
                   <MarcaBadge marca={ordem.marca} size="sm" />
