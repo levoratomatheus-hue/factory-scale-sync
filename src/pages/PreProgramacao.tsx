@@ -21,8 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox } from 'lucide-react';
-import { formatKg } from '@/lib/utils';
+import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown } from 'lucide-react';
+import { formatKg, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getNextPosicao } from '@/lib/recalcularPosicoes';
@@ -60,6 +60,11 @@ export default function PreProgramacao() {
 
   // Editar
   const [ordemEditar, setOrdemEditar] = useState<OrdemPre | null>(null);
+
+  // Expansão dos cards
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleCard = (id: string) =>
+    setExpandedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   // Excluir
   const [ordemExcluir, setOrdemExcluir] = useState<OrdemPre | null>(null);
@@ -197,75 +202,107 @@ export default function PreProgramacao() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {ordensFiltradas.map((ordem) => (
-            <div key={ordem.id} className="rounded-xl border bg-card p-4 flex flex-col gap-3">
-              {/* Topo: produto + marca */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold leading-snug break-words">{ordem.produto}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 font-mono">Lote {ordem.lote}</p>
-                </div>
-                <MarcaBadge marca={ordem.marca} />
-              </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {ordensFiltradas.map((ordem) => {
+            const isOpen = expandedIds.has(ordem.id);
+            return (
+              <div key={ordem.id} className="rounded-xl border bg-card select-none">
 
-              {/* Dados */}
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Quantidade</span>
-                  <span className="font-semibold text-foreground tabular-nums">{formatKg(ordem.quantidade)} kg</span>
-                </div>
-                {ordem.criado_em && (
-                  <div className="flex justify-between">
-                    <span>Criada em</span>
-                    <span className="font-mono">
-                      {format(parseISO(ordem.criado_em), 'dd/MM/yyyy', { locale: ptBR })}
-                    </span>
+                {/* ── Cabeçalho — sempre visível ─────────────────── */}
+                <div className="flex items-start gap-1.5 px-3 py-2.5">
+                  {/* Bolinha de status */}
+                  <span className="mt-1 h-2 w-2 rounded-full shrink-0 bg-slate-400 dark:bg-slate-500" />
+
+                  {/* Produto + Quantidade */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold leading-snug break-words">{ordem.produto}</p>
+                    <p className="text-xs font-bold tabular-nums text-muted-foreground mt-0.5">{formatKg(ordem.quantidade)} kg</p>
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Mistura</span>
-                  <span className={ordem.requer_mistura === false ? 'text-muted-foreground' : 'text-foreground'}>
-                    {ordem.requer_mistura === false ? 'Não requer' : 'Requer'}
-                  </span>
+
+                  {/* Programar compacto — sempre visível */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[11px] gap-1 shrink-0 mt-0.5 border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground"
+                    onClick={(e) => { e.stopPropagation(); setOrdemProgramar(ordem); setDataProg(''); setLinha(''); setBalanca(''); }}
+                  >
+                    <CalendarDays className="h-3 w-3" />
+                    Programar
+                  </Button>
+
+                  {/* Chevron */}
+                  <button
+                    onClick={() => toggleCard(ordem.id)}
+                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-expanded={isOpen}
+                  >
+                    <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')} />
+                  </button>
                 </div>
-                {ordem.tipo_op && ordem.tipo_op !== 'venda' && (
-                  <div className="flex justify-between">
-                    <span>Tipo</span>
-                    <span className="capitalize text-foreground">{ordem.tipo_op}</span>
+
+                {/* ── Corpo expansível ───────────────────────────── */}
+                <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                  <div className="overflow-hidden">
+                    <div className="px-3 pb-3 pt-1.5 space-y-1.5 border-t border-black/5 dark:border-white/10">
+
+                      {/* Lote + marca */}
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono">Lote {ordem.lote}</span>
+                        <MarcaBadge marca={ordem.marca} size="sm" />
+                      </p>
+
+                      {/* Dados */}
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {ordem.criado_em && (
+                          <div className="flex justify-between">
+                            <span>Criada em</span>
+                            <span className="font-mono">
+                              {format(parseISO(ordem.criado_em), 'dd/MM/yyyy', { locale: ptBR })}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span>Mistura</span>
+                          <span className={ordem.requer_mistura === false ? 'text-muted-foreground' : 'text-foreground'}>
+                            {ordem.requer_mistura === false ? 'Não requer' : 'Requer'}
+                          </span>
+                        </div>
+                        {ordem.tipo_op && ordem.tipo_op !== 'venda' && (
+                          <div className="flex justify-between">
+                            <span>Tipo</span>
+                            <span className="capitalize text-foreground">{ordem.tipo_op}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <StatusBadge status="pre_programacao" className="text-[10px] px-1.5 py-0" />
+
+                      {/* Ações secundárias */}
+                      <div className="flex gap-1 pt-1 border-t border-black/5 dark:border-white/10">
+                        <button
+                          onClick={() => setOrdemEditar(ordem as any)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                          title="Editar"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setOrdemExcluir(ordem)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Excluir
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
 
-              <StatusBadge status="pre_programacao" className="text-[11px] self-start" />
-
-              {/* Ações */}
-              <div className="flex gap-1.5 pt-1 mt-auto border-t border-black/5 dark:border-white/10">
-                <Button
-                  size="sm"
-                  className="flex-1 h-7 text-xs gap-1"
-                  onClick={() => { setOrdemProgramar(ordem); setDataProg(''); setLinha(''); setBalanca(''); }}
-                >
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Programar
-                </Button>
-                <button
-                  onClick={() => setOrdemEditar(ordem as any)}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-                  title="Editar"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setOrdemExcluir(ordem)}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                  title="Excluir"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
