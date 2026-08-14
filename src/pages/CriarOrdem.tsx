@@ -655,18 +655,18 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                               {ac.data_retirada.split('-').reverse().join('/')}
                             </span>
                           </div>
-                          {/* Linha 2: lote da OP + quantidade + impacto em % */}
+                          {/* Linha 2: lote da OP + quantidade + % a mais */}
                           {ac.acerto_lote && (
                             <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline text-amber-600 dark:text-amber-500">
                               <span>Lote {ac.acerto_lote}</span>
                               {ac.op_quantidade && (
                                 <span>(OP de {formatKg(ac.op_quantidade)} kg)</span>
                               )}
-                              {ac.pct_base !== null && ac.pct_real !== null ? (
-                                <span className="font-mono">
-                                  · {ac.pct_base.toFixed(2)}% previsto → <strong className="text-amber-700 dark:text-amber-300">{ac.pct_real.toFixed(2)}%</strong> real
+                              {ac.kg_base !== null && ac.kg_base > 0 ? (
+                                <span>
+                                  · adicionado <strong className="text-amber-700 dark:text-amber-300">+{((ac.quantidade_kg / ac.kg_base) * 100).toFixed(2)}%</strong> a mais deste item
                                 </span>
-                              ) : ac.na_formula === false && ac.op_quantidade ? (
+                              ) : !ac.na_formula && ac.op_quantidade ? (
                                 <span className="italic text-muted-foreground">não consta na fórmula base</span>
                               ) : null}
                             </div>

@@ -1010,28 +1010,26 @@ export default function ConsumoMP({ perfilNome }: Props) {
                       );
 
                       const pct_base = acertoFormulaItem.percentual;
-                      if (!podeCalc) return (
+                      const kg_base = opQtd ? (pct_base / 100) * opQtd : 0;
+
+                      if (!podeCalc || kg_base <= 0) return (
                         <>
                           {linhaOp}
-                          <p className="text-xs text-amber-700 dark:text-amber-300">
-                            Previsto na fórmula: <strong>{pct_base.toFixed(2)}%</strong>
-                            {opQtd ? <> ({formatKg((pct_base / 100) * opQtd)} kg)</> : null}
-                          </p>
+                          {pct_base > 0 && opQtd && (
+                            <p className="text-xs text-amber-700 dark:text-amber-300">
+                              Previsto na fórmula: <strong>{pct_base.toFixed(2)}%</strong> ({formatKg(kg_base)} kg)
+                            </p>
+                          )}
                         </>
                       );
 
-                      const kg_base = (pct_base / 100) * opQtd!;
-                      const kg_real = kg_base + qtdAcerto;
-                      const pct_real = (kg_real / opQtd!) * 100;
+                      const pct_a_mais = (qtdAcerto / kg_base) * 100;
                       return (
                         <>
                           {linhaOp}
                           <p className="text-xs text-amber-700 dark:text-amber-300">
-                            <span className="font-mono">{pct_base.toFixed(2)}%</span> previsto ({formatKg(kg_base)} kg)
-                            {' → '}
-                            <span className="font-mono font-semibold">{pct_real.toFixed(2)}%</span> real ({formatKg(kg_real)} kg)
-                            {' · '}
-                            <span className="font-semibold text-amber-600 dark:text-amber-400">+{formatKg(qtdAcerto)} kg</span>
+                            adicionado{' '}
+                            <strong>+{pct_a_mais.toFixed(2)}%</strong> a mais deste item
                           </p>
                         </>
                       );
