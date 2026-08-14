@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil, Save, BookOpen, Eye, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -283,9 +284,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
         .from('ordens')
         .select('id, lote, produto, formula_id, status')
         .neq('status', 'concluido')
-        .ilike('lote', `%${acertoLoteBusca}%`)
+        .or(`lote.ilike.%${acertoLoteBusca}%,produto.ilike.%${acertoLoteBusca}%`)
         .order('criado_em', { ascending: false })
-        .limit(10);
+        .limit(15);
       setAcertoOpSugestoes((rows ?? []) as OrdemBusca[]);
       setShowAcertoSugestoes(true);
     }, 250);
@@ -860,33 +861,28 @@ export default function ConsumoMP({ perfilNome }: Props) {
 
               {/* É acerto? toggle */}
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEhAcerto((v) => !v);
-                    setAcertoLoteBusca('');
-                    setAcertoOpSugestoes([]);
-                    setAcertoOpSelecionada(null);
-                  }}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors',
-                    ehAcerto
-                      ? 'bg-amber-50 border-amber-400 text-amber-700 dark:bg-amber-900/30 dark:border-amber-500 dark:text-amber-300'
-                      : 'bg-background border-input text-muted-foreground hover:bg-muted',
-                  )}
-                >
-                  <Wrench className="h-3.5 w-3.5" />
-                  É acerto de material?
-                  <span className={cn(
-                    'ml-1 inline-block h-4 w-7 rounded-full transition-colors relative',
-                    ehAcerto ? 'bg-amber-500' : 'bg-muted-foreground/30',
-                  )}>
-                    <span className={cn(
-                      'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform',
-                      ehAcerto ? 'translate-x-3.5' : 'translate-x-0.5',
-                    )} />
+                <div className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-md border transition-colors',
+                  ehAcerto
+                    ? 'bg-amber-50 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700'
+                    : 'bg-background border-input',
+                )}>
+                  <Wrench className={cn('h-4 w-4 shrink-0', ehAcerto ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')} />
+                  <span className={cn('flex-1 text-sm font-medium', ehAcerto ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
+                    É acerto de material?
                   </span>
-                </button>
+                  <Switch
+                    checked={ehAcerto}
+                    onCheckedChange={(checked) => {
+                      setEhAcerto(checked);
+                      if (!checked) {
+                        setAcertoLoteBusca('');
+                        setAcertoOpSugestoes([]);
+                        setAcertoOpSelecionada(null);
+                      }
+                    }}
+                  />
+                </div>
 
                 {ehAcerto && (
                   <div className="space-y-1.5 relative">
@@ -896,7 +892,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
-                        placeholder="Buscar por lote da OP..."
+                        placeholder="Buscar por lote ou nome do produto…"
                         value={acertoOpSelecionada
                           ? `Lote ${acertoOpSelecionada.lote} – ${acertoOpSelecionada.produto}`
                           : acertoLoteBusca}
@@ -906,7 +902,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                         }}
                         onFocus={() => { if (acertoLoteBusca.length >= 1 && !acertoOpSelecionada) setShowAcertoSugestoes(true); }}
                         onBlur={() => setTimeout(() => setShowAcertoSugestoes(false), 150)}
-                        className="pl-8 pr-8 border-amber-300 focus:ring-amber-400"
+                        className="pl-8 pr-8 border-amber-300 focus-visible:ring-amber-400"
                       />
                       {(acertoLoteBusca || acertoOpSelecionada) && (
                         <button
@@ -922,12 +918,12 @@ export default function ConsumoMP({ perfilNome }: Props) {
                         {acertoOpSugestoes.map(op => (
                           <button
                             key={op.id}
-                            className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { setAcertoOpSelecionada(op); setAcertoLoteBusca(''); setShowAcertoSugestoes(false); }}
                           >
-                            <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">Lote {op.lote}</span>
-                            <span className="leading-tight">{op.produto}</span>
+                            <span className="font-mono text-xs text-muted-foreground shrink-0">Lote {op.lote}</span>
+                            <span className="flex-1 min-w-0 truncate">{op.produto}</span>
                             <StatusBadge status={op.status} className="ml-auto shrink-0 text-[10px]" />
                           </button>
                         ))}
@@ -935,7 +931,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     )}
                     {showAcertoSugestoes && acertoLoteBusca.length >= 1 && acertoOpSugestoes.length === 0 && (
                       <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
-                        Nenhuma OP encontrada para o lote "{acertoLoteBusca}"
+                        Nenhuma OP encontrada para "{acertoLoteBusca}"
                       </div>
                     )}
                     {acertoOpSelecionada && (
