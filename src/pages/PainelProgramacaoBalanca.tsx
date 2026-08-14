@@ -175,7 +175,7 @@ function SortableCard({
     'bg-gray-400';
 
   const cardBorderClass =
-    atrasado         ? 'border-red-400' :
+    atrasado         ? 'border-2 border-red-600 dark:border-red-500 bg-red-50/[.05] dark:bg-red-950/20 shadow-[0_0_8px_2px_rgba(220,38,38,0.22)]' :
     ordem.status === 'em_pesagem' ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-900/20' :
     'border-border';
 
