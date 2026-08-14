@@ -30,6 +30,15 @@ interface SdrAlerta {
   criado_em: string;
 }
 
+interface AcertoAnterior {
+  id: string;
+  materia_prima: string;
+  quantidade_kg: number;
+  observacao: string | null;
+  acerto_lote: string | null;
+  data_retirada: string;
+}
+
 function calcProducaoSdr(sdr: SdrAlerta): number | null {
   const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_material;
   const pct = sdr.percentual_reaproveitado;
@@ -83,6 +92,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [comparator, setComparator] = useState<ResultadoComparacao | null>(null);
   const [comparatorLoading, setComparatorLoading] = useState(false);
   const [sdrsAlerta, setSdrsAlerta] = useState<SdrAlerta[]>([]);
+  const [acertosAnteriores, setAcertosAnteriores] = useState<AcertoAnterior[]>([]);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade, setItens } = useFormula(formulaId, tamanhoBatelada);
   const [itensSdrId, setItensSdrId] = useState<string | null>(null);
@@ -135,6 +145,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setComparator(null);
     setComparatorLoading(false);
     setSdrsAlerta([]);
+    setAcertosAnteriores([]);
     setItensSdrId(null);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
@@ -261,6 +272,18 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       .then(({ data }: any) => setSdrsAlerta(data ?? []));
   }, [formulaId, loteEncontrado]);
 
+  useEffect(() => {
+    if (!formulaId || loteEncontrado !== true) { setAcertosAnteriores([]); return; }
+    (supabase as any)
+      .from('consumo_mp')
+      .select('id, materia_prima, quantidade_kg, observacao, acerto_lote, data_retirada')
+      .eq('eh_acerto', true)
+      .eq('acerto_formula_id', formulaId)
+      .order('data_retirada', { ascending: false })
+      .limit(20)
+      .then(({ data }: any) => setAcertosAnteriores(data ?? []));
+  }, [formulaId, loteEncontrado]);
+
   const onSubmit = async (values: OrdemFormValues) => {
     setSaving(true);
 
@@ -340,6 +363,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setTipoOp('venda');
     setOrientacoes('');
     setDataEmissao(new Date().toISOString().split("T")[0]);
+    setAcertosAnteriores([]);
   };
 
   const lotesFiltrados = lotesDisponiveis.filter((l) =>
@@ -526,6 +550,43 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Alerta: acertos de material registrados para esta fórmula ── */}
+                {acertosAnteriores.length > 0 && (
+                  <div className="rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2.5 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        Acerto{acertosAnteriores.length > 1 ? 's' : ''} de material registrado{acertosAnteriores.length > 1 ? 's' : ''} para este produto
+                      </p>
+                    </div>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      {acertosAnteriores.length === 1
+                        ? 'Houve 1 acerto de material para esta fórmula.'
+                        : `Houve ${acertosAnteriores.length} acertos de material para esta fórmula.`
+                      } Verifique se há saldo a descontar.
+                    </p>
+                    <div className="space-y-1">
+                      {acertosAnteriores.map((ac) => (
+                        <div key={ac.id} className="rounded border border-amber-300 dark:border-amber-700 bg-amber-100/70 dark:bg-amber-900/30 px-2 py-1.5 text-xs">
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 items-baseline">
+                            <span className="font-semibold text-amber-900 dark:text-amber-200">{ac.materia_prima}</span>
+                            <span className="text-amber-700 dark:text-amber-400">{formatKg(ac.quantidade_kg)} kg</span>
+                            {ac.acerto_lote && (
+                              <span className="text-amber-600 dark:text-amber-500">Lote {ac.acerto_lote}</span>
+                            )}
+                            <span className="text-amber-500 dark:text-amber-600 ml-auto">
+                              {ac.data_retirada.split('-').reverse().join('/')}
+                            </span>
+                          </div>
+                          {ac.observacao && (
+                            <p className="mt-0.5 text-amber-600 dark:text-amber-500 italic">{ac.observacao}</p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

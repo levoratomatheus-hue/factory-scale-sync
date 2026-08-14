@@ -10,8 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil, Save, BookOpen, Eye } from 'lucide-react';
+import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil, Save, BookOpen, Eye, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { StatusBadge } from '@/components/StatusBadge';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,17 @@ interface ConsumoMpRow {
   retirado_por: string;
   criado_em: string;
   setor: Setor | null;
+  eh_acerto?: boolean;
+  acerto_lote?: string | null;
+  acerto_formula_id?: string | null;
+}
+
+interface OrdemBusca {
+  id: string;
+  lote: string;
+  produto: string;
+  formula_id: string | null;
+  status: string;
 }
 
 interface TotalPorMp {
@@ -190,6 +202,14 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [retiradas, setRetiradas] = useState<ConsumoMpRow[]>([]);
   const [carregandoRetiradas, setCarregandoRetiradas] = useState(false);
+  // ─── Acerto ────────────────────────────────────────────────────────────────
+  const [ehAcerto, setEhAcerto] = useState(false);
+  const [acertoLoteBusca, setAcertoLoteBusca] = useState('');
+  const [acertoOpSugestoes, setAcertoOpSugestoes] = useState<OrdemBusca[]>([]);
+  const [showAcertoSugestoes, setShowAcertoSugestoes] = useState(false);
+  const [acertoOpSelecionada, setAcertoOpSelecionada] = useState<OrdemBusca | null>(null);
+  const acertoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const buscaRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -254,6 +274,24 @@ export default function ConsumoMP({ perfilNome }: Props) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [busca]);
 
+  // ── Autocomplete OP acerto ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (acertoDebounceRef.current) clearTimeout(acertoDebounceRef.current);
+    if (acertoLoteBusca.length < 1) { setAcertoOpSugestoes([]); setShowAcertoSugestoes(false); return; }
+    acertoDebounceRef.current = setTimeout(async () => {
+      const { data: rows } = await supabase
+        .from('ordens')
+        .select('id, lote, produto, formula_id, status')
+        .neq('status', 'concluido')
+        .ilike('lote', `%${acertoLoteBusca}%`)
+        .order('criado_em', { ascending: false })
+        .limit(10);
+      setAcertoOpSugestoes((rows ?? []) as OrdemBusca[]);
+      setShowAcertoSugestoes(true);
+    }, 250);
+    return () => { if (acertoDebounceRef.current) clearTimeout(acertoDebounceRef.current); };
+  }, [acertoLoteBusca]);
+
   // ── Autocomplete (edit dialog) ──────────────────────────────────────────────
   useEffect(() => {
     if (editDebounceRef.current) clearTimeout(editDebounceRef.current);
@@ -304,6 +342,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
     if (!quantidade || isNaN(qtd) || qtd <= 0) { toast({ title: 'Informe uma quantidade válida (> 0)', variant: 'destructive' }); return; }
     if (!data) { toast({ title: 'Informe a data', variant: 'destructive' }); return; }
 
+    if (ehAcerto && !acertoOpSelecionada) {
+      toast({ title: 'Selecione a OP que está sendo acertada', variant: 'destructive' });
+      return;
+    }
+
     setSalvando(true);
     const { error } = await (supabase as any).from('consumo_mp').insert({
       cod_mp_excel: mpSelecionada.cod_excel,
@@ -313,6 +356,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
       observacao: observacao.trim() || null,
       retirado_por: perfilNome,
       setor,
+      eh_acerto: ehAcerto,
+      acerto_lote: ehAcerto ? acertoOpSelecionada!.lote : null,
+      acerto_formula_id: ehAcerto ? acertoOpSelecionada!.formula_id : null,
     });
     setSalvando(false);
 
@@ -329,6 +375,10 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setObservacao('');
     setSugestoes([]);
     setShowSugestoes(false);
+    setEhAcerto(false);
+    setAcertoLoteBusca('');
+    setAcertoOpSugestoes([]);
+    setAcertoOpSelecionada(null);
     fetchRetiradas();
     setTimeout(() => buscaRef.current?.focus(), 100);
   };
@@ -806,6 +856,95 @@ export default function ConsumoMP({ perfilNome }: Props) {
                   onChange={e => setObservacao(e.target.value)}
                   rows={2}
                 />
+              </div>
+
+              {/* É acerto? toggle */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEhAcerto((v) => !v);
+                    setAcertoLoteBusca('');
+                    setAcertoOpSugestoes([]);
+                    setAcertoOpSelecionada(null);
+                  }}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors',
+                    ehAcerto
+                      ? 'bg-amber-50 border-amber-400 text-amber-700 dark:bg-amber-900/30 dark:border-amber-500 dark:text-amber-300'
+                      : 'bg-background border-input text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  É acerto de material?
+                  <span className={cn(
+                    'ml-1 inline-block h-4 w-7 rounded-full transition-colors relative',
+                    ehAcerto ? 'bg-amber-500' : 'bg-muted-foreground/30',
+                  )}>
+                    <span className={cn(
+                      'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform',
+                      ehAcerto ? 'translate-x-3.5' : 'translate-x-0.5',
+                    )} />
+                  </span>
+                </button>
+
+                {ehAcerto && (
+                  <div className="space-y-1.5 relative">
+                    <Label className="text-sm text-amber-700 dark:text-amber-300">
+                      OP que está sendo acertada *
+                    </Label>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="Buscar por lote da OP..."
+                        value={acertoOpSelecionada
+                          ? `Lote ${acertoOpSelecionada.lote} – ${acertoOpSelecionada.produto}`
+                          : acertoLoteBusca}
+                        onChange={e => {
+                          if (acertoOpSelecionada) setAcertoOpSelecionada(null);
+                          setAcertoLoteBusca(e.target.value);
+                        }}
+                        onFocus={() => { if (acertoLoteBusca.length >= 1 && !acertoOpSelecionada) setShowAcertoSugestoes(true); }}
+                        onBlur={() => setTimeout(() => setShowAcertoSugestoes(false), 150)}
+                        className="pl-8 pr-8 border-amber-300 focus:ring-amber-400"
+                      />
+                      {(acertoLoteBusca || acertoOpSelecionada) && (
+                        <button
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => { setAcertoLoteBusca(''); setAcertoOpSelecionada(null); setAcertoOpSugestoes([]); setShowAcertoSugestoes(false); }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {showAcertoSugestoes && acertoOpSugestoes.length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                        {acertoOpSugestoes.map(op => (
+                          <button
+                            key={op.id}
+                            className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { setAcertoOpSelecionada(op); setAcertoLoteBusca(''); setShowAcertoSugestoes(false); }}
+                          >
+                            <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">Lote {op.lote}</span>
+                            <span className="leading-tight">{op.produto}</span>
+                            <StatusBadge status={op.status} className="ml-auto shrink-0 text-[10px]" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showAcertoSugestoes && acertoLoteBusca.length >= 1 && acertoOpSugestoes.length === 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
+                        Nenhuma OP encontrada para o lote "{acertoLoteBusca}"
+                      </div>
+                    )}
+                    {acertoOpSelecionada && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Acerto vinculado ao lote <strong>{acertoOpSelecionada.lote}</strong> — {acertoOpSelecionada.produto}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Button onClick={handleRegistrar} disabled={salvando} className="w-full sm:w-auto">
