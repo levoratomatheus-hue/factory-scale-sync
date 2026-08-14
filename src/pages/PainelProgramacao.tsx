@@ -372,10 +372,13 @@ const SortableCard = memo(function SortableCard({
   );
   const atrasado = du > 7;
 
+  // Tom do card concluído — ajuste aqui se precisar calibrar o verde
+  const CONCLUIDO_BG = 'border-green-400 bg-green-100/80 dark:bg-green-900/40';
+
   // Borda colorida por status — igual ao padrão do Comercial
   const cardBorderClass =
-    ordem.motivo_reprovacao                                          ? 'border-red-300 bg-red-50/60 dark:bg-red-900/20'       :
-    ordem.status === 'concluido'                                     ? 'border-green-300 bg-green-50/60 dark:bg-green-900/20' :
+    ordem.motivo_reprovacao                                          ? 'border-red-300 bg-red-50/60 dark:bg-red-900/20' :
+    ordem.status === 'concluido'                                     ? CONCLUIDO_BG :
     atrasado                                                         ? 'border-red-400'                                       :
     ordem.programacao_confirmada                                     ? 'border-green-400' :
     ordem.status === 'em_linha'                                      ? 'border-blue-300 bg-blue-50/50 dark:bg-blue-900/20'    :
