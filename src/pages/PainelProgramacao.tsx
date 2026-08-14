@@ -401,28 +401,28 @@ const SortableCard = memo(function SortableCard({
       className={cn('rounded-xl border bg-card select-none', cardBorderClass)}
     >
       {/* ── Cabeçalho — sempre visível ─────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        {/* Grip */}
+      <div className="flex items-start gap-1.5 px-3 py-2.5">
+        {/* Grip — estreito para não empurrar o conteúdo */}
         <button
           {...attributes}
           {...listeners}
           onClick={(e) => e.stopPropagation()}
-          className="text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+          className="mt-0.5 text-muted-foreground/30 hover:text-muted-foreground/60 cursor-grab active:cursor-grabbing shrink-0"
         >
-          <GripVertical className="h-4 w-4" />
+          <GripVertical className="h-4 w-3" />
         </button>
 
-        <span className={cn('mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 self-start', dotClass)} />
+        <span className={cn('mt-1 h-2 w-2 rounded-full shrink-0', dotClass)} />
 
         <div className="flex-1 min-w-0">
-          <p className={cn('text-xs font-semibold leading-snug', isOpen ? 'break-words' : 'truncate')}>{ordem.produto}</p>
+          <p className="text-xs font-semibold leading-snug break-words">{ordem.produto}</p>
           <p className="text-xs font-bold tabular-nums text-muted-foreground mt-0.5">{formatKg(ordem.quantidade)} kg</p>
         </div>
 
         {isMobile && (
           <button
             onClick={(e) => { e.stopPropagation(); setAcoesAbertas((v) => !v); setIsOpen(true); }}
-            className="shrink-0 p-1 text-muted-foreground/60 active:text-foreground"
+            className="mt-0.5 shrink-0 p-1 text-muted-foreground/60 active:text-foreground"
             title="Ações"
           >
             <MoreVertical className="h-4 w-4" />
@@ -431,10 +431,10 @@ const SortableCard = memo(function SortableCard({
 
         <button
           onClick={(e) => { e.stopPropagation(); setIsOpen((v) => !v); }}
-          className="shrink-0 text-muted-foreground hover:text-foreground"
+          className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
           aria-expanded={isOpen}
         >
-          <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform duration-200 self-center', isOpen && 'rotate-180')} />
+          <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform duration-200', isOpen && 'rotate-180')} />
         </button>
       </div>
 
