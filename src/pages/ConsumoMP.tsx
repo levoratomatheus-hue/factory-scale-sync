@@ -48,6 +48,13 @@ interface OrdemBusca {
   produto: string;
   formula_id: string | null;
   status: string;
+  quantidade: number | null;
+}
+
+interface FormulaItemMatch {
+  cod_mp: string;
+  materia_prima: string;
+  percentual: number;
 }
 
 interface TotalPorMp {
@@ -209,6 +216,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [acertoOpSugestoes, setAcertoOpSugestoes] = useState<OrdemBusca[]>([]);
   const [showAcertoSugestoes, setShowAcertoSugestoes] = useState(false);
   const [acertoOpSelecionada, setAcertoOpSelecionada] = useState<OrdemBusca | null>(null);
+  // null = nada selecionado ainda; 'nao_encontrado' = buscou mas não achou na fórmula
+  const [acertoFormulaItem, setAcertoFormulaItem] = useState<FormulaItemMatch | null | 'nao_encontrado'>(null);
   const acertoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const buscaRef = useRef<HTMLInputElement>(null);
@@ -282,7 +291,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     acertoDebounceRef.current = setTimeout(async () => {
       const { data: rows } = await supabase
         .from('ordens')
-        .select('id, lote, produto, formula_id, status')
+        .select('id, lote, produto, formula_id, status, quantidade')
         .neq('status', 'concluido')
         .or(`lote.ilike.%${acertoLoteBusca}%,produto.ilike.%${acertoLoteBusca}%`)
         .order('criado_em', { ascending: false })
@@ -292,6 +301,46 @@ export default function ConsumoMP({ perfilNome }: Props) {
     }, 250);
     return () => { if (acertoDebounceRef.current) clearTimeout(acertoDebounceRef.current); };
   }, [acertoLoteBusca]);
+
+  // ── Buscar item da fórmula base quando OP + MP estiverem selecionados ─────────
+  useEffect(() => {
+    if (!acertoOpSelecionada?.formula_id || !mpSelecionada) {
+      setAcertoFormulaItem(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [{ data: itens }, { data: deparaRow }] = await Promise.all([
+        supabase
+          .from('formulas')
+          .select('cod_mp, materia_prima, percentual')
+          .eq('formula_id', acertoOpSelecionada.formula_id!),
+        supabase
+          .from('mp_depara')
+          .select('cod_tid')
+          .eq('cod_excel', mpSelecionada.cod_excel)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+
+      const formulaItens = (itens ?? []) as FormulaItemMatch[];
+      const cod_tid = (deparaRow as any)?.cod_tid ?? null;
+
+      // Tentar por cod_mp (TID) primeiro, depois por nome
+      let matched: FormulaItemMatch | undefined;
+      if (cod_tid) matched = formulaItens.find(i => i.cod_mp === cod_tid);
+      if (!matched) {
+        const desc = mpSelecionada.descricao.toLowerCase().trim();
+        matched = formulaItens.find(i => i.materia_prima.toLowerCase().trim() === desc)
+               ?? formulaItens.find(i => {
+                 const fm = i.materia_prima.toLowerCase().trim();
+                 return fm.includes(desc.slice(0, 8)) || desc.includes(fm.slice(0, 8));
+               });
+      }
+      setAcertoFormulaItem(matched ?? 'nao_encontrado');
+    })();
+    return () => { cancelled = true; };
+  }, [acertoOpSelecionada, mpSelecionada]);
 
   // ── Autocomplete (edit dialog) ──────────────────────────────────────────────
   useEffect(() => {
@@ -380,6 +429,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setAcertoLoteBusca('');
     setAcertoOpSugestoes([]);
     setAcertoOpSelecionada(null);
+    setAcertoFormulaItem(null);
     fetchRetiradas();
     setTimeout(() => buscaRef.current?.focus(), 100);
   };
@@ -879,6 +929,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                         setAcertoLoteBusca('');
                         setAcertoOpSugestoes([]);
                         setAcertoOpSelecionada(null);
+                        setAcertoFormulaItem(null);
                       }
                     }}
                   />
@@ -934,11 +985,57 @@ export default function ConsumoMP({ perfilNome }: Props) {
                         Nenhuma OP encontrada para "{acertoLoteBusca}"
                       </div>
                     )}
-                    {acertoOpSelecionada && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Acerto vinculado ao lote <strong>{acertoOpSelecionada.lote}</strong> — {acertoOpSelecionada.produto}
-                      </p>
-                    )}
+                    {acertoOpSelecionada && (() => {
+                      const opQtd = acertoOpSelecionada.quantidade;
+                      const qtdAcerto = parseFloat(quantidade.replace(',', '.'));
+                      const podeCalc = !!opQtd && opQtd > 0 && !isNaN(qtdAcerto) && qtdAcerto > 0;
+
+                      // linha base: lote + produto + quantidade da OP
+                      const linhaOp = (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Acerto vinculado ao lote <strong>{acertoOpSelecionada.lote}</strong> — {acertoOpSelecionada.produto}
+                          {opQtd ? <span className="text-amber-500/80"> (OP de {formatKg(opQtd)} kg)</span> : null}
+                        </p>
+                      );
+
+                      if (!mpSelecionada || acertoFormulaItem === null) return linhaOp;
+
+                      if (acertoFormulaItem === 'nao_encontrado') return (
+                        <>
+                          {linhaOp}
+                          <p className="text-xs text-muted-foreground">
+                            {mpSelecionada.descricao} não consta na fórmula base — o acerto será registrado sem impacto em %.
+                          </p>
+                        </>
+                      );
+
+                      const pct_base = acertoFormulaItem.percentual;
+                      if (!podeCalc) return (
+                        <>
+                          {linhaOp}
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Previsto na fórmula: <strong>{pct_base.toFixed(2)}%</strong>
+                            {opQtd ? <> ({formatKg((pct_base / 100) * opQtd)} kg)</> : null}
+                          </p>
+                        </>
+                      );
+
+                      const kg_base = (pct_base / 100) * opQtd!;
+                      const kg_real = kg_base + qtdAcerto;
+                      const pct_real = (kg_real / opQtd!) * 100;
+                      return (
+                        <>
+                          {linhaOp}
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            <span className="font-mono">{pct_base.toFixed(2)}%</span> previsto ({formatKg(kg_base)} kg)
+                            {' → '}
+                            <span className="font-mono font-semibold">{pct_real.toFixed(2)}%</span> real ({formatKg(kg_real)} kg)
+                            {' · '}
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">+{formatKg(qtdAcerto)} kg</span>
+                          </p>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

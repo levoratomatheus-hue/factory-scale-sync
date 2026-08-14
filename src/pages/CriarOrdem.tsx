@@ -30,13 +30,21 @@ interface SdrAlerta {
   criado_em: string;
 }
 
-interface AcertoAnterior {
+interface AcertoEnriquecido {
   id: string;
+  cod_mp_excel: string;
   materia_prima: string;
   quantidade_kg: number;
   observacao: string | null;
   acerto_lote: string | null;
   data_retirada: string;
+  // enriquecimento calculado
+  op_quantidade: number | null;
+  na_formula: boolean;
+  pct_base: number | null;
+  kg_base: number | null;
+  pct_real: number | null;
+  kg_real: number | null;
 }
 
 function calcProducaoSdr(sdr: SdrAlerta): number | null {
@@ -92,7 +100,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [comparator, setComparator] = useState<ResultadoComparacao | null>(null);
   const [comparatorLoading, setComparatorLoading] = useState(false);
   const [sdrsAlerta, setSdrsAlerta] = useState<SdrAlerta[]>([]);
-  const [acertosAnteriores, setAcertosAnteriores] = useState<AcertoAnterior[]>([]);
+  const [acertosEnriquecidos, setAcertosEnriquecidos] = useState<AcertoEnriquecido[]>([]);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade, setItens } = useFormula(formulaId, tamanhoBatelada);
   const [itensSdrId, setItensSdrId] = useState<string | null>(null);
@@ -145,7 +153,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setComparator(null);
     setComparatorLoading(false);
     setSdrsAlerta([]);
-    setAcertosAnteriores([]);
+    setAcertosEnriquecidos([]);
     setItensSdrId(null);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
@@ -273,15 +281,83 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   }, [formulaId, loteEncontrado]);
 
   useEffect(() => {
-    if (!formulaId || loteEncontrado !== true) { setAcertosAnteriores([]); return; }
-    (supabase as any)
-      .from('consumo_mp')
-      .select('id, materia_prima, quantidade_kg, observacao, acerto_lote, data_retirada')
-      .eq('eh_acerto', true)
-      .eq('acerto_formula_id', formulaId)
-      .order('data_retirada', { ascending: false })
-      .limit(20)
-      .then(({ data }: any) => setAcertosAnteriores(data ?? []));
+    if (!formulaId || loteEncontrado !== true) { setAcertosEnriquecidos([]); return; }
+    let cancelled = false;
+    (async () => {
+      // 1. Acertos para esta fórmula
+      const { data: acertosRaw } = await (supabase as any)
+        .from('consumo_mp')
+        .select('id, cod_mp_excel, materia_prima, quantidade_kg, observacao, acerto_lote, data_retirada')
+        .eq('eh_acerto', true)
+        .eq('acerto_formula_id', formulaId)
+        .order('data_retirada', { ascending: false })
+        .limit(20);
+
+      if (cancelled) return;
+      if (!acertosRaw || acertosRaw.length === 0) { setAcertosEnriquecidos([]); return; }
+
+      // 2. Itens da fórmula base (não ordens_formula)
+      const { data: formulaItensRaw } = await supabase
+        .from('formulas')
+        .select('cod_mp, materia_prima, percentual')
+        .eq('formula_id', formulaId);
+      if (cancelled) return;
+      const formulaItens = (formulaItensRaw ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
+
+      // 3. mp_depara para todos os cod_mp_excel únicos → cod_tid
+      const codsExcel = [...new Set((acertosRaw as any[]).map((a: any) => a.cod_mp_excel).filter(Boolean))];
+      const { data: deparaRows } = await supabase
+        .from('mp_depara')
+        .select('cod_excel, cod_tid')
+        .in('cod_excel', codsExcel);
+      if (cancelled) return;
+      const deparaMap = new Map<string, string | null>();
+      for (const r of (deparaRows ?? [])) deparaMap.set(r.cod_excel, (r as any).cod_tid ?? null);
+
+      // 4. Quantidade das OPs pelos lotes dos acertos
+      const lotes = [...new Set((acertosRaw as any[]).map((a: any) => a.acerto_lote).filter(Boolean))];
+      const opQtdMap = new Map<string, number>();
+      if (lotes.length > 0) {
+        const { data: ordensRows } = await supabase
+          .from('ordens')
+          .select('lote, quantidade')
+          .in('lote', lotes);
+        if (cancelled) return;
+        for (const o of (ordensRows ?? [])) opQtdMap.set(String(o.lote), (o as any).quantidade);
+      }
+
+      // 5. Enriquecer cada acerto
+      const enriched: AcertoEnriquecido[] = (acertosRaw as any[]).map((ac) => {
+        const cod_tid = deparaMap.get(ac.cod_mp_excel) ?? null;
+
+        // Tentar casar por cod_mp (TID), depois por nome
+        let matched = cod_tid ? formulaItens.find(i => i.cod_mp === cod_tid) : undefined;
+        if (!matched) {
+          const desc = (ac.materia_prima as string).toLowerCase().trim();
+          matched = formulaItens.find(i => i.materia_prima.toLowerCase().trim() === desc)
+                 ?? formulaItens.find(i => {
+                   const fm = i.materia_prima.toLowerCase().trim();
+                   return fm.includes(desc.slice(0, 8)) || desc.includes(fm.slice(0, 8));
+                 });
+        }
+
+        const op_quantidade = ac.acerto_lote ? opQtdMap.get(String(ac.acerto_lote)) ?? null : null;
+        const podeCalc = matched && op_quantidade && op_quantidade > 0;
+
+        if (!podeCalc) {
+          return { ...ac, op_quantidade, na_formula: !!matched, pct_base: null, kg_base: null, pct_real: null, kg_real: null };
+        }
+
+        const pct_base = matched!.percentual;
+        const kg_base = (pct_base / 100) * op_quantidade!;
+        const kg_real = kg_base + ac.quantidade_kg;
+        const pct_real = (kg_real / op_quantidade!) * 100;
+        return { ...ac, op_quantidade, na_formula: true, pct_base, kg_base, pct_real, kg_real };
+      });
+
+      if (!cancelled) setAcertosEnriquecidos(enriched);
+    })();
+    return () => { cancelled = true; };
   }, [formulaId, loteEncontrado]);
 
   const onSubmit = async (values: OrdemFormValues) => {
@@ -363,7 +439,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setTipoOp('venda');
     setOrientacoes('');
     setDataEmissao(new Date().toISOString().split("T")[0]);
-    setAcertosAnteriores([]);
+    setAcertosEnriquecidos([]);
   };
 
   const lotesFiltrados = lotesDisponiveis.filter((l) =>
@@ -555,35 +631,48 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                 )}
 
                 {/* ── Alerta: acertos de material registrados para esta fórmula ── */}
-                {acertosAnteriores.length > 0 && (
+                {acertosEnriquecidos.length > 0 && (
                   <div className="rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2.5 space-y-2">
                     <div className="flex items-center gap-1.5">
                       <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                       <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                        Acerto{acertosAnteriores.length > 1 ? 's' : ''} de material registrado{acertosAnteriores.length > 1 ? 's' : ''} para este produto
+                        {acertosEnriquecidos.length === 1
+                          ? '1 acerto de material registrado para este produto'
+                          : `${acertosEnriquecidos.length} acertos de material registrados para este produto`}
                       </p>
                     </div>
                     <p className="text-xs text-amber-700 dark:text-amber-400">
-                      {acertosAnteriores.length === 1
-                        ? 'Houve 1 acerto de material para esta fórmula.'
-                        : `Houve ${acertosAnteriores.length} acertos de material para esta fórmula.`
-                      } Verifique se há saldo a descontar.
+                      Verifique se há saldo a descontar antes de incluir na fórmula desta OP.
                     </p>
-                    <div className="space-y-1">
-                      {acertosAnteriores.map((ac) => (
-                        <div key={ac.id} className="rounded border border-amber-300 dark:border-amber-700 bg-amber-100/70 dark:bg-amber-900/30 px-2 py-1.5 text-xs">
+                    <div className="space-y-1.5">
+                      {acertosEnriquecidos.map((ac) => (
+                        <div key={ac.id} className="rounded border border-amber-300 dark:border-amber-700 bg-amber-100/70 dark:bg-amber-900/30 px-2 py-2 text-xs space-y-1">
+                          {/* Linha 1: material + acerto kg + data */}
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5 items-baseline">
                             <span className="font-semibold text-amber-900 dark:text-amber-200">{ac.materia_prima}</span>
-                            <span className="text-amber-700 dark:text-amber-400">{formatKg(ac.quantidade_kg)} kg</span>
-                            {ac.acerto_lote && (
-                              <span className="text-amber-600 dark:text-amber-500">Lote {ac.acerto_lote}</span>
-                            )}
-                            <span className="text-amber-500 dark:text-amber-600 ml-auto">
+                            <span className="text-amber-700 dark:text-amber-400 font-medium">+{formatKg(ac.quantidade_kg)} kg (acerto)</span>
+                            <span className="text-amber-500 dark:text-amber-600 ml-auto tabular-nums">
                               {ac.data_retirada.split('-').reverse().join('/')}
                             </span>
                           </div>
+                          {/* Linha 2: lote da OP + quantidade + impacto em % */}
+                          {ac.acerto_lote && (
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline text-amber-600 dark:text-amber-500">
+                              <span>Lote {ac.acerto_lote}</span>
+                              {ac.op_quantidade && (
+                                <span>(OP de {formatKg(ac.op_quantidade)} kg)</span>
+                              )}
+                              {ac.pct_base !== null && ac.pct_real !== null ? (
+                                <span className="font-mono">
+                                  · {ac.pct_base.toFixed(2)}% previsto → <strong className="text-amber-700 dark:text-amber-300">{ac.pct_real.toFixed(2)}%</strong> real
+                                </span>
+                              ) : ac.na_formula === false && ac.op_quantidade ? (
+                                <span className="italic text-muted-foreground">não consta na fórmula base</span>
+                              ) : null}
+                            </div>
+                          )}
                           {ac.observacao && (
-                            <p className="mt-0.5 text-amber-600 dark:text-amber-500 italic">{ac.observacao}</p>
+                            <p className="text-amber-600 dark:text-amber-500 italic">{ac.observacao}</p>
                           )}
                         </div>
                       ))}
