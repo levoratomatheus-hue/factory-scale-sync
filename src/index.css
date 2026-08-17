@@ -7,7 +7,7 @@
 @layer base {
   :root {
     color-scheme: light;
-    --background: 220 20% 97%;
+    --background: 33 18% 97%;    /* bege off-white quente — ~#faf9f7 */
     --foreground: 220 25% 10%;
 
     --card: 0 0% 100%;

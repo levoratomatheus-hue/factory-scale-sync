@@ -8,7 +8,7 @@ import type { LinhaMP, OpDetalhe } from "@/hooks/useCompras";
 
 function buildPalette(dark: boolean) {
   return {
-    page:    dark ? "#111827" : "#e8eef5",
+    page:    dark ? "#111827" : "#faf9f7",
     card:    dark ? "#1f2937" : "#ffffff",
     cardAlt: dark ? "#374151" : "#e4ecf4",
     border:  dark ? "#374151" : "#a8b8c8",
