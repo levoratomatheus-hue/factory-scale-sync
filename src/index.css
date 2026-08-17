@@ -51,13 +51,14 @@
 
     /* ── Sidebar ── calibre o tom aqui ───────────────────────────── */
     /* fundo: bege quente claro — ajuste saturação (2ª) e brilho (3ª) */
-    --sidebar-background:         33 28% 95%;    /* bege off-white quente — ~#f6f1ea */
-    --sidebar-foreground:         30 20% 18%;    /* texto: cinza escuro quente */
+    /* fundo: cinza claro levemente quente — ajuste saturação (2ª) p/ mais/menos calidez */
+    --sidebar-background:         33 8% 94%;     /* cinza quase neutro, pontinha quente — ~#f1f0ee */
+    --sidebar-foreground:         30 10% 18%;    /* texto: cinza escuro levemente quente */
     --sidebar-primary:            220 70% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent:             33 24% 88%;    /* hover/ativo — bege um toque mais escuro */
-    --sidebar-accent-foreground:  30 22% 14%;
-    --sidebar-border:             33 20% 82%;    /* divisória sidebar ↔ conteúdo */
+    --sidebar-accent:             33 10% 87%;    /* hover/ativo — um toque mais escuro */
+    --sidebar-accent-foreground:  30 12% 13%;
+    --sidebar-border:             33 8% 80%;     /* divisória sidebar ↔ conteúdo */
     --sidebar-ring:               220 70% 50%;
   }
 }
