@@ -399,6 +399,7 @@ function ModalExcluir({ texto, onConfirmar, onCancelar, excluindo, dark }: {
 
 interface Props {
   perfilNome: string;
+  papel: string;
 }
 
 const FORM_VAZIO: FormState = {
@@ -406,7 +407,8 @@ const FORM_VAZIO: FormState = {
   data_teste: hoje(), lote: "", situacao: "aguardando", motivo: "",
 };
 
-export default function ControleMPTestada({ perfilNome }: Props) {
+export default function ControleMPTestada({ perfilNome, papel }: Props) {
+  const canEdit = papel === 'gestor' || papel === 'desenvolvimento';
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   useEffect(() => {
     const obs = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
@@ -487,12 +489,12 @@ export default function ControleMPTestada({ perfilNome }: Props) {
 
   // ── Stats ────────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
-    total:      registros.length,
-    aprovado:   registros.filter(r => r.situacao === "aprovado").length,
-    reprovado:  registros.filter(r => r.situacao === "reprovado").length,
-    observacao: registros.filter(r => r.situacao === "observacao").length,
-    aguardando: registros.filter(r => r.situacao === "aguardando").length,
-  }), [registros]);
+    total:      filtrado.length,
+    aprovado:   filtrado.filter(r => r.situacao === "aprovado").length,
+    reprovado:  filtrado.filter(r => r.situacao === "reprovado").length,
+    observacao: filtrado.filter(r => r.situacao === "observacao").length,
+    aguardando: filtrado.filter(r => r.situacao === "aguardando").length,
+  }), [filtrado]);
 
   // ── Modal novo/editar ────────────────────────────────────────────────────────
   const [modalAberto, setModalAberto] = useState(false);
@@ -587,17 +589,19 @@ export default function ControleMPTestada({ perfilNome }: Props) {
           >
             <Download size={14} /> Exportar CSV
           </button>
-          <button
-            onClick={abrirNovo}
-            style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "0.4rem 0.9rem", borderRadius: "0.5rem",
-              border: "none", background: "#2563eb",
-              color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600,
-            }}
-          >
-            <Plus size={14} /> Novo teste
-          </button>
+          {canEdit && (
+            <button
+              onClick={abrirNovo}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "0.4rem 0.9rem", borderRadius: "0.5rem",
+                border: "none", background: "#2563eb",
+                color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600,
+              }}
+            >
+              <Plus size={14} /> Novo teste
+            </button>
+          )}
         </div>
       </div>
 
@@ -712,10 +716,12 @@ export default function ControleMPTestada({ perfilNome }: Props) {
                   <Th label="Lote"               col={null}        sortCol={sortCol} sortDir={sortDir} onSort={handleSort} D={D} />
                   <Th label="Situação"           col={null}        sortCol={sortCol} sortDir={sortDir} onSort={handleSort} D={D} style={{ minWidth: 110 }} />
                   <Th label="Motivo"             col={null}        sortCol={sortCol} sortDir={sortDir} onSort={handleSort} D={D} />
-                  <th style={{
-                    padding: "10px 12px", background: D.th,
-                    borderBottom: `1px solid ${D.border}`, width: 72,
-                  }} />
+                  {canEdit && (
+                    <th style={{
+                      padding: "10px 12px", background: D.th,
+                      borderBottom: `1px solid ${D.border}`, width: 72,
+                    }} />
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -747,28 +753,30 @@ export default function ControleMPTestada({ perfilNome }: Props) {
                     <td style={{ padding: "9px 12px", fontSize: 12, color: D.muted, borderBottom: `1px solid ${D.border}`, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.motivo || "—"}
                     </td>
-                    <td style={{ padding: "9px 10px", borderBottom: `1px solid ${D.border}` }}>
-                      <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                        <button
-                          onClick={() => abrirEditar(r)}
-                          title="Editar"
-                          style={{ background: "none", border: "none", cursor: "pointer", color: D.muted, padding: 4, borderRadius: 4 }}
-                          onMouseEnter={e => (e.currentTarget.style.color = "#2563eb")}
-                          onMouseLeave={e => (e.currentTarget.style.color = D.muted)}
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => setExcluindoId(r.id)}
-                          title="Excluir"
-                          style={{ background: "none", border: "none", cursor: "pointer", color: D.muted, padding: 4, borderRadius: 4 }}
-                          onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
-                          onMouseLeave={e => (e.currentTarget.style.color = D.muted)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+                    {canEdit && (
+                      <td style={{ padding: "9px 10px", borderBottom: `1px solid ${D.border}` }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button
+                            onClick={() => abrirEditar(r)}
+                            title="Editar"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: D.muted, padding: 4, borderRadius: 4 }}
+                            onMouseEnter={e => (e.currentTarget.style.color = "#2563eb")}
+                            onMouseLeave={e => (e.currentTarget.style.color = D.muted)}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => setExcluindoId(r.id)}
+                            title="Excluir"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: D.muted, padding: 4, borderRadius: 4 }}
+                            onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
+                            onMouseLeave={e => (e.currentTarget.style.color = D.muted)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
