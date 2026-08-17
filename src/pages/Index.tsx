@@ -683,7 +683,7 @@ export default function Index() {
                   {activeTab === 'compras_previsao'    && <ComprasPrevisao />}
                   {activeTab === 'compras_media_mensal' && <ComprasMediaMensal />}
                   {activeTab === 'comercial'           && <PainelComercial />}
-                  {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} />}
+                  {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -821,7 +821,7 @@ export default function Index() {
                   {activeTab === 'consumo_mp' && <ConsumoMP perfilNome={perfil.nome} />}
                   {activeTab === 'reaproveitamento' && <Reaproveitamento perfilNome={perfil.nome} />}
                   {activeTab === 'analise_reaproveitamento' && <PainelAnaliseReaproveitamento />}
-                  {activeTab === 'mp_testadas' && <ControleMPTestada perfilNome={perfil.nome} />}
+                  {activeTab === 'mp_testadas' && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'controle_cor' && <ControleCor perfilNome={perfil.nome} />}
                 </Suspense>
               </ErrorBoundary>
@@ -1310,7 +1310,7 @@ export default function Index() {
               {mountedTabs.has('mp_testadas') && (
                 <KeepAlive active={activeTab === 'mp_testadas'}>
                   <Suspense fallback={TAB_LOADING}>
-                    <ControleMPTestada perfilNome={perfil.nome} />
+                    <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />
                   </Suspense>
                 </KeepAlive>
               )}
