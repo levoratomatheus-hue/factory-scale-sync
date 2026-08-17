@@ -346,13 +346,13 @@ export default function ControleCor({ perfilNome }: Props) {
   function exportarBusca() {
     if (!resultadosExibidos.length) return;
     const rows: (string | number)[][] = [
-      ["Posição", "Produto", "Fórmula", "L*", "a*", "b*", "ΔE", "ΔL", "Δa", "Δb", "Classificação"],
+      ["Posição", "Produto", "Fórmula", "L*", "a*", "b*", "ΔL", "Δa", "Δb", "ΔE", "Classificação"],
       ...resultadosExibidos.map((r, i) => [
         i + 1, r.produto, r.formula_id ?? "", r.lab_l, r.lab_a, r.lab_b,
-        r.deltaE.toFixed(2),
         (r.deltaL >= 0 ? "+" : "") + r.deltaL.toFixed(2),
         (r.deltaA >= 0 ? "+" : "") + r.deltaA.toFixed(2),
         (r.deltaB >= 0 ? "+" : "") + r.deltaB.toFixed(2),
+        r.deltaE.toFixed(2),
         DELTA_CONFIG[classificarDeltaE(r.deltaE)].label,
       ]),
     ];
@@ -806,7 +806,7 @@ export default function ControleCor({ perfilNome }: Props) {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: D.th }}>
-                        {["#", "Cor", "Referência", "Produto", "Fórmula", "L*", "a*", "b*", "ΔE", "ΔL", "Δa", "Δb", "Classificação"].map((h) => (
+                        {["#", "Cor", "Referência", "Produto", "Fórmula", "L*", "a*", "b*", "ΔL", "Δa", "Δb", "ΔE", "Classificação"].map((h) => (
                           <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, color: D.thText, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
@@ -830,9 +830,6 @@ export default function ControleCor({ perfilNome }: Props) {
                           <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>{r.lab_l.toFixed(2)}</td>
                           <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>{r.lab_a.toFixed(2)}</td>
                           <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>{r.lab_b.toFixed(2)}</td>
-                          <td style={{ padding: "10px 12px", fontFamily: "monospace", fontWeight: 700 }}>
-                            {r.deltaE.toFixed(2)}
-                          </td>
                           <td style={{ padding: "10px 12px", fontFamily: "monospace", color: r.deltaL > 0 ? "#16a34a" : r.deltaL < 0 ? "#dc2626" : D.muted }}>
                             {(r.deltaL >= 0 ? "+" : "") + r.deltaL.toFixed(2)}
                           </td>
@@ -841,6 +838,13 @@ export default function ControleCor({ perfilNome }: Props) {
                           </td>
                           <td style={{ padding: "10px 12px", fontFamily: "monospace", color: r.deltaB > 0 ? "#16a34a" : r.deltaB < 0 ? "#dc2626" : D.muted }}>
                             {(r.deltaB >= 0 ? "+" : "") + r.deltaB.toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px", fontFamily: "monospace", fontWeight: 800, fontSize: 15,
+                            color: dark
+                              ? DELTA_CONFIG[classificarDeltaE(r.deltaE)].darkColor
+                              : DELTA_CONFIG[classificarDeltaE(r.deltaE)].color,
+                          }}>
+                            {r.deltaE.toFixed(2)}
                           </td>
                           <td style={{ padding: "10px 12px" }}>
                             <DeltaBadge de={r.deltaE} dark={dark} />
