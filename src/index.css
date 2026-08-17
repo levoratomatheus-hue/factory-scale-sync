@@ -50,13 +50,14 @@
     --status-line-bg: 25 90% 95%;
 
     /* ── Sidebar ── calibre o tom aqui ───────────────────────────── */
-    --sidebar-background:         216 18% 84%;    /* cinza-azulado médio — mais escuro que a página */
-    --sidebar-foreground:         220 30% 12%;    /* texto principal */
+    /* fundo: warm gray/taupe — ajuste a saturação (2ª coluna) e o brilho (3ª) */
+    --sidebar-background:         33 20% 84%;    /* bege-taupe — ~#e5dbd0 */
+    --sidebar-foreground:         30 25% 16%;    /* texto: cinza escuro quente */
     --sidebar-primary:            220 70% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent:             216 20% 76%;    /* hover / item ativo — mais escuro que o fundo */
-    --sidebar-accent-foreground:  220 30% 10%;
-    --sidebar-border:             216 18% 72%;    /* divisória sidebar ↔ conteúdo */
+    --sidebar-accent:             33 22% 75%;    /* hover/ativo — taupe mais escuro */
+    --sidebar-accent-foreground:  30 28% 12%;
+    --sidebar-border:             33 18% 68%;    /* divisória sidebar ↔ conteúdo */
     --sidebar-ring:               220 70% 50%;
   }
 }
