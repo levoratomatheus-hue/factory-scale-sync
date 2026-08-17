@@ -53,6 +53,9 @@ interface CorFormula {
 
 interface BuscaResult extends CorFormula {
   deltaE: number;
+  deltaL: number;
+  deltaA: number;
+  deltaB: number;
 }
 
 interface FormulaSugestao {
@@ -312,6 +315,9 @@ export default function ControleCor({ perfilNome }: Props) {
     const scored: BuscaResult[] = (data ?? []).map((c: CorFormula) => ({
       ...c,
       deltaE: deltaE2000(ref, { L: c.lab_l, a: c.lab_a, b: c.lab_b }),
+      deltaL: c.lab_l - L,
+      deltaA: c.lab_a - a,
+      deltaB: c.lab_b - b,
     }));
     scored.sort((x, y) => x.deltaE - y.deltaE);
     setResultados(scored);
@@ -340,10 +346,14 @@ export default function ControleCor({ perfilNome }: Props) {
   function exportarBusca() {
     if (!resultadosExibidos.length) return;
     const rows: (string | number)[][] = [
-      ["Posição", "Produto", "Fórmula", "L*", "a*", "b*", "ΔE", "Classificação"],
+      ["Posição", "Produto", "Fórmula", "L*", "a*", "b*", "ΔE", "ΔL", "Δa", "Δb", "Classificação"],
       ...resultadosExibidos.map((r, i) => [
         i + 1, r.produto, r.formula_id ?? "", r.lab_l, r.lab_a, r.lab_b,
-        r.deltaE.toFixed(2), DELTA_CONFIG[classificarDeltaE(r.deltaE)].label,
+        r.deltaE.toFixed(2),
+        (r.deltaL >= 0 ? "+" : "") + r.deltaL.toFixed(2),
+        (r.deltaA >= 0 ? "+" : "") + r.deltaA.toFixed(2),
+        (r.deltaB >= 0 ? "+" : "") + r.deltaB.toFixed(2),
+        DELTA_CONFIG[classificarDeltaE(r.deltaE)].label,
       ]),
     ];
     downloadCsv(rows, "busca_cor.csv");
@@ -796,7 +806,7 @@ export default function ControleCor({ perfilNome }: Props) {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: D.th }}>
-                        {["#", "Cor", "Referência", "Produto", "Fórmula", "L*", "a*", "b*", "ΔE", "Classificação"].map((h) => (
+                        {["#", "Cor", "Referência", "Produto", "Fórmula", "L*", "a*", "b*", "ΔE", "ΔL", "Δa", "Δb", "Classificação"].map((h) => (
                           <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, color: D.thText, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
@@ -822,6 +832,15 @@ export default function ControleCor({ perfilNome }: Props) {
                           <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>{r.lab_b.toFixed(2)}</td>
                           <td style={{ padding: "10px 12px", fontFamily: "monospace", fontWeight: 700 }}>
                             {r.deltaE.toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px", fontFamily: "monospace", color: r.deltaL > 0 ? "#16a34a" : r.deltaL < 0 ? "#dc2626" : D.muted }}>
+                            {(r.deltaL >= 0 ? "+" : "") + r.deltaL.toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px", fontFamily: "monospace", color: r.deltaA > 0 ? "#16a34a" : r.deltaA < 0 ? "#dc2626" : D.muted }}>
+                            {(r.deltaA >= 0 ? "+" : "") + r.deltaA.toFixed(2)}
+                          </td>
+                          <td style={{ padding: "10px 12px", fontFamily: "monospace", color: r.deltaB > 0 ? "#16a34a" : r.deltaB < 0 ? "#dc2626" : D.muted }}>
+                            {(r.deltaB >= 0 ? "+" : "") + r.deltaB.toFixed(2)}
                           </td>
                           <td style={{ padding: "10px 12px" }}>
                             <DeltaBadge de={r.deltaE} dark={dark} />
