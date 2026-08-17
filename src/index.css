@@ -50,13 +50,13 @@
     --status-line-bg: 25 90% 95%;
 
     /* ── Sidebar ── calibre o tom aqui ───────────────────────────── */
-    --sidebar-background:         0 0% 100%;      /* fundo branco — destaca do cinza da página */
+    --sidebar-background:         216 18% 84%;    /* cinza-azulado médio — mais escuro que a página */
     --sidebar-foreground:         220 30% 12%;    /* texto principal */
     --sidebar-primary:            220 70% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent:             220 25% 90%;    /* hover / item ativo */
-    --sidebar-accent-foreground:  220 30% 12%;
-    --sidebar-border:             220 18% 76%;    /* divisória sidebar ↔ conteúdo */
+    --sidebar-accent:             216 20% 76%;    /* hover / item ativo — mais escuro que o fundo */
+    --sidebar-accent-foreground:  220 30% 10%;
+    --sidebar-border:             216 18% 72%;    /* divisória sidebar ↔ conteúdo */
     --sidebar-ring:               220 70% 50%;
   }
 }
