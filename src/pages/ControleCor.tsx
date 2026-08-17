@@ -9,25 +9,26 @@ import { deltaE2000, labToRgbString, classificarDeltaE, DELTA_CONFIG, type Lab }
 
 function buildPalette(dark: boolean) {
   return {
-    page:        dark ? "#111827" : "#f8fafc",
+    page:        dark ? "#111827" : "#f0f4f8",
     card:        dark ? "#1f2937" : "#ffffff",
-    cardAlt:     dark ? "#374151" : "#f1f5f9",
-    border:      dark ? "#374151" : "#e2e8f0",
+    cardAlt:     dark ? "#374151" : "#eef2f7",
+    border:      dark ? "#374151" : "#c8d3de",
     text:        dark ? "#f1f5f9" : "#0f172a",
     muted:       dark ? "#94a3b8" : "#64748b",
     input:       dark ? "#374151" : "#ffffff",
-    inputBorder: dark ? "#4b5563" : "#cbd5e1",
+    inputBorder: dark ? "#4b5563" : "#b8c4d0",
     row:         dark ? "#1f2937" : "#ffffff",
-    rowAlt:      dark ? "#1a2535" : "#f8fafc",
-    rowHover:    dark ? "#2d3748" : "#f1f5f9",
-    th:          dark ? "#111827" : "#f1f5f9",
-    thText:      dark ? "#94a3b8" : "#64748b",
+    rowAlt:      dark ? "#1a2535" : "#f4f7fb",
+    rowHover:    dark ? "#2d3748" : "#e8edf4",
+    th:          dark ? "#111827" : "#e4eaf2",
+    thText:      dark ? "#94a3b8" : "#374151",
+    cardShadow:  dark ? "none" : "0 1px 4px rgba(15,23,42,0.07)",
   };
 }
 type Palette = ReturnType<typeof buildPalette>;
 
 function card(D: Palette, extra?: React.CSSProperties): React.CSSProperties {
-  return { background: D.card, border: `1px solid ${D.border}`, borderRadius: "0.75rem", ...extra };
+  return { background: D.card, border: `1px solid ${D.border}`, borderRadius: "0.75rem", boxShadow: D.cardShadow, ...extra };
 }
 function inp(D: Palette, extra?: React.CSSProperties): React.CSSProperties {
   return {

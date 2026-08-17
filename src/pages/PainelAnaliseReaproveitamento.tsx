@@ -18,10 +18,10 @@ import {
 // ── Palette ───────────────────────────────────────────────────────────────────
 function buildPalette(dark: boolean) {
   return {
-    page:    dark ? "#111827" : "#f8fafc",
+    page:    dark ? "#111827" : "#f0f4f8",
     card:    dark ? "#1f2937" : "#ffffff",
-    cardAlt: dark ? "#374151" : "#f1f5f9",
-    border:  dark ? "#374151" : "#e2e8f0",
+    cardAlt: dark ? "#374151" : "#eef2f7",
+    border:  dark ? "#374151" : "#c8d3de",
     text:    dark ? "#f1f5f9" : "#0f172a",
     muted:   dark ? "#94a3b8" : "#64748b",
     cyan:    "#0891b2",
@@ -29,7 +29,7 @@ function buildPalette(dark: boolean) {
     amber:   "#d97706",
     red:     "#dc2626",
     violet:  "#7c3aed",
-    grid:    dark ? "#374151" : "#e2e8f0",
+    grid:    dark ? "#374151" : "#c8d3de",
   };
 }
 
