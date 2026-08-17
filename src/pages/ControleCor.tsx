@@ -47,6 +47,7 @@ interface CorFormula {
   lab_a: number;
   lab_b: number;
   observacao: string | null;
+  aplicacao: string | null;
   criado_por: string | null;
   criado_em: string;
 }
@@ -154,6 +155,7 @@ export default function ControleCor({ perfilNome }: Props) {
   const [labA, setLabA] = useState("");
   const [labB, setLabB] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [aplicacao, setAplicacao] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Autocomplete fórmulas
@@ -215,7 +217,7 @@ export default function ControleCor({ perfilNome }: Props) {
   function resetForm() {
     setEditingId(null);
     setProduto(""); setFormulaId("");
-    setLabL(""); setLabA(""); setLabB(""); setObservacao("");
+    setLabL(""); setLabA(""); setLabB(""); setObservacao(""); setAplicacao("");
     setFormulaQuery(""); setSugestoes([]);
   }
 
@@ -224,6 +226,7 @@ export default function ControleCor({ perfilNome }: Props) {
     setProduto(c.produto); setFormulaId(c.formula_id ?? "");
     setLabL(String(c.lab_l)); setLabA(String(c.lab_a)); setLabB(String(c.lab_b));
     setObservacao(c.observacao ?? "");
+    setAplicacao(c.aplicacao ?? "");
     setFormulaQuery(c.formula_id
       ? `${c.formula_id}${c.produto && c.produto !== c.formula_id ? " — " + c.produto : ""}`
       : "");
@@ -242,6 +245,7 @@ export default function ControleCor({ perfilNome }: Props) {
       formula_id: formulaId.trim() || null,
       lab_l: L, lab_a: a, lab_b: b,
       observacao: observacao.trim() || null,
+      aplicacao: aplicacao.trim() || null,
       criado_por: perfilNome,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -268,10 +272,10 @@ export default function ControleCor({ perfilNome }: Props) {
 
   function exportarCadastro() {
     const rows: (string | number)[][] = [
-      ["Produto", "Fórmula", "L*", "a*", "b*", "Observação", "Cadastrado por", "Data"],
+      ["Produto", "Fórmula", "L*", "a*", "b*", "Observação", "Aplicação", "Cadastrado por", "Data"],
       ...coresFiltradas.map((c) => [
         c.produto, c.formula_id ?? "", c.lab_l, c.lab_a, c.lab_b,
-        c.observacao ?? "", c.criado_por ?? "",
+        c.observacao ?? "", c.aplicacao ?? "", c.criado_por ?? "",
         new Date(c.criado_em).toLocaleDateString("pt-BR"),
       ]),
     ];
@@ -280,7 +284,10 @@ export default function ControleCor({ perfilNome }: Props) {
 
   const coresFiltradas = cores.filter((c) => {
     const q = listSearch.toLowerCase();
-    return !q || c.produto.toLowerCase().includes(q) || (c.formula_id ?? "").toLowerCase().includes(q);
+    return !q
+      || c.produto.toLowerCase().includes(q)
+      || (c.formula_id ?? "").toLowerCase().includes(q)
+      || (c.aplicacao ?? "").toLowerCase().includes(q);
   });
 
   // Prévia ao vivo (cadastro)
@@ -510,6 +517,16 @@ export default function ControleCor({ perfilNome }: Props) {
                   placeholder="ex.: substrato PVC, lote 230412"
                 />
               </div>
+
+              {/* Aplicação */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: D.muted }}>Aplicação</label>
+                <input
+                  style={inp(D)} value={aplicacao}
+                  onChange={(e) => setAplicacao(e.target.value)}
+                  placeholder="ex.: embalagem, tinta automotiva, plástico injetado"
+                />
+              </div>
             </div>
 
             {/* Prévia visual */}
@@ -562,7 +579,7 @@ export default function ControleCor({ perfilNome }: Props) {
                   style={inp(D, { paddingLeft: 28 })}
                   value={listSearch}
                   onChange={(e) => setListSearch(e.target.value)}
-                  placeholder="Buscar produto / fórmula..."
+                  placeholder="Buscar produto, fórmula ou aplicação..."
                 />
               </div>
               <button
@@ -591,7 +608,7 @@ export default function ControleCor({ perfilNome }: Props) {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: D.th }}>
-                      {["Cor", "Produto", "Fórmula", "L*", "a*", "b*", "Observação", "Data", "Ações"].map((h) => (
+                      {["Cor", "Produto", "Fórmula", "L*", "a*", "b*", "Observação", "Aplicação", "Data", "Ações"].map((h) => (
                         <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, color: D.thText, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -613,6 +630,7 @@ export default function ControleCor({ perfilNome }: Props) {
                         <td style={{ padding: "8px 12px", fontFamily: "monospace" }}>{c.lab_a.toFixed(2)}</td>
                         <td style={{ padding: "8px 12px", fontFamily: "monospace" }}>{c.lab_b.toFixed(2)}</td>
                         <td style={{ padding: "8px 12px", color: D.muted, maxWidth: 180 }}>{c.observacao ?? "—"}</td>
+                        <td style={{ padding: "8px 12px", color: D.muted, maxWidth: 200 }}>{c.aplicacao ?? "—"}</td>
                         <td style={{ padding: "8px 12px", color: D.muted, whiteSpace: "nowrap" }}>
                           {new Date(c.criado_em).toLocaleDateString("pt-BR")}
                         </td>
