@@ -360,17 +360,20 @@ export default function Index() {
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton size="lg" tooltip="Manutenção">
-                  <Wrench className="h-5 w-5 text-primary shrink-0" />
-                  <div className="flex flex-col leading-tight min-w-0">
-                    <span className="font-bold text-sm truncate">Manutenção</span>
-                    <span className="text-xs text-muted-foreground truncate">{perfil.nome}</span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <div className="flex items-center">
+              <SidebarTrigger className="shrink-0 ml-1 group-data-[collapsible=icon]:mx-auto" />
+              <SidebarMenu className="group-data-[collapsible=icon]:hidden">
+                <SidebarMenuItem>
+                  <SidebarMenuButton size="lg" tooltip="Manutenção">
+                    <Wrench className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex flex-col leading-tight min-w-0">
+                      <span className="font-bold text-sm truncate">Manutenção</span>
+                      <span className="text-xs text-muted-foreground truncate">{perfil.nome}</span>
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </div>
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
@@ -421,13 +424,6 @@ export default function Index() {
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="overflow-x-hidden">
-          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
-            <SidebarTrigger />
-            <span className="font-semibold text-sm">
-              {activeTab === 'abrir_os' ? 'Abrir OS' : activeTab === 'ferramentas_manutencao' ? 'Ferramentas' : 'Painel de Manutenção'}
-            </span>
-            <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
-          </header>
           <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
@@ -450,7 +446,8 @@ export default function Index() {
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
             <div className="flex items-center">
-              <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
+              <SidebarTrigger className="shrink-0 ml-1 group-data-[collapsible=icon]:mx-auto" />
+              <button onClick={goHome} className="flex-1 min-w-0 text-left px-2 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center gap-1.5">
                   <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                   <span className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200">
@@ -458,7 +455,7 @@ export default function Index() {
                   </span>
                 </div>
               </button>
-              <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:mx-auto">
+              <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:hidden">
                 <Home className="h-4 w-4" />
               </button>
             </div>
@@ -500,11 +497,6 @@ export default function Index() {
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="overflow-x-hidden">
-          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
-            <SidebarTrigger />
-            <span className="font-semibold text-sm">Painel Comercial</span>
-            <span className="text-xs text-muted-foreground">— {perfil.nome}</span>
-          </header>
           <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
@@ -522,9 +514,10 @@ export default function Index() {
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
-            <div className="flex items-center px-3 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-              <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-              <span className="ml-1.5 text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-1 px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1">
+              <SidebarTrigger className="shrink-0" />
+              <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 group-data-[collapsible=icon]:hidden" />
+              <span className="ml-0.5 text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 group-data-[collapsible=icon]:hidden">
                 Gestão Industrial
               </span>
             </div>
@@ -667,10 +660,6 @@ export default function Index() {
         </Sidebar>
 
         <SidebarInset className="overflow-x-hidden flex flex-col">
-          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
-            <SidebarTrigger />
-            {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
-          </header>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Selecione uma opção no menu
@@ -698,9 +687,10 @@ export default function Index() {
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <SidebarHeader className="border-b">
-            <div className="flex items-center px-3 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-              <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-              <span className="ml-1.5 text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-1 px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1">
+              <SidebarTrigger className="shrink-0" />
+              <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 group-data-[collapsible=icon]:hidden" />
+              <span className="ml-0.5 text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 group-data-[collapsible=icon]:hidden">
                 Gestão Industrial
               </span>
             </div>
@@ -802,14 +792,6 @@ export default function Index() {
         </Sidebar>
 
         <SidebarInset className="overflow-x-hidden flex flex-col">
-          <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
-            <SidebarTrigger />
-            {activeTab === 'consumo_mp' && <span className="font-semibold text-sm">Consumo de MP</span>}
-            {activeTab === 'reaproveitamento' && <span className="font-semibold text-sm">Reaproveitamento</span>}
-            {activeTab === 'analise_reaproveitamento' && <span className="font-semibold text-sm">Análise de Reaproveitamento</span>}
-            {activeTab === 'mp_testadas' && <span className="font-semibold text-sm">Controle de MP Testada</span>}
-            {activeTab === 'controle_cor' && <span className="font-semibold text-sm">Controle de Cor (CIELAB)</span>}
-          </header>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Selecione uma opção no menu
@@ -838,7 +820,8 @@ export default function Index() {
       <Sidebar collapsible="icon">
         <SidebarHeader className="border-b">
           <div className="flex items-center">
-            <button onClick={goHome} className="flex-1 min-w-0 text-left px-3 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
+            <SidebarTrigger className="shrink-0 ml-1 group-data-[collapsible=icon]:mx-auto" />
+            <button onClick={goHome} className="flex-1 min-w-0 text-left px-2 py-2 hover:opacity-70 transition-opacity group-data-[collapsible=icon]:hidden">
               <div className="flex items-center gap-1.5">
                 <Factory className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                 <span className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200">
@@ -846,7 +829,7 @@ export default function Index() {
                 </span>
               </div>
             </button>
-            <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+            <button onClick={goHome} title="Início" className="shrink-0 mr-2 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors group-data-[collapsible=icon]:hidden">
               <Home className="h-4 w-4" />
             </button>
           </div>
@@ -1118,10 +1101,6 @@ export default function Index() {
       </Sidebar>
 
       <SidebarInset className="overflow-x-hidden flex flex-col">
-        <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10 shrink-0">
-          <SidebarTrigger />
-          {activeLabel && <span className="font-semibold text-sm">{activeLabel}</span>}
-        </header>
         {activeTab === null ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             Selecione uma opção no menu
@@ -1342,17 +1321,20 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
     <SidebarProvider>
       <Sidebar collapsible="icon">
         <SidebarHeader className="border-b">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" tooltip={titulo}>
-                {icon}
-                <div className="flex flex-col leading-tight min-w-0">
-                  <span className="font-bold text-sm truncate">{titulo}</span>
-                  <span className="text-xs text-muted-foreground truncate">{nome}</span>
-                </div>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          <div className="flex items-center">
+            <SidebarTrigger className="shrink-0 ml-1 group-data-[collapsible=icon]:mx-auto" />
+            <SidebarMenu className="group-data-[collapsible=icon]:hidden">
+              <SidebarMenuItem>
+                <SidebarMenuButton size="lg" tooltip={titulo}>
+                  {icon}
+                  <div className="flex flex-col leading-tight min-w-0">
+                    <span className="font-bold text-sm truncate">{titulo}</span>
+                    <span className="text-xs text-muted-foreground truncate">{nome}</span>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
         </SidebarHeader>
 
         <SidebarContent />
@@ -1370,11 +1352,6 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
       </Sidebar>
 
       <SidebarInset>
-        <header className="flex items-center gap-3 border-b bg-card px-4 h-12 sticky top-0 z-10">
-          <SidebarTrigger />
-          <span className="font-semibold text-sm">{titulo}</span>
-          <span className="text-xs text-muted-foreground">— {nome}</span>
-        </header>
         <main className="p-3 sm:p-6">
           {children}
         </main>
