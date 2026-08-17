@@ -49,14 +49,15 @@
     --status-line: 25 90% 48%;
     --status-line-bg: 25 90% 95%;
 
-    --sidebar-background: 220 20% 97%;
-    --sidebar-foreground: 220 25% 15%;
-    --sidebar-primary: 220 70% 50%;
+    /* ── Sidebar ── calibre o tom aqui ───────────────────────────── */
+    --sidebar-background:         0 0% 100%;      /* fundo branco — destaca do cinza da página */
+    --sidebar-foreground:         220 30% 12%;    /* texto principal */
+    --sidebar-primary:            220 70% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 91%;
-    --sidebar-accent-foreground: 220 25% 15%;
-    --sidebar-border: 220 15% 88%;
-    --sidebar-ring: 220 70% 50%;
+    --sidebar-accent:             220 25% 90%;    /* hover / item ativo */
+    --sidebar-accent-foreground:  220 30% 12%;
+    --sidebar-border:             220 18% 76%;    /* divisória sidebar ↔ conteúdo */
+    --sidebar-ring:               220 70% 50%;
   }
 }
 
