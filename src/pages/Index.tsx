@@ -528,7 +528,7 @@ export default function Index() {
             <SidebarGroup>
               <button
                 onClick={() => toggleGroup('compras')}
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
               >
                 <span className="flex items-center gap-1.5">
                   <ShoppingCart className="h-3 w-3 shrink-0" />
@@ -581,7 +581,7 @@ export default function Index() {
             <SidebarGroup>
               <button
                 onClick={() => toggleGroup('comercial')}
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
               >
                 <span className="flex items-center gap-1.5">
                   <Briefcase className="h-3 w-3 shrink-0" />
@@ -612,7 +612,7 @@ export default function Index() {
             <SidebarGroup>
               <button
                 onClick={() => toggleGroup('laboratorio')}
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
               >
                 <span className="flex items-center gap-1.5">
                   <TestTube2 className="h-3 w-3 shrink-0" />
@@ -700,7 +700,7 @@ export default function Index() {
             <SidebarGroup>
               <button
                 onClick={() => toggleGroup('laboratorio')}
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
               >
                 <span className="flex items-center gap-1.5">
                   <TestTube2 className="h-3 w-3 shrink-0" />
@@ -839,7 +839,7 @@ export default function Index() {
           <SidebarGroup>
             <button
               onClick={() => toggleGroup('producao')}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex items-center gap-1.5">
                 <Package className="h-3 w-3 shrink-0" />
@@ -855,7 +855,7 @@ export default function Index() {
                   <div key={grupo.id}>
                     <button
                       onClick={() => toggleGroup(grupo.id)}
-                      className="group/grp flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-semibold text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                      className="group/grp flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                     >
                       <span className="flex items-center gap-1.5 group-data-[collapsible=icon]:justify-center">
                         <grupo.icon className="h-3.5 w-3.5 shrink-0" />
@@ -895,7 +895,7 @@ export default function Index() {
           <SidebarGroup>
             <button
               onClick={() => toggleGroup('manutencao')}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex items-center gap-1.5">
                 <Wrench className="h-3 w-3 shrink-0" />
@@ -927,7 +927,7 @@ export default function Index() {
           <SidebarGroup>
             <button
               onClick={() => toggleGroup('comercial')}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex items-center gap-1.5">
                 <Briefcase className="h-3 w-3 shrink-0" />
@@ -957,7 +957,7 @@ export default function Index() {
           <SidebarGroup>
             <button
               onClick={() => toggleGroup('laboratorio')}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex items-center gap-1.5">
                 <TestTube2 className="h-3 w-3 shrink-0" />
@@ -1031,7 +1031,7 @@ export default function Index() {
           <SidebarGroup>
             <button
               onClick={() => toggleGroup('compras')}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex items-center gap-1.5">
                 <ShoppingCart className="h-3 w-3 shrink-0" />
