@@ -191,7 +191,7 @@ function CardSemana({ op, isOpen, onToggle, hj }: {
   const concluida = op.status === 'concluido' && !!op.data_conclusao;
   const isEstoque = op.tipo_op === 'estoque';
 
-  const dotClass = isEstoque ? 'bg-purple-500' : confirmada ? 'bg-green-500' : 'bg-orange-400';
+  const dotClass = isEstoque ? 'bg-purple-500' : (concluida || confirmada) ? 'bg-green-500' : 'bg-orange-400';
 
   const emissaoFmt = op.data_emissao
     ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM', { locale: ptBR })
@@ -210,8 +210,16 @@ function CardSemana({ op, isOpen, onToggle, hj }: {
         : { cls: 'bg-red-100 text-red-700 border-red-200', label: `${du}du` }
     : null;
 
+  const cardClass = isEstoque
+    ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20'
+    : concluida
+      ? 'border-green-400 bg-green-100/80 dark:bg-green-900/40'
+      : confirmada
+        ? 'border-green-400'
+        : '';
+
   return (
-    <div className={cn('border rounded-lg bg-background', isEstoque && 'border-purple-300')}>
+    <div className={cn('border rounded-lg bg-background', cardClass)}>
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-1.5 px-2 py-2 text-left"
