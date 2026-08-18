@@ -493,16 +493,16 @@ export default function PainelComercial() {
         {/* ── Modo semanal ── */}
         {!loading && !modoTexto && (
           /*
-           * overflow-x-auto envolve TANTO os cabeçalhos quanto os cards,
-           * garantindo que o scroll horizontal mova ambos juntos.
-           * Os cabeçalhos ficam FORA do overflow-y-auto, então nunca sobem
-           * atrás deles — sem depender de position:sticky que quebra quando
-           * overflow-x e overflow-y estão no mesmo elemento.
+           * Um único overflow-y-auto — sem overflow-x aninhado.
+           * Colunas usam flex-1 para dividir a largura disponível igualmente,
+           * todos os dias cabem na tela sem scroll horizontal.
+           * Cabeçalhos são sticky top-0 (funciona porque não há overflow-x
+           * em nenhum ancestral).
            */
-          <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
 
-            {/* Cabeçalhos dos dias — fixos (fora do scroll vertical) */}
-            <div className="shrink-0 flex gap-4 min-w-max pb-0.5">
+            {/* Cabeçalhos dos dias — sticky no topo do scroll */}
+            <div className="sticky top-0 z-10 bg-background flex gap-2 pb-0.5">
               {diasSemana.map((dia) => {
                 const isHoje = dia === hj;
                 const nomeDia = capitalize(
@@ -513,56 +513,54 @@ export default function PainelComercial() {
                   <div
                     key={dia}
                     className={cn(
-                      'w-[220px] shrink-0 px-3 py-2.5 rounded-t-xl border-t border-l border-r border-b flex items-center justify-between gap-2',
+                      'flex-1 min-w-0 px-2 py-2 rounded-t-xl border-t border-l border-r border-b flex items-center justify-between gap-1',
                       isHoje
                         ? 'border-primary/60 bg-primary/5 border-b-primary/30'
                         : 'border-border bg-card'
                     )}
                   >
-                    <span className={cn('font-semibold text-sm', isHoje && 'text-primary')}>
+                    <span className={cn('font-semibold text-xs truncate', isHoje && 'text-primary')}>
                       {nomeDia}
                     </span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{dataDia}</span>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{dataDia}</span>
                   </div>
                 );
               })}
             </div>
 
-            {/* Cards — apenas scroll vertical, sem overlap com os cabeçalhos */}
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <div className="flex gap-4 pb-4 min-w-max">
-                {diasSemana.map((dia) => {
-                  const ops = ordPorDia.get(dia) ?? [];
-                  const isHoje = dia === hj;
-                  return (
-                    <div
-                      key={dia}
-                      className={cn(
-                        'w-[220px] shrink-0 rounded-b-xl border-b border-l border-r',
-                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+            {/* Cards — dividem a largura igualmente, sem scroll horizontal */}
+            <div className="flex gap-2 pb-4">
+              {diasSemana.map((dia) => {
+                const ops = ordPorDia.get(dia) ?? [];
+                const isHoje = dia === hj;
+                return (
+                  <div
+                    key={dia}
+                    className={cn(
+                      'flex-1 min-w-0 rounded-b-xl border-b border-l border-r',
+                      isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                    )}
+                  >
+                    <div className="px-1.5 py-2 space-y-1.5">
+                      {ops.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic px-1 py-1">
+                          Nenhum produto previsto
+                        </p>
+                      ) : (
+                        ops.map((op) => (
+                          <CardSemana
+                            key={op.id}
+                            op={op}
+                            isOpen={openIds.has(op.id)}
+                            onToggle={() => toggleCard(op.id)}
+                            hj={hj}
+                          />
+                        ))
                       )}
-                    >
-                      <div className="px-2 py-2 space-y-1.5">
-                        {ops.length === 0 ? (
-                          <p className="text-xs text-muted-foreground italic px-1 py-1">
-                            Nenhum produto previsto
-                          </p>
-                        ) : (
-                          ops.map((op) => (
-                            <CardSemana
-                              key={op.id}
-                              op={op}
-                              isOpen={openIds.has(op.id)}
-                              onToggle={() => toggleCard(op.id)}
-                              hj={hj}
-                            />
-                          ))
-                        )}
-                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
