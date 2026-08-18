@@ -76,10 +76,12 @@ function CardBusca({ op, isOpen, onToggle, hj }: {
   const isEstoque = op.tipo_op === 'estoque';
 
   const borderClass = isEstoque
-    ? 'border-purple-300 bg-purple-50/50'
-    : (concluida || confirmada)
-      ? 'border-green-300 bg-green-50/50'
-      : 'border-orange-300 bg-orange-50/50';
+    ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20'
+    : concluida
+      ? 'border-green-400 bg-green-100/80 dark:bg-green-900/40'
+      : confirmada
+        ? 'border-green-400'
+        : 'border-orange-300 bg-orange-50/50 dark:bg-orange-900/10';
 
   const dotClass = isEstoque
     ? 'bg-purple-500'
@@ -422,6 +424,10 @@ export default function PainelComercial() {
 
         {/* Legenda */}
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-green-400 ring-offset-1 ring-offset-background" />
+            Concluído
+          </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
             Confirmado
