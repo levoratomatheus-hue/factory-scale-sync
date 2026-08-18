@@ -109,7 +109,7 @@ function CardBusca({ op, isOpen, onToggle, hj }: {
       : null;
 
   return (
-    <div className={`rounded-xl border ${borderClass}`}>
+    <div className={`rounded-xl border ${borderClass} max-w-[560px]`}>
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left"
@@ -464,17 +464,19 @@ export default function PainelComercial() {
                 <p className="text-sm">Nenhum produto encontrado</p>
               </div>
             ) : (
-              <div className="space-y-1.5 pb-4">
-                {resultadosBusca.map((op) => (
-                  <CardBusca
-                    key={op.id}
-                    op={op}
-                    isOpen={openIds.has(op.id)}
-                    onToggle={() => toggleCard(op.id)}
-                    hj={hj}
-                  />
-                ))}
-                <p className="text-xs text-muted-foreground text-right pt-1">
+              <div className="pb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                  {resultadosBusca.map((op) => (
+                    <CardBusca
+                      key={op.id}
+                      op={op}
+                      isOpen={openIds.has(op.id)}
+                      onToggle={() => toggleCard(op.id)}
+                      hj={hj}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground text-right pt-2">
                   {resultadosBusca.length} produto{resultadosBusca.length !== 1 ? 's' : ''}
                 </p>
               </div>
