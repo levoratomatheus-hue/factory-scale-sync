@@ -8,6 +8,7 @@ import { ptBR } from "date-fns/locale";
 import {
   BarChart,
   Bar,
+  LabelList,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -1192,7 +1193,7 @@ export default function PainelAnalises() {
                 <div style={{ ...cardStyle }}>
                   <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Total kg produzidos por faixa · período selecionado</p>
                   <ResponsiveContainer width="100%" height={160}>
-                    <BarChart data={dadosFaixas} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                    <BarChart data={dadosFaixas} margin={{ top: 20, right: 8, left: 0, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
                       <XAxis dataKey="faixa" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
                       <YAxis
@@ -1203,7 +1204,14 @@ export default function PainelAnalises() {
                         label={{ value: "kg", angle: -90, position: "insideLeft", fontSize: 10, fill: D.muted, dy: 10 }}
                       />
                       <Tooltip content={<TooltipFaixaKg />} cursor={{ fill: "#ffffff08" }} />
-                      <Bar dataKey="totalKg" fill={D.emerald} radius={[4, 4, 0, 0]} maxBarSize={60} />
+                      <Bar dataKey="totalKg" fill={D.emerald} radius={[4, 4, 0, 0]} maxBarSize={60}>
+                        <LabelList
+                          dataKey="totalKg"
+                          position="top"
+                          formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                          style={{ fontSize: 9, fill: D.text, fontWeight: 600 }}
+                        />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1215,7 +1223,7 @@ export default function PainelAnalises() {
                 <div style={{ ...cardStyle }}>
                   <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Últimos 12 meses</p>
                   <ResponsiveContainer width="100%" height={160}>
-                    <BarChart data={dadosMensais} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                    <BarChart data={dadosMensais} margin={{ top: 20, right: 8, left: 0, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
                       <XAxis dataKey="mes" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
                       <YAxis
@@ -1225,7 +1233,14 @@ export default function PainelAnalises() {
                         tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
                       />
                       <Tooltip content={<TooltipMensal />} cursor={{ fill: "#ffffff08" }} />
-                      <Bar dataKey="kg" fill={D.cyan} radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      <Bar dataKey="kg" fill={D.cyan} radius={[4, 4, 0, 0]} maxBarSize={36}>
+                        <LabelList
+                          dataKey="kg"
+                          position="top"
+                          formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                          style={{ fontSize: 9, fill: D.text, fontWeight: 600 }}
+                        />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
