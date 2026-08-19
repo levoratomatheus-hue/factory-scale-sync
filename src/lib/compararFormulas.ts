@@ -257,19 +257,13 @@ export async function conferirTodasFormulas(
 
   const allFormulaIds = [...excelByFormula.keys()];
 
-  // 3. Buscar itens do TID em chunks de 100
+  // 3. Buscar TODOS os itens do TID (paginado — PostgREST limita a 1.000 linhas por query)
   const tidByFormula = new Map<string, { cod_mp: string; materia_prima: string; percentual: number }[]>();
-  const CHUNK = 100;
-  for (let i = 0; i < allFormulaIds.length; i += CHUNK) {
-    const chunk = allFormulaIds.slice(i, i + CHUNK);
-    const { data } = await (supabase as any)
-      .from('formulas')
-      .select('formula_id, cod_mp, materia_prima, percentual')
-      .in('formula_id', chunk);
-    for (const r of data ?? []) {
-      if (!tidByFormula.has(r.formula_id)) tidByFormula.set(r.formula_id, []);
-      tidByFormula.get(r.formula_id)!.push({ cod_mp: r.cod_mp, materia_prima: r.materia_prima, percentual: r.percentual });
-    }
+  const { fetchAllFormulas } = await import("@/lib/formulasCache");
+  const allTid = await fetchAllFormulas();
+  for (const r of allTid) {
+    if (!tidByFormula.has(r.formula_id)) tidByFormula.set(r.formula_id, []);
+    tidByFormula.get(r.formula_id)!.push({ cod_mp: r.cod_mp ?? "", materia_prima: r.materia_prima, percentual: r.percentual });
   }
 
   // 4. Buscar de-para (uma vez)

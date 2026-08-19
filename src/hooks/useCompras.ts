@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllFormulas } from "@/lib/formulasCache";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,8 +54,6 @@ export type ResultadoPrevisao = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BATCH_SIZE = 500; // 500 formula_ids/chunk → ~3.500 linhas avg, bem dentro do limit(50000)
-
 const STATUS_EM_PRODUCAO = new Set([
   "em_pesagem", "aguardando_mistura", "em_mistura", "aguardando_linha", "em_linha",
 ]);
@@ -67,24 +66,6 @@ function diaSeguinte(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + 1);
   return d.toISOString().split("T")[0];
-}
-
-async function fetchFormulasBatch(formulaIds: string[]): Promise<any[]> {
-  // Normaliza para string para evitar falha de comparação se o tipo vier como number
-  const unique = [...new Set(formulaIds.map(String))];
-  const rows: any[] = [];
-  for (let i = 0; i < unique.length; i += BATCH_SIZE) {
-    const chunk = unique.slice(i, i + BATCH_SIZE);
-    // .limit(50000) substitui o padrão silencioso de 1.000 linhas do PostgREST.
-    // Com BATCH_SIZE=100 e ~7 itens/fórmula em média → ~700 linhas/chunk, bem dentro do limite.
-    const { data } = await (supabase as any)
-      .from("formulas")
-      .select("formula_id, materia_prima, percentual, cod_mp")
-      .in("formula_id", chunk)
-      .limit(50000);
-    if (data) rows.push(...data);
-  }
-  return rows;
 }
 
 // ── Core calculation ──────────────────────────────────────────────────────────
@@ -252,9 +233,7 @@ export function useComprasConsumo(
         data: o.criado_em ?? "",
       }));
 
-      const fRows = await fetchFormulasBatch(
-        ordensMapped.filter((o) => o.formula_id).map((o) => o.formula_id!),
-      );
+      const fRows = await fetchAllFormulas();
 
       const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, false);
       const linhas = buildLinhas<LinhaMP>(linhasMap, () => ({}));
@@ -305,9 +284,7 @@ export function useComprasPrevisao(dataInicio: string, dataFim: string) {
         data: o.data_programacao ?? "", status: o.status ?? "",
       }));
 
-      const fRows = await fetchFormulasBatch(
-        ordensMapped.filter((o) => o.formula_id).map((o) => o.formula_id!),
-      );
+      const fRows = await fetchAllFormulas();
 
       const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, true);
       const linhas = buildLinhas<LinhaPrevisao>(linhasMap, (e) => ({
