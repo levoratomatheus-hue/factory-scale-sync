@@ -3,6 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
+import { estornarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical, ChevronDown, Info } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -1075,6 +1076,8 @@ export default function PainelProgramacao() {
   const handleExcluirOP = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
+    // Estorna o estoque antes de excluir
+    try { await estornarEstoqueOP(ordemParaExcluir.id); } catch { /* falha silenciosa */ }
     const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
     setExcluindo(false);
     setOrdemParaExcluir(null);

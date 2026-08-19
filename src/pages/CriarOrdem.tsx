@@ -13,6 +13,8 @@ import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
+import { baixarEstoqueOP } from '@/lib/estoqueUtils';
+import { useAuth } from '@/hooks/useAuth';
 
 interface LoteDisponivel {
   lote: number;
@@ -76,6 +78,7 @@ interface CriarOrdemProps {
 }
 
 export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrdemProps = {}) {
+  const { perfil } = useAuth();
   const [saving, setSaving] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
@@ -391,6 +394,21 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       setSaving(false);
       toast({ title: 'Erro ao salvar', description: error?.message, variant: 'destructive' });
       return;
+    }
+
+    // Baixa automática de estoque de MP (teórico pela fórmula)
+    if (formulaId) {
+      try {
+        await baixarEstoqueOP(
+          (novaOrdem as any).id,
+          formulaId,
+          values.quantidade,
+          values.lote,
+          perfil?.nome,
+        );
+      } catch {
+        // Falha silenciosa — não impede a criação da OP
+      }
     }
 
     // Update orientacoes on formulas table for future orders

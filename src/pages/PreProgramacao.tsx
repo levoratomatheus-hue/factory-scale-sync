@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { estornarEstoqueOP } from '@/lib/estoqueUtils';
 import { MarcaBadge } from '@/components/MarcaBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EditarOrdemDialog } from '@/components/EditarOrdemDialog';
@@ -139,6 +140,8 @@ export default function PreProgramacao() {
   const excluir = async () => {
     if (!ordemExcluir) return;
     setExcluindo(true);
+    // Estorna o estoque antes de excluir
+    try { await estornarEstoqueOP(ordemExcluir.id); } catch { /* falha silenciosa */ }
     const { error } = await supabase.from('ordens').delete().eq('id', ordemExcluir.id);
     setExcluindo(false);
     if (error) {

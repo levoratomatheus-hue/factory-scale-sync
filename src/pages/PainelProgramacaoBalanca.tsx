@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { estornarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowRightLeft, Undo2, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -461,6 +462,8 @@ export default function PainelProgramacaoBalanca() {
   const handleExcluir = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
+    // Estorna o estoque antes de excluir
+    try { await estornarEstoqueOP(ordemParaExcluir.id); } catch { /* falha silenciosa */ }
     const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
     setExcluindo(false);
     setOrdemParaExcluir(null);

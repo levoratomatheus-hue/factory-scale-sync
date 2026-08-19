@@ -33,6 +33,7 @@ const PainelAnaliseReaproveitamento = lazy(() => import('./PainelAnaliseReaprove
 const ControleMPTestada             = lazy(() => import('./ControleMPTestada'));
 const ControleCor                   = lazy(() => import('./ControleCor'));
 const PreProgramacao                = lazy(() => import('./PreProgramacao'));
+const EstoqueMP                     = lazy(() => import('./EstoqueMP'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -68,7 +69,8 @@ type TabGestorId =
   | 'reaproveitamento'
   | 'analise_reaproveitamento'
   | 'mp_testadas'
-  | 'controle_cor';
+  | 'controle_cor'
+  | 'estoque_mp';
 
 const gruposGestor = [
   {
@@ -157,6 +159,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
   ['mp_testadas' as TabGestorId, 'Controle de MP Testada'],
   ['controle_cor' as TabGestorId, 'Controle de Cor (CIELAB)'],
+  ['estoque_mp' as TabGestorId, 'Estoque de MP'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -198,6 +201,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'analise_reaproveitamento',
   'mp_testadas',
   'controle_cor',
+  'estoque_mp',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -608,6 +612,37 @@ export default function Index() {
               )}
             </SidebarGroup>
 
+            {/* ── Estoque de MP ── */}
+            <SidebarGroup>
+              <button
+                onClick={() => toggleGroup('estoque_mp_grp')}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Package className="h-3 w-3 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden">Estoque</span>
+                </span>
+                <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('estoque_mp_grp') && '-rotate-90')} />
+              </button>
+              {openGroups.has('estoque_mp_grp') && (
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'estoque_mp'}
+                        tooltip="Estoque de MP"
+                        onClick={() => goToTab('estoque_mp')}
+                        size="sm"
+                      >
+                        <Package className="h-3.5 w-3.5 shrink-0" />
+                        <span>Estoque de MP</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              )}
+            </SidebarGroup>
+
             {/* ── Laboratório (apenas MP Testada) ── */}
             <SidebarGroup>
               <button
@@ -673,6 +708,7 @@ export default function Index() {
                   {activeTab === 'compras_media_mensal' && <ComprasMediaMensal />}
                   {activeTab === 'comercial'           && <PainelComercial />}
                   {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
+                  {activeTab === 'estoque_mp'          && <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -1044,6 +1080,17 @@ export default function Index() {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={activeTab === 'estoque_mp'}
+                    tooltip="Estoque de MP"
+                    onClick={() => goToTab('estoque_mp')}
+                    size="sm"
+                  >
+                    <Package className="h-3.5 w-3.5 shrink-0" />
+                    <span>Estoque de MP</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={activeTab === 'compras_consumo'}
                     tooltip="Consumo de MP"
                     onClick={() => goToTab('compras_consumo')}
@@ -1297,6 +1344,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'controle_cor'}>
                   <Suspense fallback={TAB_LOADING}>
                     <ControleCor perfilNome={perfil.nome} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('estoque_mp') && (
+                <KeepAlive active={activeTab === 'estoque_mp'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />
                   </Suspense>
                 </KeepAlive>
               )}
