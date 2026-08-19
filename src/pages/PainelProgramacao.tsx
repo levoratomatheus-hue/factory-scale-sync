@@ -3,7 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
-import { estornarEstoqueOP } from "@/lib/estoqueUtils";
+import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical, ChevronDown, Info } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -1160,6 +1160,11 @@ export default function PainelProgramacao() {
   };
 
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
+    // Captura valores antigos antes do update (ordemEditando ainda está no estado)
+    const qtdAntiga = ordemEditando?.quantidade;
+    const formulaIdAntigo = ordemEditando?.formula_id ?? null;
+    const lote = String(ordemEditando?.lote ?? "");
+
     const { error } = await supabase
       .from("ordens")
       .update(payload as any)
@@ -1170,6 +1175,24 @@ export default function PainelProgramacao() {
     }
     setOrdens((prev) => prev.map((o) => o.id === id ? { ...o, ...payload } : o));
     toast({ title: "Ordem atualizada com sucesso" });
+
+    // Ajusta estoque ZC se quantidade ou fórmula mudou (silencioso — não bloqueia)
+    try {
+      const qtdNova = payload.quantidade as number | undefined;
+      const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
+      const formulaMudou = formulaIdNovo !== formulaIdAntigo;
+
+      if (qtdAntiga !== undefined && qtdNova !== undefined) {
+        if (formulaMudou) {
+          // Fórmula trocada: estorna tudo e rebaixa com novos valores
+          await estornarEstoqueOP(id);
+          if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
+        } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
+          // Só quantidade mudou: aplica diferença
+          await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+        }
+      }
+    } catch { /* silencioso — não impede a edição */ }
   };
 
   const handleRegistrarDia = async () => {

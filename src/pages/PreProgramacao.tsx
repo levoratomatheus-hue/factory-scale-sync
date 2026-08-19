@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { estornarEstoqueOP } from '@/lib/estoqueUtils';
+import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from '@/lib/estoqueUtils';
 import { MarcaBadge } from '@/components/MarcaBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EditarOrdemDialog } from '@/components/EditarOrdemDialog';
@@ -154,6 +154,10 @@ export default function PreProgramacao() {
   };
 
   const editar = async (id: string, payload: Record<string, unknown>) => {
+    const qtdAntiga = ordemEditar?.quantidade;
+    const formulaIdAntigo = ordemEditar?.formula_id ?? null;
+    const lote = String(ordemEditar?.lote ?? "");
+
     const { error } = await supabase.from('ordens').update(payload as any).eq('id', id);
     if (error) {
       toast({ title: 'Erro ao editar OP', description: error.message, variant: 'destructive' });
@@ -161,6 +165,21 @@ export default function PreProgramacao() {
     }
     await fetchOrdens();
     toast({ title: 'OP atualizada' });
+
+    try {
+      const qtdNova = payload.quantidade as number | undefined;
+      const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
+      const formulaMudou = formulaIdNovo !== formulaIdAntigo;
+
+      if (qtdAntiga !== undefined && qtdNova !== undefined) {
+        if (formulaMudou) {
+          await estornarEstoqueOP(id);
+          if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
+        } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
+          await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+        }
+      }
+    } catch { /* silencioso */ }
   };
 
   return (

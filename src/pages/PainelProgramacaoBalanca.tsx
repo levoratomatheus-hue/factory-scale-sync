@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { estornarEstoqueOP } from "@/lib/estoqueUtils";
+import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GripVertical, Loader2, CalendarDays, Pencil, Trash2, AlertTriangle, CheckCircle2, ArrowRightLeft, Undo2, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -520,6 +520,10 @@ export default function PainelProgramacaoBalanca() {
   };
 
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
+    const qtdAntiga = ordemEditando?.quantidade;
+    const formulaIdAntigo = ordemEditando?.formula_id ?? null;
+    const lote = String(ordemEditando?.lote ?? "");
+
     const { error } = await supabase.from("ordens").update(payload as any).eq("id", id);
     if (error) {
       toast({ title: "Erro ao editar ordem", description: error.message, variant: "destructive" });
@@ -527,6 +531,21 @@ export default function PainelProgramacaoBalanca() {
     }
     await fetchOrdens();
     toast({ title: "Ordem atualizada com sucesso" });
+
+    try {
+      const qtdNova = payload.quantidade as number | undefined;
+      const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
+      const formulaMudou = formulaIdNovo !== formulaIdAntigo;
+
+      if (qtdAntiga !== undefined && qtdNova !== undefined) {
+        if (formulaMudou) {
+          await estornarEstoqueOP(id);
+          if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
+        } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
+          await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+        }
+      }
+    } catch { /* silencioso */ }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
