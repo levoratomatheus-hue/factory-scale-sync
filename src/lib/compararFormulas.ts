@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllDepara } from '@/lib/deparaCache';
 
 // ── Tipos exportados ──────────────────────────────────────────────────────────
 
@@ -182,8 +183,8 @@ const VAZIO: ResultadoComparacao = {
 };
 
 export async function compararFormulas(formulaId: string): Promise<ResultadoComparacao> {
-  // Todas as 4 queries em paralelo — sem dependência entre elas
-  const [excelResult, tidResult, deparaResult, chaveResult] = await Promise.all([
+  // 3 queries em paralelo + depara do cache (instantâneo após 1ª chamada)
+  const [excelResult, tidResult, chaveResult, depara] = await Promise.all([
     (supabase as any)
       .from('formulas_excel')
       .select('cod_mp_excel, materia_prima, percentual')
@@ -193,10 +194,6 @@ export async function compararFormulas(formulaId: string): Promise<ResultadoComp
       .select('cod_mp, materia_prima, percentual')
       .eq('formula_id', formulaId)
       .order('sequencia', { ascending: true }),
-    (supabase as any)
-      .from('mp_depara')
-      .select('cod_excel, cod_tid')
-      .not('cod_tid', 'is', null),
     // produto_chave: coluna pode não existir — erro é ignorado via .data
     (supabase as any)
       .from('formulas_excel')
@@ -204,6 +201,7 @@ export async function compararFormulas(formulaId: string): Promise<ResultadoComp
       .eq('formula_id', formulaId)
       .eq('sequencia', 1)
       .maybeSingle(),
+    fetchAllDepara(), // cache — 0 ms se já populado
   ]);
 
   const { data: excelItens, error: excelErr } = excelResult;
@@ -215,7 +213,7 @@ export async function compararFormulas(formulaId: string): Promise<ResultadoComp
   const { data: tidItens } = tidResult;
   if (!tidItens || tidItens.length === 0) return { ...VAZIO, produtoChaveExcel, isVariante };
 
-  const tidToExcel = buildTidToExcel(deparaResult.data ?? []);
+  const tidToExcel = buildTidToExcel(depara);
 
   return compararEmMemoria(tidItens, excelItens, tidToExcel, produtoChaveExcel, isVariante);
 }

@@ -14,6 +14,7 @@ import { formatKg } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 import { baixarEstoqueOP } from '@/lib/estoqueUtils';
+import { fetchAllDepara } from '@/lib/deparaCache';
 import { useAuth } from '@/hooks/useAuth';
 
 interface LoteDisponivel {
@@ -184,18 +185,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setFormulaId(data.formula_id ?? null);
     setTamanhoBatelada(data.tamanho_batelada ?? null);
     setSemFormula(!data.formula_id);
+    setOrientacoes(''); // será preenchido pelo useEffect abaixo
     setLoteEncontrado(true);
-
-    if (data.formula_id) {
-      const { data: formulaData } = await supabase
-        .from('formulas')
-        .select('orientacoes')
-        .eq('id', data.formula_id)
-        .single();
-      setOrientacoes((formulaData as any)?.orientacoes ?? '');
-    } else {
-      setOrientacoes('');
-    }
 
     toast({ title: 'Lote encontrado!', description: data.produto });
     onPrefillConsumed?.();
@@ -204,6 +195,17 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   useEffect(() => {
     if (prefillLote) buscarLote(prefillLote);
   }, [prefillLote, buscarLote]);
+
+  // ── Orientações: carrega em paralelo com os demais efeitos ───────────────
+  useEffect(() => {
+    if (!formulaId || loteEncontrado !== true) { setOrientacoes(''); return; }
+    supabase
+      .from('formulas')
+      .select('orientacoes')
+      .eq('id', formulaId)
+      .single()
+      .then(({ data }) => setOrientacoes((data as any)?.orientacoes ?? ''));
+  }, [formulaId, loteEncontrado]);
 
   // ── Comparador TID × Excel ────────────────────────────────────────────────
   const runComparison = useCallback(async (fid: string) => {
@@ -303,11 +305,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       const codsExcel = [...new Set((acertosRaw as any[]).map((a: any) => a.cod_mp_excel).filter(Boolean))];
       const lotes = [...new Set((acertosRaw as any[]).map((a: any) => a.acerto_lote).filter(Boolean))];
 
-      const [formulaItensResult, deparaResult, ordensResult] = await Promise.all([
+      const [formulaItensResult, allDepara, ordensResult] = await Promise.all([
         supabase.from('formulas').select('cod_mp, materia_prima, percentual').eq('formula_id', formulaId),
-        codsExcel.length > 0
-          ? supabase.from('mp_depara').select('cod_excel, cod_tid').in('cod_excel', codsExcel)
-          : Promise.resolve({ data: [] as any[] }),
+        fetchAllDepara(), // cache — 0 ms se já populado por compararFormulas
         lotes.length > 0
           ? supabase.from('ordens').select('lote, quantidade').in('lote', lotes)
           : Promise.resolve({ data: [] as any[] }),
@@ -318,7 +318,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       const formulaItens = (formulaItensResult.data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
 
       const deparaMap = new Map<string, string | null>();
-      for (const r of (deparaResult.data ?? [])) deparaMap.set(r.cod_excel, (r as any).cod_tid ?? null);
+      for (const r of allDepara) {
+        if (codsExcel.includes(r.cod_excel)) deparaMap.set(r.cod_excel, r.cod_tid ?? null);
+      }
 
       const opQtdMap = new Map<string, number>();
       for (const o of (ordensResult.data ?? [])) opQtdMap.set(String(o.lote), (o as any).quantidade);
