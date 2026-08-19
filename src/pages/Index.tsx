@@ -34,6 +34,7 @@ const ControleMPTestada             = lazy(() => import('./ControleMPTestada'));
 const ControleCor                   = lazy(() => import('./ControleCor'));
 const PreProgramacao                = lazy(() => import('./PreProgramacao'));
 const EstoqueMP                     = lazy(() => import('./EstoqueMP'));
+const EstoqueMPPG                   = lazy(() => import('./EstoqueMPPG'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -70,7 +71,8 @@ type TabGestorId =
   | 'analise_reaproveitamento'
   | 'mp_testadas'
   | 'controle_cor'
-  | 'estoque_mp';
+  | 'estoque_mp'
+  | 'estoque_mp_pg';
 
 const gruposGestor = [
   {
@@ -160,6 +162,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['mp_testadas' as TabGestorId, 'Controle de MP Testada'],
   ['controle_cor' as TabGestorId, 'Controle de Cor (CIELAB)'],
   ['estoque_mp' as TabGestorId, 'Estoque de MP'],
+  ['estoque_mp_pg' as TabGestorId, 'Estoque de MP — PG'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -204,6 +207,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'mp_testadas',
   'controle_cor',
   'estoque_mp',
+  'estoque_mp_pg',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -640,6 +644,17 @@ export default function Index() {
                         <span>Estoque de MP</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'estoque_mp_pg'}
+                        tooltip="Estoque MP PG"
+                        onClick={() => goToTab('estoque_mp_pg')}
+                        size="sm"
+                      >
+                        <Package className="h-3.5 w-3.5 shrink-0" />
+                        <span>Estoque MP PG</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -711,6 +726,7 @@ export default function Index() {
                   {activeTab === 'comercial'           && <PainelComercial />}
                   {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'estoque_mp'          && <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />}
+                  {activeTab === 'estoque_mp_pg'       && <EstoqueMPPG perfilNome={perfil.nome} papel={perfil.papel} />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -1093,6 +1109,17 @@ export default function Index() {
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={activeTab === 'estoque_mp_pg'}
+                    tooltip="Estoque MP PG"
+                    onClick={() => goToTab('estoque_mp_pg')}
+                    size="sm"
+                  >
+                    <Package className="h-3.5 w-3.5 shrink-0" />
+                    <span>Estoque MP PG</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={activeTab === 'compras_consumo'}
                     tooltip="Consumo de MP"
                     onClick={() => goToTab('compras_consumo')}
@@ -1353,6 +1380,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'estoque_mp'}>
                   <Suspense fallback={TAB_LOADING}>
                     <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('estoque_mp_pg') && (
+                <KeepAlive active={activeTab === 'estoque_mp_pg'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <EstoqueMPPG perfilNome={perfil.nome} papel={perfil.papel} />
                   </Suspense>
                 </KeepAlive>
               )}
