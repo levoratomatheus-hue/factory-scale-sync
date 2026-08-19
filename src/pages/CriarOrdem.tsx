@@ -392,49 +392,38 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       return;
     }
 
-    // Baixa automática de estoque de MP (teórico pela fórmula)
-    if (formulaId) {
-      try {
-        await baixarEstoqueOP(
-          (novaOrdem as any).id,
-          formulaId,
-          values.quantidade,
-          values.lote,
-          perfil?.nome,
-        );
-      } catch {
-        // Falha silenciosa — não impede a criação da OP
-      }
-    }
-
-    // Update orientacoes on formulas table for future orders
-    if (formulaId) {
-      await supabase
-        .from('formulas')
-        .update({ orientacoes: orientacoes.trim() || null } as any)
-        .eq('id', formulaId);
-    }
-
-    // Save customized formula quantities if the gestor edited them
-    if (itens.length > 0) {
-      await supabase.from('ordens_formula').insert(
-        itens.map((item) => ({
-          ordem_id: (novaOrdem as any).id,
-          sequencia: item.sequencia,
-          materia_prima: nomes[item.id] ?? item.materia_prima,
-          quantidade_kg: item.quantidade_kg,
-        }))
-      );
-    }
-
-    // Sync data_emissao back to cadastro_lotes so PainelProgramacao can read it
+    const ordemId = (novaOrdem as any).id;
     const loteNum = Number(values.lote.replace(/\./g, ''));
-    if (loteNum > 0 && dataEmissao) {
-      await (supabase as any)
-        .from('cadastro_lotes')
-        .update({ data_emissao: dataEmissao })
-        .eq('lote', loteNum);
-    }
+
+    // Tudo que não bloqueia o UX roda em paralelo após o insert
+    await Promise.all([
+      // Baixa automática de estoque (agora batch internamente: 3 RT fixos)
+      formulaId
+        ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome).catch(() => {})
+        : Promise.resolve(),
+
+      // Atualiza orientações na tabela formulas para futuras OPs
+      formulaId
+        ? supabase.from('formulas').update({ orientacoes: orientacoes.trim() || null } as any).eq('id', formulaId)
+        : Promise.resolve(),
+
+      // Salva itens customizados da fórmula (quando gestor ajustou quantidades)
+      itens.length > 0
+        ? supabase.from('ordens_formula').insert(
+            itens.map((item) => ({
+              ordem_id: ordemId,
+              sequencia: item.sequencia,
+              materia_prima: nomes[item.id] ?? item.materia_prima,
+              quantidade_kg: item.quantidade_kg,
+            }))
+          )
+        : Promise.resolve(),
+
+      // Sincroniza data_emissao no cadastro_lotes
+      loteNum > 0 && dataEmissao
+        ? (supabase as any).from('cadastro_lotes').update({ data_emissao: dataEmissao }).eq('lote', loteNum)
+        : Promise.resolve(),
+    ]);
 
 
     setSaving(false);
