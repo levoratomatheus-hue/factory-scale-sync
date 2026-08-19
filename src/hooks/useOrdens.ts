@@ -162,7 +162,8 @@ export function useAnalises(dataInicio: string, dataFim: string) {
       .eq("status", "concluido")
       .gte("data_programacao", dataInicio)
       .lte("data_programacao", dataFim)
-      .order("data_programacao", { ascending: true });
+      .order("data_programacao", { ascending: true })
+      .limit(50000);
 
     if (!error && data) setOrdens(data);
     setLoading(false);
@@ -223,7 +224,8 @@ export function useParadasAnalises(dataInicio: string, dataFim: string) {
       .from("paradas")
       .select("linha, data, motivo, hora_inicio, hora_fim")
       .gte("data", dataInicio)
-      .lte("data", dataFim);
+      .lte("data", dataFim)
+      .limit(50000);
     if (!error && data) setParadas(data);
     setLoading(false);
   }, [dataInicio, dataFim]);
@@ -280,7 +282,8 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
       .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, ordens(linha, quantidade, quantidade_real, formula_id, produto)")
       .gte("data", dataInicio)
       .lte("data", dataFim)
-      .eq("reprovado", false);
+      .eq("reprovado", false)
+      .limit(50000);
     if (!error && data) setRegistros(data);
   }, [dataInicio, dataFim]);
 
