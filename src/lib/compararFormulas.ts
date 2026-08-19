@@ -182,45 +182,40 @@ const VAZIO: ResultadoComparacao = {
 };
 
 export async function compararFormulas(formulaId: string): Promise<ResultadoComparacao> {
-  // 1. Buscar itens do Excel
-  const { data: excelItens, error: excelErr } = await (supabase as any)
-    .from('formulas_excel')
-    .select('cod_mp_excel, materia_prima, percentual')
-    .eq('formula_id', formulaId);
-
-  if (excelErr || !excelItens || excelItens.length === 0) return VAZIO;
-
-  // 2. Tentar buscar produto_chave (coluna pode não existir ainda)
-  let produtoChaveExcel: string | null = null;
-  try {
-    const { data: chaveData } = await (supabase as any)
+  // Todas as 4 queries em paralelo — sem dependência entre elas
+  const [excelResult, tidResult, deparaResult, chaveResult] = await Promise.all([
+    (supabase as any)
+      .from('formulas_excel')
+      .select('cod_mp_excel, materia_prima, percentual')
+      .eq('formula_id', formulaId),
+    (supabase as any)
+      .from('formulas')
+      .select('cod_mp, materia_prima, percentual')
+      .eq('formula_id', formulaId)
+      .order('sequencia', { ascending: true }),
+    (supabase as any)
+      .from('mp_depara')
+      .select('cod_excel, cod_tid')
+      .not('cod_tid', 'is', null),
+    // produto_chave: coluna pode não existir — erro é ignorado via .data
+    (supabase as any)
       .from('formulas_excel')
       .select('produto_chave')
       .eq('formula_id', formulaId)
       .eq('sequencia', 1)
-      .maybeSingle();
-    produtoChaveExcel = chaveData?.produto_chave ?? null;
-  } catch { /* coluna ainda não existe — silencioso */ }
+      .maybeSingle(),
+  ]);
 
-  // Detectar variante "-1": produto_chave termina em "-1" (ex.: MBG-10-1024-1)
+  const { data: excelItens, error: excelErr } = excelResult;
+  if (excelErr || !excelItens || excelItens.length === 0) return VAZIO;
+
+  const produtoChaveExcel: string | null = chaveResult.data?.produto_chave ?? null;
   const isVariante = produtoChaveExcel?.endsWith('-1') ?? false;
 
-  // 3. Buscar itens do TID
-  const { data: tidItens } = await (supabase as any)
-    .from('formulas')
-    .select('cod_mp, materia_prima, percentual')
-    .eq('formula_id', formulaId)
-    .order('sequencia', { ascending: true });
-
+  const { data: tidItens } = tidResult;
   if (!tidItens || tidItens.length === 0) return { ...VAZIO, produtoChaveExcel, isVariante };
 
-  // 4. Buscar de-para (só MPs com cod_tid preenchido)
-  const { data: depara } = await (supabase as any)
-    .from('mp_depara')
-    .select('cod_excel, cod_tid')
-    .not('cod_tid', 'is', null);
-
-  const tidToExcel = buildTidToExcel(depara ?? []);
+  const tidToExcel = buildTidToExcel(deparaResult.data ?? []);
 
   return compararEmMemoria(tidItens, excelItens, tidToExcel, produtoChaveExcel, isVariante);
 }

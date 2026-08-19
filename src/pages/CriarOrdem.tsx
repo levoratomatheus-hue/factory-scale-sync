@@ -116,24 +116,24 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
   const fetchLotesDisponiveis = useCallback(async () => {
     setLoadingLotes(true);
-    const { data: lotes } = await (supabase as any)
-      .from('cadastro_lotes')
-      .select('lote, produto, quantidade')
-      .eq('status', 'Em Aberto')
-      .order('lote', { ascending: true });
+    // Queries em paralelo: lotes em aberto + ordens existentes (campo lote apenas)
+    const [{ data: lotes }, { data: ordensExistentes }] = await Promise.all([
+      (supabase as any)
+        .from('cadastro_lotes')
+        .select('lote, produto, quantidade')
+        .eq('status', 'Em Aberto')
+        .order('lote', { ascending: true }),
+      (supabase as any)
+        .from('ordens')
+        .select('lote')
+        .limit(5000),
+    ]);
 
     if (!lotes || lotes.length === 0) {
       setLotesDisponiveis([]);
       setLoadingLotes(false);
       return;
     }
-
-    // Busca apenas ordens cujo lote está na lista em aberto — evita trazer toda a tabela
-    const loteNums = lotes.map((l: any) => String(l.lote));
-    const { data: ordensExistentes } = await (supabase as any)
-      .from('ordens')
-      .select('lote')
-      .in('lote', loteNums);
 
     const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
     setLotesDisponiveis(lotes.filter((l: any) => !lotesComOP.has(String(l.lote))));
@@ -299,35 +299,29 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       if (cancelled) return;
       if (!acertosRaw || acertosRaw.length === 0) { setAcertosEnriquecidos([]); return; }
 
-      // 2. Itens da fórmula base (não ordens_formula)
-      const { data: formulaItensRaw } = await supabase
-        .from('formulas')
-        .select('cod_mp, materia_prima, percentual')
-        .eq('formula_id', formulaId);
-      if (cancelled) return;
-      const formulaItens = (formulaItensRaw ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
-
-      // 3. mp_depara para todos os cod_mp_excel únicos → cod_tid
+      // 2, 3 e 4 em paralelo — nenhuma depende das outras, só de acertosRaw
       const codsExcel = [...new Set((acertosRaw as any[]).map((a: any) => a.cod_mp_excel).filter(Boolean))];
-      const { data: deparaRows } = await supabase
-        .from('mp_depara')
-        .select('cod_excel, cod_tid')
-        .in('cod_excel', codsExcel);
-      if (cancelled) return;
-      const deparaMap = new Map<string, string | null>();
-      for (const r of (deparaRows ?? [])) deparaMap.set(r.cod_excel, (r as any).cod_tid ?? null);
-
-      // 4. Quantidade das OPs pelos lotes dos acertos
       const lotes = [...new Set((acertosRaw as any[]).map((a: any) => a.acerto_lote).filter(Boolean))];
+
+      const [formulaItensResult, deparaResult, ordensResult] = await Promise.all([
+        supabase.from('formulas').select('cod_mp, materia_prima, percentual').eq('formula_id', formulaId),
+        codsExcel.length > 0
+          ? supabase.from('mp_depara').select('cod_excel, cod_tid').in('cod_excel', codsExcel)
+          : Promise.resolve({ data: [] as any[] }),
+        lotes.length > 0
+          ? supabase.from('ordens').select('lote, quantidade').in('lote', lotes)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      if (cancelled) return;
+
+      const formulaItens = (formulaItensResult.data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
+
+      const deparaMap = new Map<string, string | null>();
+      for (const r of (deparaResult.data ?? [])) deparaMap.set(r.cod_excel, (r as any).cod_tid ?? null);
+
       const opQtdMap = new Map<string, number>();
-      if (lotes.length > 0) {
-        const { data: ordensRows } = await supabase
-          .from('ordens')
-          .select('lote, quantidade')
-          .in('lote', lotes);
-        if (cancelled) return;
-        for (const o of (ordensRows ?? [])) opQtdMap.set(String(o.lote), (o as any).quantidade);
-      }
+      for (const o of (ordensResult.data ?? [])) opQtdMap.set(String(o.lote), (o as any).quantidade);
 
       // 5. Enriquecer cada acerto
       const enriched: AcertoEnriquecido[] = (acertosRaw as any[]).map((ac) => {
