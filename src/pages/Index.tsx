@@ -161,7 +161,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
   ['mp_testadas' as TabGestorId, 'Controle de MP Testada'],
   ['controle_cor' as TabGestorId, 'Controle de Cor (CIELAB)'],
-  ['estoque_mp' as TabGestorId, 'Estoque de MP'],
+  ['estoque_mp' as TabGestorId, 'Estoque MP ZC'],
   ['estoque_mp_pg' as TabGestorId, 'Estoque de MP — PG'],
 ]);
 
@@ -636,12 +636,12 @@ export default function Index() {
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         isActive={activeTab === 'estoque_mp'}
-                        tooltip="Estoque de MP"
+                        tooltip="Estoque MP ZC"
                         onClick={() => goToTab('estoque_mp')}
                         size="sm"
                       >
                         <Package className="h-3.5 w-3.5 shrink-0" />
-                        <span>Estoque de MP</span>
+                        <span>Estoque MP ZC</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>

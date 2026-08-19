@@ -419,7 +419,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   return (
     <div className="space-y-4 max-w-full">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Estoque de Matéria-Prima</h1>
+        <h1 className="text-2xl font-bold">Estoque MP ZC</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => fetchEstoque()} disabled={loading}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
