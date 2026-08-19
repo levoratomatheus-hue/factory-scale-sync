@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, TrendingUp, Recycle, Palette, Inbox } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -26,7 +26,6 @@ const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
 const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
 const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
-const ComprasPrevisao           = lazy(() => import('./ComprasPrevisao'));
 const ComprasMediaMensal        = lazy(() => import('./ComprasMediaMensal'));
 const Reaproveitamento              = lazy(() => import('./Reaproveitamento'));
 const PainelAnaliseReaproveitamento = lazy(() => import('./PainelAnaliseReaproveitamento'));
@@ -66,7 +65,7 @@ type TabGestorId =
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
   | 'historico_paradas'
   | 'consumo_mp'
-  | 'compras_consumo' | 'compras_previsao' | 'compras_media_mensal'
+  | 'compras_consumo' | 'compras_media_mensal'
   | 'reaproveitamento'
   | 'analise_reaproveitamento'
   | 'mp_testadas'
@@ -155,7 +154,6 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['comercial' as TabGestorId, 'Painel Comercial'],
   ['consumo_mp' as TabGestorId, 'Consumo de MP'],
   ['compras_consumo' as TabGestorId, 'Consumo de MP'],
-  ['compras_previsao' as TabGestorId, 'Previsão de Compra'],
   ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
   ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
@@ -201,7 +199,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
   'estoque_manutencao',
   'consumo_mp',
-  'compras_consumo', 'compras_previsao', 'compras_media_mensal',
+  'compras_consumo', 'compras_media_mensal',
   'reaproveitamento',
   'analise_reaproveitamento',
   'mp_testadas',
@@ -562,17 +560,6 @@ export default function Index() {
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
-                        isActive={activeTab === 'compras_previsao'}
-                        tooltip="Previsão de Compra"
-                        onClick={() => goToTab('compras_previsao')}
-                        size="sm"
-                      >
-                        <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-                        <span>Previsão de Compra</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
                         isActive={activeTab === 'compras_media_mensal'}
                         tooltip="Consumo Médio Mensal"
                         onClick={() => goToTab('compras_media_mensal')}
@@ -721,7 +708,6 @@ export default function Index() {
               <ErrorBoundary>
                 <Suspense fallback={TAB_LOADING}>
                   {activeTab === 'compras_consumo'     && <ComprasConsumo />}
-                  {activeTab === 'compras_previsao'    && <ComprasPrevisao />}
                   {activeTab === 'compras_media_mensal' && <ComprasMediaMensal />}
                   {activeTab === 'comercial'           && <PainelComercial />}
                   {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
@@ -1131,17 +1117,6 @@ export default function Index() {
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    isActive={activeTab === 'compras_previsao'}
-                    tooltip="Previsão de Compra"
-                    onClick={() => goToTab('compras_previsao')}
-                    size="sm"
-                  >
-                    <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-                    <span>Previsão de Compra</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
                     isActive={activeTab === 'compras_media_mensal'}
                     tooltip="Consumo Médio Mensal"
                     onClick={() => goToTab('compras_media_mensal')}
@@ -1336,11 +1311,6 @@ export default function Index() {
               {mountedTabs.has('compras_consumo') && (
                 <KeepAlive active={activeTab === 'compras_consumo'}>
                   <Suspense fallback={TAB_LOADING}><ComprasConsumo /></Suspense>
-                </KeepAlive>
-              )}
-              {mountedTabs.has('compras_previsao') && (
-                <KeepAlive active={activeTab === 'compras_previsao'}>
-                  <Suspense fallback={TAB_LOADING}><ComprasPrevisao /></Suspense>
                 </KeepAlive>
               )}
               {mountedTabs.has('compras_media_mensal') && (

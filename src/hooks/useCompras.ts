@@ -8,7 +8,7 @@ export type OpDetalhe = {
   id: string;
   lote: number;
   produto: string;
-  data: string;   // criado_em (ISO) para consumo; data_programacao para previsão
+  data: string;   // criado_em (ISO)
   kg_mp: number;
   status?: string;
 };
@@ -19,11 +19,6 @@ export type LinhaMP = {
   total_kg: number;
   n_ops: number;
   ops: OpDetalhe[];
-};
-
-export type LinhaPrevisao = LinhaMP & {
-  em_producao_kg: number;
-  nao_iniciada_kg: number;
 };
 
 export type AvisoCobertura = {
@@ -45,19 +40,6 @@ export type ResultadoCompras = {
   total_kg: number;
   mesesComDados: MesesComDados;
 };
-
-export type ResultadoPrevisao = {
-  linhas: LinhaPrevisao[];
-  aviso: AvisoCobertura;
-  total_kg: number;
-};
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const STATUS_EM_PRODUCAO = new Set([
-  "em_pesagem", "aguardando_mistura", "em_mistura", "aguardando_linha", "em_linha",
-]);
-const STATUS_NAO_INICIADA = new Set(["pendente", "aguardando_liberacao"]);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,9 +68,6 @@ type EntradaMP = {
   total_kg: number;
   n_ops: number;
   ops: OpDetalhe[];
-  em_producao_kg: number;
-  nao_iniciada_kg: number;
-  // conta ocorrências de cada nome para exibir o mais frequente
   _nameCount: Map<string, number>;
 };
 
@@ -100,7 +79,6 @@ type CalcResult = {
 function calcularCompras(
   ordens: OrdemInput[],
   formulasRows: any[],
-  withStatus: boolean,
 ): CalcResult {
   // Indexa fórmula base por formula_id (normalizado para string)
   const fIndex = new Map<string, Array<{ materia_prima: string; cod_mp: string | null; fracao: number }>>();
@@ -135,8 +113,6 @@ function calcularCompras(
     }
 
     aviso.ops_calculadas++;
-    const isEmProducao = withStatus && op.status ? STATUS_EM_PRODUCAO.has(op.status) : false;
-    const isNaoIniciada = withStatus && op.status ? STATUS_NAO_INICIADA.has(op.status) : false;
 
     for (const item of items) {
       const kg_mp = item.fracao * op.qtd_op;
@@ -148,14 +124,11 @@ function calcularCompras(
           materia_prima: item.materia_prima,
           cod_mp: item.cod_mp,
           total_kg: 0, n_ops: 0, ops: [],
-          em_producao_kg: 0, nao_iniciada_kg: 0,
           _nameCount: new Map(),
         });
       }
       const entry = linhasMap.get(groupKey)!;
       entry.total_kg += kg_mp;
-      entry.em_producao_kg += isEmProducao ? kg_mp : 0;
-      entry.nao_iniciada_kg += isNaoIniciada ? kg_mp : 0;
 
       // Conta ocorrências de cada nome — resolução do mais frequente fica em buildLinhas
       entry._nameCount.set(item.materia_prima, (entry._nameCount.get(item.materia_prima) ?? 0) + 1);
@@ -235,7 +208,7 @@ export function useComprasConsumo(
 
       const fRows = await fetchAllFormulas();
 
-      const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, false);
+      const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows);
       const linhas = buildLinhas<LinhaMP>(linhasMap, () => ({}));
 
       // Conta meses distintos com OPs no período (base para divisão da média)
@@ -254,49 +227,6 @@ export function useComprasConsumo(
       setLoading(false);
     }
   }, [dataInicio, dataFim, filtros?.linha, filtros?.marca]);
-
-  return { resultado, loading, refetch };
-}
-
-// ── useComprasPrevisao ────────────────────────────────────────────────────────
-// OPs em aberto filtradas por data_programacao. Sem alteração.
-
-export function useComprasPrevisao(dataInicio: string, dataFim: string) {
-  const [resultado, setResultado] = useState<ResultadoPrevisao | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: ordensData } = await (supabase as any)
-        .from("ordens")
-        .select("id, lote, produto, quantidade, formula_id, status, data_programacao")
-        .neq("status", "concluido")
-        .gte("data_programacao", dataInicio)
-        .lte("data_programacao", dataFim)
-        .limit(2000);
-
-      if (!ordensData) { setResultado(null); return; }
-
-      const ordensMapped: OrdemInput[] = (ordensData as any[]).map((o) => ({
-        id: o.id, lote: Number(o.lote), produto: o.produto,
-        formula_id: o.formula_id ?? null, qtd_op: o.quantidade ?? 0,
-        data: o.data_programacao ?? "", status: o.status ?? "",
-      }));
-
-      const fRows = await fetchAllFormulas();
-
-      const { linhasMap, aviso } = calcularCompras(ordensMapped, fRows, true);
-      const linhas = buildLinhas<LinhaPrevisao>(linhasMap, (e) => ({
-        em_producao_kg: e.em_producao_kg,
-        nao_iniciada_kg: e.nao_iniciada_kg,
-      }));
-
-      setResultado({ linhas, aviso, total_kg: linhas.reduce((s, l) => s + l.total_kg, 0) });
-    } finally {
-      setLoading(false);
-    }
-  }, [dataInicio, dataFim]);
 
   return { resultado, loading, refetch };
 }
