@@ -53,7 +53,7 @@ export type ResultadoPrevisao = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BATCH_SIZE = 100; // menor chunk → menos linhas por request (evita corte silencioso)
+const BATCH_SIZE = 500; // 500 formula_ids/chunk → ~3.500 linhas avg, bem dentro do limit(50000)
 
 const STATUS_EM_PRODUCAO = new Set([
   "em_pesagem", "aguardando_mistura", "em_mistura", "aguardando_linha", "em_linha",
@@ -176,13 +176,8 @@ function calcularCompras(
       entry.em_producao_kg += isEmProducao ? kg_mp : 0;
       entry.nao_iniciada_kg += isNaoIniciada ? kg_mp : 0;
 
-      // Conta o nome para exibir o mais frequente no grupo
+      // Conta ocorrências de cada nome — resolução do mais frequente fica em buildLinhas
       entry._nameCount.set(item.materia_prima, (entry._nameCount.get(item.materia_prima) ?? 0) + 1);
-      // Atualiza nome para o mais frequente
-      let maxCount = 0;
-      for (const [nome, cnt] of entry._nameCount) {
-        if (cnt > maxCount) { maxCount = cnt; entry.materia_prima = nome; }
-      }
 
       const existingOp = entry.ops.find((o) => o.id === op.id);
       if (!existingOp) {
@@ -199,14 +194,21 @@ function calcularCompras(
 
 function buildLinhas<T extends LinhaMP>(linhasMap: Map<string, EntradaMP>, extra: (e: EntradaMP) => Partial<T>): T[] {
   return Array.from(linhasMap.entries())
-    .map(([, e]) => ({
-      materia_prima: e.materia_prima,
-      cod_mp: e.cod_mp,
-      total_kg: e.total_kg,
-      n_ops: e.n_ops,
-      ops: e.ops.sort((a, b) => b.kg_mp - a.kg_mp),
-      ...extra(e),
-    }) as T)
+    .map(([, e]) => {
+      // Resolve o nome mais frequente do grupo — uma única passagem por grupo
+      let maxCount = 0;
+      for (const [nome, cnt] of e._nameCount) {
+        if (cnt > maxCount) { maxCount = cnt; e.materia_prima = nome; }
+      }
+      return {
+        materia_prima: e.materia_prima,
+        cod_mp: e.cod_mp,
+        total_kg: e.total_kg,
+        n_ops: e.n_ops,
+        ops: e.ops.sort((a, b) => b.kg_mp - a.kg_mp),
+        ...extra(e),
+      } as T;
+    })
     .sort((a, b) => b.total_kg - a.total_kg);
 }
 

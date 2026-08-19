@@ -187,14 +187,16 @@ const papelLabel: Record<string, string> = {
 
 // Abas que ficam no DOM após a primeira visita (keep-alive).
 // Formulários/one-shot ficam de fora e sempre remontam.
+// Abas que ficam no DOM após a primeira visita.
+// Não incluir: consulta_formula, ferramentas_manutencao, historico_paradas
+// (sem estado crítico a preservar — remontam rápido e liberam memória/subscriptions).
 const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'gestor', 'programacao', 'programacao_balanca', 'pre_programacao', 'historico', 'liberacao',
-  'analises', 'consulta_formula', 'comercial',
+  'analises', 'comercial',
   'balanca1', 'balanca2', 'mistura',
   'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
   'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
-  'estoque_manutencao', 'ferramentas_manutencao',
-  'historico_paradas',
+  'estoque_manutencao',
   'consumo_mp',
   'compras_consumo', 'compras_previsao', 'compras_media_mensal',
   'reaproveitamento',

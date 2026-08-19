@@ -207,7 +207,8 @@ export default function PainelAnaliseReaproveitamento() {
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
       .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em")
-      .order("criado_em", { ascending: false });
+      .order("criado_em", { ascending: false })
+      .limit(5000);
     if (!error) {
       setLista(data ?? []);
     }
