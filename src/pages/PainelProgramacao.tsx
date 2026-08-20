@@ -5,7 +5,7 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical, ChevronDown, Info } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical, ChevronDown, Info, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -1540,11 +1540,22 @@ export default function PainelProgramacao() {
         <Button
           size="sm"
           variant="outline"
-          className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
+          className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950"
           onClick={() => { setParadaAvulsaData(data); setModalParadaAvulsaAberto(true); }}
         >
           <PauseCircle className="h-3.5 w-3.5" />
           Adicionar Parada
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={loading}
+          className="gap-1.5 ml-auto"
+          title="Atualizar dados"
+          onClick={() => fetchOrdens(data)}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <span className="hidden sm:inline">Atualizar</span>
         </Button>
       </div>
 
