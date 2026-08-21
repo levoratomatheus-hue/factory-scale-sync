@@ -183,29 +183,37 @@ const VAZIO: ResultadoComparacao = {
 };
 
 export async function compararFormulas(formulaId: string): Promise<ResultadoComparacao> {
+  // Normaliza: garante string sem espaços, independente do que vier do cadastro_lotes
+  const fid = String(formulaId ?? '').trim();
+  if (!fid) return VAZIO;
+
   // 3 queries em paralelo + depara do cache (instantâneo após 1ª chamada)
   const [excelResult, tidResult, chaveResult, depara] = await Promise.all([
     (supabase as any)
       .from('formulas_excel')
       .select('cod_mp_excel, materia_prima, percentual')
-      .eq('formula_id', formulaId),
+      .eq('formula_id', fid),
     (supabase as any)
       .from('formulas')
       .select('cod_mp, materia_prima, percentual')
-      .eq('formula_id', formulaId)
+      .eq('formula_id', fid)
       .order('sequencia', { ascending: true }),
     // produto_chave: coluna pode não existir — erro é ignorado via .data
     (supabase as any)
       .from('formulas_excel')
       .select('produto_chave')
-      .eq('formula_id', formulaId)
+      .eq('formula_id', fid)
       .eq('sequencia', 1)
       .maybeSingle(),
     fetchAllDepara(), // cache — 0 ms se já populado
   ]);
 
   const { data: excelItens, error: excelErr } = excelResult;
-  if (excelErr || !excelItens || excelItens.length === 0) return VAZIO;
+  if (excelErr) {
+    console.error(`[compararFormulas] Erro ao buscar formulas_excel para formula_id="${fid}":`, excelErr);
+    return VAZIO;
+  }
+  if (!excelItens || excelItens.length === 0) return VAZIO;
 
   const produtoChaveExcel: string | null = chaveResult.data?.produto_chave ?? null;
   const isVariante = produtoChaveExcel?.endsWith('-1') ?? false;
