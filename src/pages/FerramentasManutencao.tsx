@@ -10,7 +10,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Hammer, Pencil, Trash2, Plus, MapPin } from "lucide-react";
+import { Loader2, Hammer, Pencil, Trash2, Plus, MapPin, Search } from "lucide-react";
 
 type StatusFerramenta = "disponivel" | "em_uso" | "manutencao";
 
@@ -52,6 +52,7 @@ export default function FerramentasManutencao({ papel }: Props) {
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<StatusFerramenta | "todos">("todos");
   const [filtroLocalizacao, setFiltroLocalizacao] = useState("");
+  const [busca, setBusca] = useState("");
 
   const [localizacoes, setLocalizacoes] = useState<Localizacao[]>([]);
 
@@ -182,9 +183,11 @@ export default function FerramentasManutencao({ papel }: Props) {
     fetchLocalizacoes();
   }
 
+  const buscaNorm = busca.trim().toLowerCase();
   const listaFiltrada = ferramentas.filter(f => {
     if (filtroStatus !== "todos" && f.status !== filtroStatus) return false;
     if (filtroLocalizacao && f.localizacao !== filtroLocalizacao) return false;
+    if (buscaNorm && !f.nome.toLowerCase().includes(buscaNorm) && !(f.codigo ?? "").toLowerCase().includes(buscaNorm)) return false;
     return true;
   });
 
@@ -211,6 +214,17 @@ export default function FerramentasManutencao({ papel }: Props) {
             </Button>
           </div>
         )}
+      </div>
+
+      {/* Busca por nome / código */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Pesquisar por nome ou código..."
+          className="pl-9"
+        />
       </div>
 
       {/* Filtro de localização */}
