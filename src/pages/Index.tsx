@@ -1248,10 +1248,8 @@ export default function Index() {
                   <Suspense fallback={TAB_LOADING}><PainelHistorico /></Suspense>
                 </KeepAlive>
               )}
-              {mountedTabs.has('consulta_formula') && (
-                <KeepAlive active={activeTab === 'consulta_formula'}>
-                  <Suspense fallback={TAB_LOADING}><PainelConsultaFormula /></Suspense>
-                </KeepAlive>
+              {activeTab === 'consulta_formula' && (
+                <Suspense fallback={TAB_LOADING}><PainelConsultaFormula /></Suspense>
               )}
               {mountedTabs.has('analises') && (
                 <KeepAlive active={activeTab === 'analises'}>
@@ -1287,19 +1285,15 @@ export default function Index() {
                   </Suspense>
                 </KeepAlive>
               )}
-              {mountedTabs.has('ferramentas_manutencao') && (
-                <KeepAlive active={activeTab === 'ferramentas_manutencao'}>
-                  <Suspense fallback={TAB_LOADING}>
-                    <FerramentasManutencao papel={perfil.papel} />
-                  </Suspense>
-                </KeepAlive>
+              {activeTab === 'ferramentas_manutencao' && (
+                <Suspense fallback={TAB_LOADING}>
+                  <FerramentasManutencao papel={perfil.papel} />
+                </Suspense>
               )}
-              {mountedTabs.has('historico_paradas') && (
-                <KeepAlive active={activeTab === 'historico_paradas'}>
-                  <Suspense fallback={TAB_LOADING}>
-                    <HistoricoParadas papel={perfil.papel} />
-                  </Suspense>
-                </KeepAlive>
+              {activeTab === 'historico_paradas' && (
+                <Suspense fallback={TAB_LOADING}>
+                  <HistoricoParadas papel={perfil.papel} />
+                </Suspense>
               )}
               {mountedTabs.has('consumo_mp') && (
                 <KeepAlive active={activeTab === 'consumo_mp'}>
