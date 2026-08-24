@@ -1192,7 +1192,9 @@ export default function PainelProgramacao() {
           await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
         }
       }
-    } catch { /* silencioso — não impede a edição */ }
+    } catch (err: any) {
+      toast({ title: 'Aviso: falha ao atualizar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
+    }
   };
 
   const handleRegistrarDia = async () => {

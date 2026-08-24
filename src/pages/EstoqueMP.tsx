@@ -313,13 +313,17 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
 
   const abrirHistorico = useCallback(async (item: EstoqueItem) => {
     setHistoricoItem(item);
+    setHistorico([]);
     setLoadingHistorico(true);
-    const { data } = await (supabase as any)
+    const { data, error } = await (supabase as any)
       .from('estoque_movimentacoes')
       .select('*')
       .eq('cod_mp_excel', item.cod_mp_excel)
       .order('criado_em', { ascending: false })
       .limit(200);
+    if (error) {
+      toast({ title: 'Erro ao carregar histórico', description: error.message, variant: 'destructive' });
+    }
     setHistorico((data ?? []) as Movimentacao[]);
     setLoadingHistorico(false);
   }, []);

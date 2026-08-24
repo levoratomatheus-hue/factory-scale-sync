@@ -410,13 +410,50 @@ export default function ConsumoMP({ perfilNome }: Props) {
       acerto_lote: ehAcerto ? acertoOpSelecionada!.lote : null,
       acerto_formula_id: ehAcerto ? acertoOpSelecionada!.formula_id : null,
     });
-    setSalvando(false);
 
     if (error) {
+      setSalvando(false);
       toast({ title: 'Erro ao registrar', description: error.message, variant: 'destructive' });
       return;
     }
 
+    // Atualizar estoque_mp e gravar em estoque_movimentacoes
+    const agora = new Date().toISOString();
+    const { data: estoqueRow } = await (supabase as any)
+      .from('estoque_mp')
+      .select('saldo_kg')
+      .eq('cod_mp_excel', mpSelecionada.cod_excel)
+      .maybeSingle();
+
+    if (estoqueRow !== null) {
+      const novoSaldo = (estoqueRow.saldo_kg ?? 0) - qtd;
+      const obsTexto = [
+        ehAcerto ? `Acerto OP Lote ${acertoOpSelecionada!.lote}` : 'Retirada manual',
+        setor === 'laboratorio' ? '(Laboratório)' : setor === 'producao' ? '(Produção)' : null,
+        observacao.trim() || null,
+      ].filter(Boolean).join(' — ');
+
+      await Promise.all([
+        (supabase as any)
+          .from('estoque_mp')
+          .update({ saldo_kg: novoSaldo, atualizado_em: agora })
+          .eq('cod_mp_excel', mpSelecionada.cod_excel),
+        (supabase as any)
+          .from('estoque_movimentacoes')
+          .insert({
+            cod_mp_excel: mpSelecionada.cod_excel,
+            materia_prima: mpSelecionada.descricao,
+            tipo: 'saida',
+            quantidade_kg: -qtd,
+            saldo_apos: novoSaldo,
+            observacao: obsTexto,
+            criado_por: perfilNome,
+            criado_em: agora,
+          }),
+      ]);
+    }
+
+    setSalvando(false);
     toast({ title: 'Retirada registrada com sucesso!' });
     setBusca('');
     setMpSelecionada(null);
@@ -437,8 +474,51 @@ export default function ConsumoMP({ perfilNome }: Props) {
   // ── Excluir retirada ────────────────────────────────────────────────────────
   const handleExcluir = async (id: string) => {
     if (!confirm('Excluir este lançamento?')) return;
+
+    // Buscar dados da retirada antes de excluir para poder estornar o estoque
+    const { data: consumoRow, error: fetchErr } = await (supabase as any)
+      .from('consumo_mp')
+      .select('cod_mp_excel, materia_prima, quantidade_kg')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) { toast({ title: 'Erro ao excluir', description: fetchErr.message, variant: 'destructive' }); return; }
+
     const { error } = await supabase.from('consumo_mp').delete().eq('id', id);
     if (error) { toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' }); return; }
+
+    // Estornar no estoque_mp e registrar em estoque_movimentacoes
+    if (consumoRow) {
+      const agora = new Date().toISOString();
+      const { data: estoqueRow } = await (supabase as any)
+        .from('estoque_mp')
+        .select('saldo_kg')
+        .eq('cod_mp_excel', consumoRow.cod_mp_excel)
+        .maybeSingle();
+
+      if (estoqueRow !== null) {
+        const novoSaldo = (estoqueRow.saldo_kg ?? 0) + consumoRow.quantidade_kg;
+        await Promise.all([
+          (supabase as any)
+            .from('estoque_mp')
+            .update({ saldo_kg: novoSaldo, atualizado_em: agora })
+            .eq('cod_mp_excel', consumoRow.cod_mp_excel),
+          (supabase as any)
+            .from('estoque_movimentacoes')
+            .insert({
+              cod_mp_excel: consumoRow.cod_mp_excel,
+              materia_prima: consumoRow.materia_prima,
+              tipo: 'estorno',
+              quantidade_kg: consumoRow.quantidade_kg,
+              saldo_apos: novoSaldo,
+              observacao: 'Estorno — retirada manual excluída',
+              criado_por: perfilNome,
+              criado_em: agora,
+            }),
+        ]);
+      }
+    }
+
     toast({ title: 'Lançamento excluído' });
     fetchRetiradas();
     fetchRelatorio();

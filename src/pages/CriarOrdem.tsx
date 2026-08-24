@@ -399,7 +399,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     await Promise.all([
       // Baixa automática de estoque (agora batch internamente: 3 RT fixos)
       formulaId
-        ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome).catch(() => {})
+        ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome).catch((err: any) => {
+            toast({ title: 'Aviso: falha ao baixar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
+          })
         : Promise.resolve(),
 
       // Atualiza orientações na tabela formulas para futuras OPs
