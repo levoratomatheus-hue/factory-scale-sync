@@ -73,15 +73,18 @@ function SituacaoBadge({ item }: { item: EstoqueItem }) {
   );
 }
 
-function tipoBadge(tipo: Movimentacao['tipo']) {
-  const map: Record<Movimentacao['tipo'], { label: string; cls: string }> = {
-    entrada:       { label: 'Entrada',        cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-    saida:         { label: 'Saída (OP)',      cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
-    estorno:       { label: 'Estorno',         cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-    ajuste:        { label: 'Ajuste',          cls: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
-    saldo_inicial: { label: 'Saldo inicial',   cls: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300' },
+function tipoBadge(mov: Movimentacao) {
+  const isManual = mov.tipo === 'saida' && !mov.ordem_id;
+  const map: Record<string, { label: string; cls: string }> = {
+    entrada:       { label: 'Entrada',         cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+    saida_op:      { label: 'Saída (OP)',       cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+    saida_manual:  { label: 'Saída (Manual)',   cls: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:text-fuchsia-400' },
+    estorno:       { label: 'Estorno',          cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    ajuste:        { label: 'Ajuste',           cls: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
+    saldo_inicial: { label: 'Saldo inicial',    cls: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300' },
   };
-  const { label, cls } = map[tipo] ?? { label: tipo, cls: '' };
+  const key = mov.tipo === 'saida' ? (isManual ? 'saida_manual' : 'saida_op') : mov.tipo;
+  const { label, cls } = map[key] ?? { label: mov.tipo, cls: '' };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
       {label}
@@ -752,7 +755,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                   {historico.map((mov) => (
                     <tr key={mov.id} className="border-t">
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{fmtDatetime(mov.criado_em)}</td>
-                      <td className="px-3 py-1.5">{tipoBadge(mov.tipo)}</td>
+                      <td className="px-3 py-1.5">{tipoBadge(mov)}</td>
                       <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${mov.quantidade_kg >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {mov.quantidade_kg >= 0 ? '+' : ''}{formatKg(mov.quantidade_kg)}
                       </td>

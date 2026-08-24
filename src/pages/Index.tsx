@@ -34,6 +34,7 @@ const ControleCor                   = lazy(() => import('./ControleCor'));
 const PreProgramacao                = lazy(() => import('./PreProgramacao'));
 const EstoqueMP                     = lazy(() => import('./EstoqueMP'));
 const EstoqueMPPG                   = lazy(() => import('./EstoqueMPPG'));
+const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoesMP'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -71,7 +72,8 @@ type TabGestorId =
   | 'mp_testadas'
   | 'controle_cor'
   | 'estoque_mp'
-  | 'estoque_mp_pg';
+  | 'estoque_mp_pg'
+  | 'historico_mov_mp';
 
 const gruposGestor = [
   {
@@ -161,6 +163,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['controle_cor' as TabGestorId, 'Controle de Cor (CIELAB)'],
   ['estoque_mp' as TabGestorId, 'Estoque MP ZC'],
   ['estoque_mp_pg' as TabGestorId, 'Estoque MP PG'],
+  ['historico_mov_mp' as TabGestorId, 'Histórico de Movimentações'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -206,6 +209,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'controle_cor',
   'estoque_mp',
   'estoque_mp_pg',
+  'historico_mov_mp',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -640,6 +644,17 @@ export default function Index() {
                       >
                         <Package className="h-3.5 w-3.5 shrink-0" />
                         <span>Estoque MP PG</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'historico_mov_mp'}
+                        tooltip="Histórico de Movimentações"
+                        onClick={() => goToTab('historico_mov_mp')}
+                        size="sm"
+                      >
+                        <History className="h-3.5 w-3.5 shrink-0" />
+                        <span>Histórico de Movimentações</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   </SidebarMenu>
@@ -1351,6 +1366,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'estoque_mp_pg'}>
                   <Suspense fallback={TAB_LOADING}>
                     <EstoqueMPPG perfilNome={perfil.nome} papel={perfil.papel} />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('historico_mov_mp') && (
+                <KeepAlive active={activeTab === 'historico_mov_mp'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <HistoricoMovimentacoesMP />
                   </Suspense>
                 </KeepAlive>
               )}
