@@ -507,116 +507,86 @@ export default function PainelComercial() {
         {/* ── Modo semanal ── */}
         {!loading && !modoTexto && (
           <>
-            {/* ══ MOBILE: 5 colunas compactas com scroll horizontal (hidden em md+) ══ */}
-            <div className="flex flex-col flex-1 min-h-0 md:hidden overflow-auto">
-              <div className="min-w-0 flex flex-col flex-1">
-                {/* Cabeçalhos compactos */}
-                <div className="sticky top-0 z-10 bg-background flex gap-0.5 pb-0.5 shrink-0">
-                  {diasSemana.map((dia) => {
+            {/* ══ MOBILE: navegação dia a dia ←/→ (hidden em md+) ══ */}
+            <div className="flex flex-col flex-1 min-h-0 md:hidden">
+              {/* Barra de navegação de dia */}
+              <div className="shrink-0 flex items-center gap-2 pb-2">
+                <button
+                  onClick={() => setDiaAtivoIdx((i) => Math.max(0, i - 1))}
+                  disabled={diaAtivoIdx === 0}
+                  className="p-1.5 rounded-lg border bg-card disabled:opacity-30 active:bg-accent"
+                  aria-label="Dia anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="flex-1 text-center">
+                  {diasSemana[diaAtivoIdx] && (() => {
+                    const dia = diasSemana[diaAtivoIdx];
                     const isHoje = dia === hj;
-                    const abrev = capitalize(format(new Date(dia + 'T12:00:00'), 'EEE', { locale: ptBR })).replace('.','');
+                    const nomeDia = capitalize(format(new Date(dia + 'T12:00:00'), 'EEEE', { locale: ptBR }));
                     const dataDia = format(new Date(dia + 'T12:00:00'), 'dd/MM');
                     return (
-                      <div key={dia} className={cn(
-                        'flex-1 min-w-0 px-0.5 py-1 rounded-t-lg border-t border-l border-r border-b text-center',
-                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
-                      )}>
-                        <p className={cn('font-bold text-[10px] leading-tight truncate', isHoje && 'text-primary')}>{abrev}</p>
-                        <p className="text-[9px] text-muted-foreground leading-tight">{dataDia}</p>
-                      </div>
+                      <>
+                        <p className={cn('font-bold text-sm leading-tight', isHoje && 'text-primary')}>{nomeDia}</p>
+                        <p className="text-xs text-muted-foreground leading-tight">{dataDia}{isHoje && ' · hoje'}</p>
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
-                {/* Cards compactos */}
-                <div className="flex gap-0.5 flex-1 pb-4">
-                  {diasSemana.map((dia) => {
-                    const ops = ordPorDia.get(dia) ?? [];
-                    const isHoje = dia === hj;
+                <button
+                  onClick={() => setDiaAtivoIdx((i) => Math.min(diasSemana.length - 1, i + 1))}
+                  disabled={diaAtivoIdx === diasSemana.length - 1}
+                  className="p-1.5 rounded-lg border bg-card disabled:opacity-30 active:bg-accent"
+                  aria-label="Próximo dia"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Indicadores de dia */}
+              <div className="shrink-0 flex justify-center gap-1.5 pb-3">
+                {diasSemana.map((dia, idx) => (
+                  <button
+                    key={dia}
+                    onClick={() => setDiaAtivoIdx(idx)}
+                    className={cn(
+                      'h-1.5 rounded-full transition-all',
+                      idx === diaAtivoIdx
+                        ? 'w-4 bg-primary'
+                        : dia === hj
+                          ? 'w-2 bg-primary/40'
+                          : 'w-2 bg-muted-foreground/30'
+                    )}
+                    aria-label={format(new Date(dia + 'T12:00:00'), 'EEEE', { locale: ptBR })}
+                  />
+                ))}
+              </div>
+              {/* Cards do dia ativo */}
+              <div className="flex-1 overflow-y-auto min-h-0 pb-4">
+                {(() => {
+                  const dia = diasSemana[diaAtivoIdx];
+                  const ops = dia ? (ordPorDia.get(dia) ?? []) : [];
+                  if (ops.length === 0) {
                     return (
-                      <div key={dia} className={cn(
-                        'flex-1 min-w-0 rounded-b-lg border-b border-l border-r',
-                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
-                      )}>
-                        <div className="px-0.5 py-1 space-y-0.5">
-                          {ops.length === 0 ? (
-                            <p className="text-[9px] text-muted-foreground italic px-0.5 py-1 text-center">—</p>
-                          ) : (
-                            ops.map((op) => {
-                              const concluida = op.status === 'concluido' && !!op.data_conclusao;
-                              const confirmada = op.programacao_confirmada === true;
-                              const isEstoque = op.tipo_op === 'estoque';
-                              const dotClass = isEstoque ? 'bg-purple-500' : (concluida || confirmada) ? 'bg-green-500' : 'bg-orange-400';
-                              const isOpen = openIds.has(op.id);
-                              const emissaoFmt = op.data_emissao
-                                ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM')
-                                : null;
-                              const conclusaoFmt = op.data_conclusao
-                                ? format(new Date(op.data_conclusao.substring(0,10) + 'T12:00:00'), 'dd/MM')
-                                : null;
-                              const dispStr = concluida
-                                ? op.data_conclusao!.substring(0,10)
-                                : (confirmada || isEstoque)
-                                  ? proximoDiaUtil(op.data_programacao)
-                                  : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
-                              const dispFmt = dispStr
-                                ? format(new Date(dispStr + 'T12:00:00'), 'dd/MM')
-                                : null;
-                              return (
-                                <button
-                                  key={op.id}
-                                  onClick={() => toggleCard(op.id)}
-                                  className={cn(
-                                    'w-full text-left rounded border px-0.5 py-0.5',
-                                    isEstoque ? 'border-purple-200 bg-purple-50/50 dark:bg-purple-900/20'
-                                      : concluida ? 'border-green-300 bg-green-50/80 dark:bg-green-900/30'
-                                      : confirmada ? 'border-green-300'
-                                      : 'border-orange-200 bg-orange-50/30'
-                                  )}
-                                >
-                                  <div className="flex items-start gap-0.5">
-                                    <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${dotClass}`} />
-                                    <div className="min-w-0">
-                                      <p className="text-[9px] font-medium leading-tight break-words">{op.produto}</p>
-                                      <p className="text-[9px] tabular-nums text-muted-foreground leading-tight">{formatKg(op.quantidade)}kg</p>
-                                    </div>
-                                  </div>
-                                  {isOpen && (
-                                    <div className="mt-0.5 pt-0.5 border-t border-black/10 dark:border-white/10 space-y-0.5">
-                                      <p className="text-[9px] text-muted-foreground leading-tight">Lote {op.lote}</p>
-                                      {op.quantidade_real != null && (
-                                        <p className="text-[9px] text-green-600 dark:text-green-400 font-medium leading-tight">
-                                          Prod: {formatKg(op.quantidade_real)}kg
-                                        </p>
-                                      )}
-                                      {emissaoFmt && (
-                                        <p className="text-[9px] text-muted-foreground leading-tight">Emit: {emissaoFmt}</p>
-                                      )}
-                                      {conclusaoFmt && (
-                                        <p className="text-[9px] text-green-600 dark:text-green-400 leading-tight">Conc: {conclusaoFmt}</p>
-                                      )}
-                                      {dispFmt && (
-                                        <p className={cn('text-[9px] font-medium leading-tight',
-                                          concluida ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
-                                        )}>
-                                          {concluida ? 'Disp:' : dispStr! <= hj ? 'Disp:' : 'Est:'} {dispFmt}
-                                        </p>
-                                      )}
-                                      {isEstoque && (
-                                        <span className="inline-block text-[8px] font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded px-0.5 leading-tight">
-                                          Estoque
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
+                      <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                        <PackageSearch className="h-8 w-8" />
+                        <p className="text-sm">Nenhum produto previsto</p>
                       </div>
                     );
-                  })}
-                </div>
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {ops.map((op) => (
+                        <CardSemana
+                          key={op.id}
+                          op={op}
+                          isOpen={openIds.has(op.id)}
+                          onToggle={() => toggleCard(op.id)}
+                          hj={hj}
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
