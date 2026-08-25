@@ -75,17 +75,15 @@ function CardBusca({ op, isOpen, onToggle, hj }: {
   const concluida = op.status === 'concluido' && !!op.data_conclusao;
   const isEstoque = op.tipo_op === 'estoque';
 
-  const borderClass = isEstoque
-    ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20'
-    : concluida
-      ? 'border-green-400 bg-green-100/80 dark:bg-green-900/40'
+  const borderClass = concluida
+    ? 'border-green-400 bg-green-100/80 dark:bg-green-900/40'
+    : isEstoque
+      ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20'
       : confirmada
         ? 'border-green-400'
         : 'border-orange-300 bg-orange-50/50 dark:bg-orange-900/10';
 
-  const dotClass = isEstoque
-    ? 'bg-purple-500'
-    : (concluida || confirmada) ? 'bg-green-500' : 'bg-orange-400';
+  const dotClass = concluida ? 'bg-green-500' : isEstoque ? 'bg-purple-500' : confirmada ? 'bg-green-500' : 'bg-orange-400';
 
   const emissaoFmt = op.data_emissao
     ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM/yyyy')
@@ -191,7 +189,7 @@ function CardSemana({ op, isOpen, onToggle, hj }: {
   const concluida = op.status === 'concluido' && !!op.data_conclusao;
   const isEstoque = op.tipo_op === 'estoque';
 
-  const dotClass = isEstoque ? 'bg-purple-500' : (concluida || confirmada) ? 'bg-green-500' : 'bg-orange-400';
+  const dotClass = concluida ? 'bg-green-500' : isEstoque ? 'bg-purple-500' : confirmada ? 'bg-green-500' : 'bg-orange-400';
 
   const emissaoFmt = op.data_emissao
     ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM', { locale: ptBR })
@@ -210,10 +208,10 @@ function CardSemana({ op, isOpen, onToggle, hj }: {
         : { cls: 'bg-red-100 text-red-700 border-red-200', label: `${du}du` }
     : null;
 
-  const cardClass = isEstoque
-    ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20'
-    : concluida
-      ? 'border-green-400 bg-green-100/80 dark:bg-green-900/40'
+  const cardClass = concluida
+    ? 'border-green-400 bg-green-100/80 dark:bg-green-900/40'
+    : isEstoque
+      ? 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/20'
       : confirmada
         ? 'border-green-400'
         : '';
