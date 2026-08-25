@@ -507,70 +507,76 @@ export default function PainelComercial() {
         {/* ── Modo semanal ── */}
         {!loading && !modoTexto && (
           <>
-            {/* ══ MOBILE: um dia por vez com nav ←/→ (hidden em md+) ══ */}
-            <div className="flex flex-col flex-1 min-h-0 md:hidden">
-              {/* Navegação de dia */}
-              <div className="shrink-0 flex items-center gap-2 mb-2">
-                <button
-                  onClick={() => setDiaAtivoIdx((i) => Math.max(0, i - 1))}
-                  disabled={diaAtivoIdx === 0}
-                  className="p-2 rounded-lg border bg-card disabled:opacity-30 active:bg-muted"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <div className={cn(
-                  'flex-1 text-center px-3 py-2 rounded-xl border',
-                  diasSemana[diaAtivoIdx] === hj
-                    ? 'border-primary/60 bg-primary/5'
-                    : 'border-border bg-card'
-                )}>
-                  <p className={cn('font-semibold text-sm', diasSemana[diaAtivoIdx] === hj && 'text-primary')}>
-                    {capitalize(format(new Date(diasSemana[diaAtivoIdx] + 'T12:00:00'), 'EEEE', { locale: ptBR }))}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(diasSemana[diaAtivoIdx] + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })}
-                  </p>
+            {/* ══ MOBILE: 5 colunas compactas com scroll horizontal (hidden em md+) ══ */}
+            <div className="flex flex-col flex-1 min-h-0 md:hidden overflow-auto">
+              <div className="min-w-0 flex flex-col flex-1">
+                {/* Cabeçalhos compactos */}
+                <div className="sticky top-0 z-10 bg-background flex gap-0.5 pb-0.5 shrink-0">
+                  {diasSemana.map((dia) => {
+                    const isHoje = dia === hj;
+                    const abrev = capitalize(format(new Date(dia + 'T12:00:00'), 'EEE', { locale: ptBR })).replace('.','');
+                    const dataDia = format(new Date(dia + 'T12:00:00'), 'dd/MM');
+                    return (
+                      <div key={dia} className={cn(
+                        'flex-1 min-w-0 px-0.5 py-1 rounded-t-lg border-t border-l border-r border-b text-center',
+                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                      )}>
+                        <p className={cn('font-bold text-[10px] leading-tight truncate', isHoje && 'text-primary')}>{abrev}</p>
+                        <p className="text-[9px] text-muted-foreground leading-tight">{dataDia}</p>
+                      </div>
+                    );
+                  })}
                 </div>
-                <button
-                  onClick={() => setDiaAtivoIdx((i) => Math.min(diasSemana.length - 1, i + 1))}
-                  disabled={diaAtivoIdx === diasSemana.length - 1}
-                  className="p-2 rounded-lg border bg-card disabled:opacity-30 active:bg-muted"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Indicador de posição */}
-              <div className="shrink-0 flex justify-center gap-1 mb-2">
-                {diasSemana.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setDiaAtivoIdx(i)}
-                    className={cn(
-                      'h-1.5 rounded-full transition-all',
-                      i === diaAtivoIdx ? 'w-4 bg-primary' : 'w-1.5 bg-muted-foreground/30'
-                    )}
-                  />
-                ))}
-              </div>
-
-              {/* Cards do dia ativo */}
-              <div className="flex-1 overflow-y-auto space-y-2 pb-4">
-                {(ordPorDia.get(diasSemana[diaAtivoIdx]) ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic text-center py-8">
-                    Nenhum produto previsto para este dia
-                  </p>
-                ) : (
-                  (ordPorDia.get(diasSemana[diaAtivoIdx]) ?? []).map((op) => (
-                    <CardBusca
-                      key={op.id}
-                      op={op}
-                      isOpen={openIds.has(op.id)}
-                      onToggle={() => toggleCard(op.id)}
-                      hj={hj}
-                    />
-                  ))
-                )}
+                {/* Cards compactos */}
+                <div className="flex gap-0.5 flex-1 pb-4">
+                  {diasSemana.map((dia) => {
+                    const ops = ordPorDia.get(dia) ?? [];
+                    const isHoje = dia === hj;
+                    return (
+                      <div key={dia} className={cn(
+                        'flex-1 min-w-0 rounded-b-lg border-b border-l border-r',
+                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                      )}>
+                        <div className="px-0.5 py-1 space-y-0.5">
+                          {ops.length === 0 ? (
+                            <p className="text-[9px] text-muted-foreground italic px-0.5 py-1 text-center">—</p>
+                          ) : (
+                            ops.map((op) => {
+                              const concluida = op.status === 'concluido' && !!op.data_conclusao;
+                              const confirmada = op.programacao_confirmada === true;
+                              const isEstoque = op.tipo_op === 'estoque';
+                              const dotClass = isEstoque ? 'bg-purple-500' : (concluida || confirmada) ? 'bg-green-500' : 'bg-orange-400';
+                              return (
+                                <button
+                                  key={op.id}
+                                  onClick={() => toggleCard(op.id)}
+                                  className={cn(
+                                    'w-full text-left rounded border px-0.5 py-0.5',
+                                    isEstoque ? 'border-purple-200 bg-purple-50/50 dark:bg-purple-900/20'
+                                      : concluida ? 'border-green-300 bg-green-50/80 dark:bg-green-900/30'
+                                      : confirmada ? 'border-green-300'
+                                      : 'border-orange-200 bg-orange-50/30'
+                                  )}
+                                >
+                                  <div className="flex items-start gap-0.5">
+                                    <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${dotClass}`} />
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-medium leading-tight break-words">{op.produto}</p>
+                                      <p className="text-[9px] tabular-nums text-muted-foreground leading-tight">{formatKg(op.quantidade)}kg</p>
+                                    </div>
+                                  </div>
+                                  {openIds.has(op.id) && (
+                                    <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">Lote {op.lote}</p>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
