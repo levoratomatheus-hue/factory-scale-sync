@@ -14,7 +14,6 @@ import { formatKg } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 import { baixarEstoqueOP } from '@/lib/estoqueUtils';
-import { fetchAllDepara } from '@/lib/deparaCache';
 import { useAuth } from '@/hooks/useAuth';
 
 interface LoteDisponivel {
@@ -35,7 +34,7 @@ interface SdrAlerta {
 
 interface AcertoEnriquecido {
   id: string;
-  cod_mp_excel: string;
+  cod_tid: string;
   materia_prima: string;
   quantidade_kg: number;
   observacao: string | null;
@@ -292,7 +291,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       // 1. Acertos para esta fórmula
       const { data: acertosRaw } = await (supabase as any)
         .from('consumo_mp')
-        .select('id, cod_mp_excel, materia_prima, quantidade_kg, observacao, acerto_lote, data_retirada')
+        .select('id, cod_tid, materia_prima, quantidade_kg, observacao, acerto_lote, data_retirada')
         .eq('eh_acerto', true)
         .eq('acerto_formula_id', formulaId)
         .order('data_retirada', { ascending: false })
@@ -301,13 +300,10 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       if (cancelled) return;
       if (!acertosRaw || acertosRaw.length === 0) { setAcertosEnriquecidos([]); return; }
 
-      // 2, 3 e 4 em paralelo — nenhuma depende das outras, só de acertosRaw
-      const codsExcel = [...new Set((acertosRaw as any[]).map((a: any) => a.cod_mp_excel).filter(Boolean))];
       const lotes = [...new Set((acertosRaw as any[]).map((a: any) => a.acerto_lote).filter(Boolean))];
 
-      const [formulaItensResult, allDepara, ordensResult] = await Promise.all([
+      const [formulaItensResult, ordensResult] = await Promise.all([
         supabase.from('formulas').select('cod_mp, materia_prima, percentual').eq('formula_id', formulaId),
-        fetchAllDepara(), // cache — 0 ms se já populado por compararFormulas
         lotes.length > 0
           ? supabase.from('ordens').select('lote, quantidade').in('lote', lotes)
           : Promise.resolve({ data: [] as any[] }),
@@ -317,20 +313,13 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
       const formulaItens = (formulaItensResult.data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
 
-      const deparaMap = new Map<string, string | null>();
-      for (const r of allDepara) {
-        if (codsExcel.includes(r.cod_excel)) deparaMap.set(r.cod_excel, r.cod_tid ?? null);
-      }
-
       const opQtdMap = new Map<string, number>();
       for (const o of (ordensResult.data ?? [])) opQtdMap.set(String(o.lote), (o as any).quantidade);
 
-      // 5. Enriquecer cada acerto
+      // Enriquecer cada acerto
       const enriched: AcertoEnriquecido[] = (acertosRaw as any[]).map((ac) => {
-        const cod_tid = deparaMap.get(ac.cod_mp_excel) ?? null;
-
-        // Tentar casar por cod_mp (TID), depois por nome
-        let matched = cod_tid ? formulaItens.find(i => i.cod_mp === cod_tid) : undefined;
+        // Tentar casar por cod_mp (TID) diretamente, depois por nome
+        let matched = ac.cod_tid ? formulaItens.find(i => i.cod_mp === ac.cod_tid) : undefined;
         if (!matched) {
           const desc = (ac.materia_prima as string).toLowerCase().trim();
           matched = formulaItens.find(i => i.materia_prima.toLowerCase().trim() === desc)

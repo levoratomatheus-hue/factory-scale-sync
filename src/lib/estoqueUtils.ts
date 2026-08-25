@@ -1,40 +1,27 @@
 import { supabase } from '@/integrations/supabase/client';
-import { fetchAllDepara } from '@/lib/deparaCache';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
-/** Busca itens da fórmula + mapa depara (cod_tid → cod_excel) em paralelo. */
-async function fetchFormulaDeparaMap(formulaId: string): Promise<{
-  formulaItens: { cod_mp: string; materia_prima: string; percentual: number }[];
-  deparaMap: Map<string, string>;
-}> {
-  const [formulaResult, allDepara] = await Promise.all([
-    supabase
-      .from('formulas')
-      .select('cod_mp, materia_prima, percentual')
-      .eq('formula_id', formulaId),
-    fetchAllDepara(), // cache — 0 ms se já populado
-  ]);
-
-  const formulaItens = (formulaResult.data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
-
-  const deparaMap = new Map<string, string>();
-  for (const r of allDepara) {
-    if (r.cod_tid) deparaMap.set(r.cod_tid, r.cod_excel);
-  }
-
-  return { formulaItens, deparaMap };
+/** Busca itens da fórmula pelo formula_id. */
+async function fetchFormulaItens(formulaId: string): Promise<
+  { cod_mp: string; materia_prima: string; percentual: number }[]
+> {
+  const { data } = await supabase
+    .from('formulas')
+    .select('cod_mp, materia_prima, percentual')
+    .eq('formula_id', formulaId);
+  return (data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
 }
 
-/** Busca saldos atuais de uma lista de cod_mp_excel em UMA query. */
-async function fetchSaldos(codsExcel: string[]): Promise<Map<string, number>> {
-  if (codsExcel.length === 0) return new Map();
+/** Busca saldos atuais de uma lista de cod_tid em UMA query. */
+async function fetchSaldos(codsTid: string[]): Promise<Map<string, number>> {
+  if (codsTid.length === 0) return new Map();
   const { data } = await (supabase as any)
     .from('estoque_mp')
-    .select('cod_mp_excel, saldo_kg')
-    .in('cod_mp_excel', codsExcel);
+    .select('cod_tid, saldo_kg')
+    .in('cod_tid', codsTid);
   const map = new Map<string, number>();
-  for (const e of (data ?? []) as any[]) map.set(e.cod_mp_excel, e.saldo_kg ?? 0);
+  for (const e of (data ?? []) as any[]) map.set(e.cod_tid, e.saldo_kg ?? 0);
   return map;
 }
 
@@ -43,10 +30,9 @@ async function fetchSaldos(codsExcel: string[]): Promise<Map<string, number>> {
 /**
  * Baixa o consumo teórico de cada MP da fórmula quando uma OP é criada.
  *
- * Antes: 2 + N×3 round trips (N = nº de MPs na fórmula).
- * Agora: 3 round trips fixos, independente do tamanho da fórmula.
- *   1. formulas + deparaCache em paralelo
- *   2. estoque_mp WHERE IN (todos os cods de uma vez)
+ * 3 round trips fixos, independente do tamanho da fórmula:
+ *   1. formulas
+ *   2. estoque_mp WHERE IN (todos os cod_tid de uma vez)
  *   3. upsert estoque_mp + insert movimentacoes em paralelo
  */
 export async function baixarEstoqueOP(
@@ -56,33 +42,32 @@ export async function baixarEstoqueOP(
   lote: string,
   criadoPor?: string,
 ): Promise<void> {
-  const { formulaItens, deparaMap } = await fetchFormulaDeparaMap(formulaId);
+  const formulaItens = await fetchFormulaItens(formulaId);
   if (formulaItens.length === 0) return;
 
-  // Calcular MPs e quantidades
-  type MPBaixa = { codExcel: string; materia_prima: string; qty: number };
+  // Calcular MPs e quantidades — cod_mp da fórmula já é o cod_tid
+  type MPBaixa = { codTid: string; materia_prima: string; qty: number };
   const mps: MPBaixa[] = [];
   for (const item of formulaItens) {
-    const codExcel = deparaMap.get(item.cod_mp);
-    if (!codExcel) continue;
+    if (!item.cod_mp) continue;
     const qty = (item.percentual / 100) * quantidade;
     if (qty <= 0) continue;
-    mps.push({ codExcel, materia_prima: item.materia_prima, qty });
+    mps.push({ codTid: item.cod_mp, materia_prima: item.materia_prima, qty });
   }
   if (mps.length === 0) return;
 
   // Buscar todos os saldos em uma query
-  const saldoMap = await fetchSaldos(mps.map((m) => m.codExcel));
+  const saldoMap = await fetchSaldos(mps.map((m) => m.codTid));
 
   const agora = new Date().toISOString();
   const upsertRows: any[] = [];
   const movimentacoes: any[] = [];
 
-  for (const { codExcel, materia_prima, qty } of mps) {
-    const novoSaldo = (saldoMap.get(codExcel) ?? 0) - qty;
-    upsertRows.push({ cod_mp_excel: codExcel, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
+  for (const { codTid, materia_prima, qty } of mps) {
+    const novoSaldo = (saldoMap.get(codTid) ?? 0) - qty;
+    upsertRows.push({ cod_tid: codTid, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
     movimentacoes.push({
-      cod_mp_excel: codExcel, materia_prima, tipo: 'saida',
+      cod_tid: codTid, materia_prima, tipo: 'saida',
       quantidade_kg: -qty, saldo_apos: novoSaldo,
       ordem_id: ordemId, ordem_lote: lote,
       observacao: `Baixa automática — OP Lote ${lote}`,
@@ -92,7 +77,7 @@ export async function baixarEstoqueOP(
 
   // Upsert + insert em paralelo
   await Promise.all([
-    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_mp_excel' }),
+    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_tid' }),
     (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
   ]);
 }
@@ -102,8 +87,6 @@ export async function baixarEstoqueOP(
 /**
  * Ajusta o estoque quando a quantidade de uma OP muda (mesma fórmula).
  * Aplica apenas a diferença (qtdNova − qtdAntiga), sem duplicar a baixa original.
- *
- * Mesmo padrão batch de baixarEstoqueOP: 3 round trips fixos.
  */
 export async function ajustarEstoqueOP(
   ordemId: string,
@@ -116,32 +99,31 @@ export async function ajustarEstoqueOP(
   const diferenca = qtdNova - qtdAntiga;
   if (diferenca === 0) return;
 
-  const { formulaItens, deparaMap } = await fetchFormulaDeparaMap(formulaId);
+  const formulaItens = await fetchFormulaItens(formulaId);
   if (formulaItens.length === 0) return;
 
-  type MPAjuste = { codExcel: string; materia_prima: string; deltaKg: number };
+  type MPAjuste = { codTid: string; materia_prima: string; deltaKg: number };
   const mps: MPAjuste[] = [];
   for (const item of formulaItens) {
-    const codExcel = deparaMap.get(item.cod_mp);
-    if (!codExcel) continue;
+    if (!item.cod_mp) continue;
     const deltaKg = (item.percentual / 100) * diferenca;
     if (deltaKg === 0) continue;
-    mps.push({ codExcel, materia_prima: item.materia_prima, deltaKg });
+    mps.push({ codTid: item.cod_mp, materia_prima: item.materia_prima, deltaKg });
   }
   if (mps.length === 0) return;
 
-  const saldoMap = await fetchSaldos(mps.map((m) => m.codExcel));
+  const saldoMap = await fetchSaldos(mps.map((m) => m.codTid));
 
   const agora = new Date().toISOString();
   const upsertRows: any[] = [];
   const movimentacoes: any[] = [];
 
-  for (const { codExcel, materia_prima, deltaKg } of mps) {
-    const novoSaldo = (saldoMap.get(codExcel) ?? 0) - deltaKg;
+  for (const { codTid, materia_prima, deltaKg } of mps) {
+    const novoSaldo = (saldoMap.get(codTid) ?? 0) - deltaKg;
     const tipo = deltaKg > 0 ? 'saida' : 'estorno';
-    upsertRows.push({ cod_mp_excel: codExcel, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
+    upsertRows.push({ cod_tid: codTid, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
     movimentacoes.push({
-      cod_mp_excel: codExcel, materia_prima, tipo,
+      cod_tid: codTid, materia_prima, tipo,
       quantidade_kg: -deltaKg, saldo_apos: novoSaldo,
       ordem_id: ordemId, ordem_lote: lote,
       observacao: `Ajuste de quantidade — Lote ${lote} (${qtdAntiga} → ${qtdNova} kg)`,
@@ -150,7 +132,7 @@ export async function ajustarEstoqueOP(
   }
 
   await Promise.all([
-    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_mp_excel' }),
+    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_tid' }),
     (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
   ]);
 }
@@ -162,7 +144,6 @@ export async function ajustarEstoqueOP(
  *
  * Considera TODOS os movimentos da OP (saida + estorno de ajustes anteriores),
  * calcula o efeito líquido por MP e reverte exatamente esse valor.
- * Mesmo padrão batch: 3 round trips fixos.
  */
 export async function estornarEstoqueOP(
   ordemId: string,
@@ -176,34 +157,34 @@ export async function estornarEstoqueOP(
 
   if (!movimentos || movimentos.length === 0) return;
 
-  // Efeito líquido por cod_mp_excel
+  // Efeito líquido por cod_tid
   const netByCod = new Map<string, { rep: any; net: number }>();
   for (const mov of movimentos as any[]) {
-    if (!netByCod.has(mov.cod_mp_excel)) netByCod.set(mov.cod_mp_excel, { rep: mov, net: 0 });
-    netByCod.get(mov.cod_mp_excel)!.net += Number(mov.quantidade_kg);
+    const key = mov.cod_tid;
+    if (!netByCod.has(key)) netByCod.set(key, { rep: mov, net: 0 });
+    netByCod.get(key)!.net += Number(mov.quantidade_kg);
   }
 
   const entries = [...netByCod.entries()].filter(([, { net }]) => net !== 0);
   if (entries.length === 0) return;
 
-  // Buscar todos os saldos em uma query
-  const codsExcel = entries.map(([cod]) => cod);
-  const saldoMap = await fetchSaldos(codsExcel);
+  const codsTid = entries.map(([cod]) => cod);
+  const saldoMap = await fetchSaldos(codsTid);
 
   const agora = new Date().toISOString();
   const upsertRows: any[] = [];
   const movimentacoes: any[] = [];
 
-  for (const [codExcel, { rep, net }] of entries) {
-    const saldoAtual = saldoMap.get(codExcel);
+  for (const [codTid, { rep, net }] of entries) {
+    const saldoAtual = saldoMap.get(codTid);
     if (saldoAtual === undefined) continue; // MP sem registro — nada a estornar
 
     const qtyRestaurar = -net;
     const novoSaldo = saldoAtual + qtyRestaurar;
 
-    upsertRows.push({ cod_mp_excel: codExcel, materia_prima: rep.materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
+    upsertRows.push({ cod_tid: codTid, materia_prima: rep.materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
     movimentacoes.push({
-      cod_mp_excel: codExcel, materia_prima: rep.materia_prima, tipo: 'estorno',
+      cod_tid: codTid, materia_prima: rep.materia_prima, tipo: 'estorno',
       quantidade_kg: qtyRestaurar, saldo_apos: novoSaldo,
       ordem_id: ordemId, ordem_lote: rep.ordem_lote,
       observacao: `Estorno — OP excluída (Lote ${rep.ordem_lote ?? ''})`,
@@ -212,7 +193,7 @@ export async function estornarEstoqueOP(
   }
 
   await Promise.all([
-    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_mp_excel' }),
+    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_tid' }),
     (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
   ]);
 }
