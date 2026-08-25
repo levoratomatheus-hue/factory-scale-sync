@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -35,6 +35,7 @@ const PreProgramacao                = lazy(() => import('./PreProgramacao'));
 const EstoqueMP                     = lazy(() => import('./EstoqueMP'));
 const EstoqueMPPG                   = lazy(() => import('./EstoqueMPPG'));
 const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoesMP'));
+const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
@@ -73,7 +74,8 @@ type TabGestorId =
   | 'controle_cor'
   | 'estoque_mp'
   | 'estoque_mp_pg'
-  | 'historico_mov_mp';
+  | 'historico_mov_mp'
+  | 'conferencia_estoque';
 
 const gruposGestor = [
   {
@@ -164,6 +166,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['estoque_mp' as TabGestorId, 'Estoque MP ZC'],
   ['estoque_mp_pg' as TabGestorId, 'Estoque MP PG'],
   ['historico_mov_mp' as TabGestorId, 'Histórico de Movimentações'],
+  ['conferencia_estoque' as TabGestorId, 'Conferência de Estoque'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -210,6 +213,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'estoque_mp',
   'estoque_mp_pg',
   'historico_mov_mp',
+  'conferencia_estoque',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -657,6 +661,17 @@ export default function Index() {
                         <span>Histórico de Movimentações</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'conferencia_estoque'}
+                        tooltip="Conferência de Estoque"
+                        onClick={() => goToTab('conferencia_estoque')}
+                        size="sm"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
+                        <span>Conferência de Estoque</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -728,6 +743,7 @@ export default function Index() {
                   {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'estoque_mp'          && <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'estoque_mp_pg'       && <EstoqueMPPG perfilNome={perfil.nome} papel={perfil.papel} />}
+                  {activeTab === 'conferencia_estoque' && <ConferenciaEstoque />}
                 </Suspense>
               </ErrorBoundary>
             </main>
@@ -1141,6 +1157,17 @@ export default function Index() {
                     <span>Consumo Médio Mensal</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'conferencia_estoque'}
+                    tooltip="Conferência de Estoque"
+                    onClick={() => goToTab('conferencia_estoque')}
+                    size="sm"
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
+                    <span>Conferência de Estoque</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
             )}
@@ -1373,6 +1400,13 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'historico_mov_mp'}>
                   <Suspense fallback={TAB_LOADING}>
                     <HistoricoMovimentacoesMP />
+                  </Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('conferencia_estoque') && (
+                <KeepAlive active={activeTab === 'conferencia_estoque'}>
+                  <Suspense fallback={TAB_LOADING}>
+                    <ConferenciaEstoque />
                   </Suspense>
                 </KeepAlive>
               )}

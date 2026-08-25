@@ -17,8 +17,7 @@ import * as XLSX from 'xlsx';
 
 interface EstoqueItem {
   id: string;
-  cod_mp_excel: string;
-  cod_tid: string | null;
+  cod_tid: string;
   materia_prima: string;
   saldo_kg: number;
   minimo_kg: number;
@@ -27,7 +26,7 @@ interface EstoqueItem {
 
 interface Movimentacao {
   id: string;
-  cod_mp_excel: string;
+  cod_tid: string;
   materia_prima: string;
   tipo: 'entrada' | 'saida' | 'estorno' | 'ajuste' | 'saldo_inicial';
   quantidade_kg: number;
@@ -154,24 +153,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
       return;
     }
 
-    // Enriquecer com cod_tid via mp_depara
-    const codsExcel = (estoqueData as any[]).map((e: any) => e.cod_mp_excel);
-    const { data: deparaRows } = await supabase
-      .from('mp_depara')
-      .select('cod_excel, cod_tid')
-      .in('cod_excel', codsExcel);
-
-    const deparaMap = new Map<string, string | null>();
-    for (const r of (deparaRows ?? []) as any[]) {
-      deparaMap.set(r.cod_excel, r.cod_tid ?? null);
-    }
-
-    setEstoque(
-      (estoqueData as any[]).map((e: any) => ({
-        ...e,
-        cod_tid: deparaMap.get(e.cod_mp_excel) ?? null,
-      })),
-    );
+    setEstoque((estoqueData ?? []) as EstoqueItem[]);
     setLoading(false);
   }, []);
 
@@ -186,8 +168,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
       list = list.filter(
         (e) =>
           e.materia_prima.toLowerCase().includes(q) ||
-          e.cod_mp_excel.toLowerCase().includes(q) ||
-          (e.cod_tid ?? '').toLowerCase().includes(q),
+          e.cod_tid.toLowerCase().includes(q),
       );
     }
     if (filterBelowMin) {
@@ -227,7 +208,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     }
 
     await (supabase as any).from('estoque_movimentacoes').insert({
-      cod_mp_excel: entradaItem.cod_mp_excel,
+      cod_tid: entradaItem.cod_tid,
       materia_prima: entradaItem.materia_prima,
       tipo: 'entrada',
       quantidade_kg: qty,
@@ -269,7 +250,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     }
 
     await (supabase as any).from('estoque_movimentacoes').insert({
-      cod_mp_excel: ajusteItem.cod_mp_excel,
+      cod_tid: ajusteItem.cod_tid,
       materia_prima: ajusteItem.materia_prima,
       tipo: 'ajuste',
       quantidade_kg: diferenca,
@@ -321,7 +302,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     const { data, error } = await (supabase as any)
       .from('estoque_movimentacoes')
       .select('*')
-      .eq('cod_mp_excel', item.cod_mp_excel)
+      .eq('cod_tid', item.cod_tid)
       .order('criado_em', { ascending: false })
       .limit(200);
     if (error) {
@@ -348,7 +329,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
         const rows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
         // Remove cabeçalho (primeira linha)
         const preview = rows.slice(1).filter((r: any[]) => r[0]).map((r: any[]) => ({
-          cod_mp_excel: String(r[0] ?? '').trim(),
+          cod_tid: String(r[0] ?? '').trim(),
           materia_prima: String(r[1] ?? '').trim(),
           saldo_kg: parseFloat(String(r[2] ?? '0').replace(',', '.')) || 0,
           minimo_kg: parseFloat(String(r[3] ?? '0').replace(',', '.')) || 0,
@@ -367,24 +348,24 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
 
     let ok = 0;
     for (const row of importPreview) {
-      if (!row.cod_mp_excel) continue;
+      if (!row.cod_tid) continue;
 
       // Upsert estoque_mp
       await (supabase as any).from('estoque_mp').upsert(
         {
-          cod_mp_excel: row.cod_mp_excel,
-          materia_prima: row.materia_prima || row.cod_mp_excel,
+          cod_tid: row.cod_tid,
+          materia_prima: row.materia_prima || row.cod_tid,
           saldo_kg: row.saldo_kg,
           minimo_kg: row.minimo_kg,
           atualizado_em: new Date().toISOString(),
         },
-        { onConflict: 'cod_mp_excel' },
+        { onConflict: 'cod_tid' },
       );
 
       // Movimentação saldo_inicial
       await (supabase as any).from('estoque_movimentacoes').insert({
-        cod_mp_excel: row.cod_mp_excel,
-        materia_prima: row.materia_prima || row.cod_mp_excel,
+        cod_tid: row.cod_tid,
+        materia_prima: row.materia_prima || row.cod_tid,
         tipo: 'saldo_inicial',
         quantidade_kg: row.saldo_kg,
         saldo_apos: row.saldo_kg,
@@ -408,8 +389,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   const handleExportar = () => {
     const rows = estoque.map((e) => ({
       'Matéria-Prima': e.materia_prima,
-      'Cód. Excel': e.cod_mp_excel,
-      'Cód. TID': e.cod_tid ?? '',
+      'Cód. TID': e.cod_tid,
       'Saldo (kg)': e.saldo_kg,
       'Mínimo (kg)': e.minimo_kg,
       'Situação': situacao(e) === 'negativo' ? 'Negativo' : situacao(e) === 'abaixo' ? 'Abaixo do mínimo' : 'OK',
@@ -498,7 +478,6 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Matéria-Prima</th>
-                <th className="text-left px-3 py-2 font-medium w-24">Cód. Excel</th>
                 <th className="text-left px-3 py-2 font-medium w-24">Cód. TID</th>
                 <th className="text-right px-3 py-2 font-medium w-28">Saldo (kg)</th>
                 <th className="text-right px-3 py-2 font-medium w-28">Mínimo (kg)</th>
@@ -509,7 +488,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhum resultado encontrado.
                   </td>
                 </tr>
@@ -517,8 +496,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                 filtered.map((item) => (
                   <tr key={item.id} className="border-t hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-medium">{item.materia_prima}</td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{item.cod_mp_excel}</td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{item.cod_tid ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground">{item.cod_tid}</td>
                     <td className={`px-3 py-2 text-right font-semibold tabular-nums ${item.saldo_kg < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
                       {formatKg(item.saldo_kg)}
                     </td>
@@ -789,7 +767,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
           <div className="space-y-3 flex-1 overflow-y-auto min-h-0">
             <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-300">
               <p className="font-semibold mb-1">Formato esperado da planilha (a partir da 2ª linha):</p>
-              <p>Coluna A: Código Excel (ex.: <code>PE001</code>)</p>
+              <p>Coluna A: Código TID (ex.: <code>000141</code>)</p>
               <p>Coluna B: Nome da matéria-prima</p>
               <p>Coluna C: Saldo em kg</p>
               <p>Coluna D: Estoque mínimo em kg (opcional)</p>
@@ -812,7 +790,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                   <table className="w-full text-xs">
                     <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                       <tr>
-                        <th className="text-left px-2 py-1">Cód. Excel</th>
+                        <th className="text-left px-2 py-1">Cód. TID</th>
                         <th className="text-left px-2 py-1">Matéria-Prima</th>
                         <th className="text-right px-2 py-1">Saldo (kg)</th>
                         <th className="text-right px-2 py-1">Mínimo (kg)</th>
@@ -821,7 +799,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                     <tbody>
                       {importPreview.slice(0, 20).map((row, i) => (
                         <tr key={i} className="border-t">
-                          <td className="px-2 py-1 font-mono">{row.cod_mp_excel}</td>
+                          <td className="px-2 py-1 font-mono">{row.cod_tid}</td>
                           <td className="px-2 py-1">{row.materia_prima || '—'}</td>
                           <td className="px-2 py-1 text-right">{formatKg(row.saldo_kg)}</td>
                           <td className="px-2 py-1 text-right">{formatKg(row.minimo_kg)}</td>

@@ -21,15 +21,14 @@ type Setor = 'laboratorio' | 'producao';
 type FiltroSetor = Setor | 'ambos';
 type FiltroSetorLista = Setor | 'ambos' | 'sem_setor';
 
-interface MpDepara {
-  cod_excel: string;
-  descricao: string;
-  tipo: string | null;
+interface MpEstoque {
+  cod_tid: string;
+  materia_prima: string;
 }
 
 interface ConsumoMpRow {
   id: string;
-  cod_mp_excel: string;
+  cod_tid: string;
   materia_prima: string;
   quantidade_kg: number;
   data_retirada: string;
@@ -58,8 +57,7 @@ interface FormulaItemMatch {
 }
 
 interface TotalPorMp {
-  cod_mp_excel: string;
-  cod_tid: string | null;
+  cod_tid: string;
   materia_prima: string;
   total_kg: number;
   kg_lab: number;
@@ -86,8 +84,7 @@ interface RelatorioSalvoItem {
   id: string;
   relatorio_id: string;
   materia_prima: string;
-  cod_mp_excel: string;
-  cod_tid: string | null;
+  cod_tid: string;
   total_kg: number;
   percentual: number;
   setor: string;
@@ -95,8 +92,7 @@ interface RelatorioSalvoItem {
 
 // Linha pivotada para exibição (agrupa lab + prod de uma mesma MP)
 interface RelatorioSalvoItemDisplay {
-  cod_mp_excel: string;
-  cod_tid: string | null;
+  cod_tid: string;
   materia_prima: string;
   total_kg: number;
   kg_lab: number;
@@ -200,9 +196,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
 
   // ─── Seção 1 – Lançar retirada ─────────────────────────────────────────────
   const [busca, setBusca] = useState('');
-  const [sugestoes, setSugestoes] = useState<MpDepara[]>([]);
+  const [sugestoes, setSugestoes] = useState<MpEstoque[]>([]);
   const [showSugestoes, setShowSugestoes] = useState(false);
-  const [mpSelecionada, setMpSelecionada] = useState<MpDepara | null>(null);
+  const [mpSelecionada, setMpSelecionada] = useState<MpEstoque | null>(null);
   const [quantidade, setQuantidade] = useState('');
   const [data, setData] = useState(toInputDate(new Date()));
   const [observacao, setObservacao] = useState('');
@@ -232,9 +228,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [editRow, setEditRow] = useState<ConsumoMpRow | null>(null);
   const [editSetor, setEditSetor] = useState<Setor>('laboratorio');
   const [editBusca, setEditBusca] = useState('');
-  const [editSugestoes, setEditSugestoes] = useState<MpDepara[]>([]);
+  const [editSugestoes, setEditSugestoes] = useState<MpEstoque[]>([]);
   const [editShowSugestoes, setEditShowSugestoes] = useState(false);
-  const [editMp, setEditMp] = useState<MpDepara | null>(null);
+  const [editMp, setEditMp] = useState<MpEstoque | null>(null);
   const [editQtd, setEditQtd] = useState('');
   const [editData, setEditData] = useState('');
   const [editObs, setEditObs] = useState('');
@@ -249,7 +245,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const [filtroSetor, setFiltroSetor] = useState<FiltroSetor>('ambos');
   const [relatorio, setRelatorio] = useState<ConsumoMpRow[]>([]);
   const [carregandoRel, setCarregandoRel] = useState(false);
-  const [deparaMap, setDeparaMap] = useState<Map<string, string | null>>(new Map());
 
   // ─── Salvar relatório ──────────────────────────────────────────────────────
   const [showSalvarDialog, setShowSalvarDialog] = useState(false);
@@ -272,13 +267,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (busca.length < 2) { setSugestoes([]); setShowSugestoes(false); return; }
     debounceRef.current = setTimeout(async () => {
-      const { data: rows } = await supabase
-        .from('mp_depara')
-        .select('cod_excel, descricao, tipo')
-        .or(`descricao.ilike.%${busca}%,cod_excel.ilike.%${busca}%`)
-        .order('descricao')
+      const { data: rows } = await (supabase as any)
+        .from('estoque_mp')
+        .select('cod_tid, materia_prima')
+        .or(`materia_prima.ilike.%${busca}%,cod_tid.ilike.%${busca}%`)
+        .order('materia_prima')
         .limit(20);
-      setSugestoes(rows ?? []);
+      setSugestoes((rows ?? []) as MpEstoque[]);
       setShowSugestoes(true);
     }, 250);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
@@ -310,27 +305,19 @@ export default function ConsumoMP({ perfilNome }: Props) {
     }
     let cancelled = false;
     (async () => {
-      const [{ data: itens }, { data: deparaRow }] = await Promise.all([
-        supabase
-          .from('formulas')
-          .select('cod_mp, materia_prima, percentual')
-          .eq('formula_id', acertoOpSelecionada.formula_id!),
-        supabase
-          .from('mp_depara')
-          .select('cod_tid')
-          .eq('cod_excel', mpSelecionada.cod_excel)
-          .maybeSingle(),
-      ]);
+      const { data: itens } = await supabase
+        .from('formulas')
+        .select('cod_mp, materia_prima, percentual')
+        .eq('formula_id', acertoOpSelecionada.formula_id!);
       if (cancelled) return;
 
       const formulaItens = (itens ?? []) as FormulaItemMatch[];
-      const cod_tid = (deparaRow as any)?.cod_tid ?? null;
 
       // Tentar por cod_mp (TID) primeiro, depois por nome
       let matched: FormulaItemMatch | undefined;
-      if (cod_tid) matched = formulaItens.find(i => i.cod_mp === cod_tid);
+      matched = formulaItens.find(i => i.cod_mp === mpSelecionada.cod_tid);
       if (!matched) {
-        const desc = mpSelecionada.descricao.toLowerCase().trim();
+        const desc = mpSelecionada.materia_prima.toLowerCase().trim();
         matched = formulaItens.find(i => i.materia_prima.toLowerCase().trim() === desc)
                ?? formulaItens.find(i => {
                  const fm = i.materia_prima.toLowerCase().trim();
@@ -347,13 +334,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
     if (editDebounceRef.current) clearTimeout(editDebounceRef.current);
     if (editBusca.length < 2) { setEditSugestoes([]); setEditShowSugestoes(false); return; }
     editDebounceRef.current = setTimeout(async () => {
-      const { data: rows } = await supabase
-        .from('mp_depara')
-        .select('cod_excel, descricao, tipo')
-        .or(`descricao.ilike.%${editBusca}%,cod_excel.ilike.%${editBusca}%`)
-        .order('descricao')
+      const { data: rows } = await (supabase as any)
+        .from('estoque_mp')
+        .select('cod_tid, materia_prima')
+        .or(`materia_prima.ilike.%${editBusca}%,cod_tid.ilike.%${editBusca}%`)
+        .order('materia_prima')
         .limit(20);
-      setEditSugestoes(rows ?? []);
+      setEditSugestoes((rows ?? []) as MpEstoque[]);
       setEditShowSugestoes(true);
     }, 250);
     return () => { if (editDebounceRef.current) clearTimeout(editDebounceRef.current); };
@@ -399,8 +386,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
 
     setSalvando(true);
     const { error } = await (supabase as any).from('consumo_mp').insert({
-      cod_mp_excel: mpSelecionada.cod_excel,
-      materia_prima: mpSelecionada.descricao,
+      cod_tid: mpSelecionada.cod_tid,
+      materia_prima: mpSelecionada.materia_prima,
       quantidade_kg: qtd,
       data_retirada: data,
       observacao: observacao.trim() || null,
@@ -422,7 +409,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     const { data: estoqueRow } = await (supabase as any)
       .from('estoque_mp')
       .select('saldo_kg')
-      .eq('cod_mp_excel', mpSelecionada.cod_excel)
+      .eq('cod_tid', mpSelecionada.cod_tid)
       .maybeSingle();
 
     if (estoqueRow !== null) {
@@ -437,12 +424,12 @@ export default function ConsumoMP({ perfilNome }: Props) {
         (supabase as any)
           .from('estoque_mp')
           .update({ saldo_kg: novoSaldo, atualizado_em: agora })
-          .eq('cod_mp_excel', mpSelecionada.cod_excel),
+          .eq('cod_tid', mpSelecionada.cod_tid),
         (supabase as any)
           .from('estoque_movimentacoes')
           .insert({
-            cod_mp_excel: mpSelecionada.cod_excel,
-            materia_prima: mpSelecionada.descricao,
+            cod_tid: mpSelecionada.cod_tid,
+            materia_prima: mpSelecionada.materia_prima,
             tipo: 'saida',
             quantidade_kg: -qtd,
             saldo_apos: novoSaldo,
@@ -478,7 +465,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     // Buscar dados da retirada antes de excluir para poder estornar o estoque
     const { data: consumoRow, error: fetchErr } = await (supabase as any)
       .from('consumo_mp')
-      .select('cod_mp_excel, materia_prima, quantidade_kg')
+      .select('cod_tid, materia_prima, quantidade_kg')
       .eq('id', id)
       .maybeSingle();
 
@@ -493,7 +480,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
       const { data: estoqueRow } = await (supabase as any)
         .from('estoque_mp')
         .select('saldo_kg')
-        .eq('cod_mp_excel', consumoRow.cod_mp_excel)
+        .eq('cod_tid', consumoRow.cod_tid)
         .maybeSingle();
 
       if (estoqueRow !== null) {
@@ -502,11 +489,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
           (supabase as any)
             .from('estoque_mp')
             .update({ saldo_kg: novoSaldo, atualizado_em: agora })
-            .eq('cod_mp_excel', consumoRow.cod_mp_excel),
+            .eq('cod_tid', consumoRow.cod_tid),
           (supabase as any)
             .from('estoque_movimentacoes')
             .insert({
-              cod_mp_excel: consumoRow.cod_mp_excel,
+              cod_tid: consumoRow.cod_tid,
               materia_prima: consumoRow.materia_prima,
               tipo: 'estorno',
               quantidade_kg: consumoRow.quantidade_kg,
@@ -545,7 +532,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setEditQtd(String(row.quantidade_kg).replace('.', ','));
     setEditData(row.data_retirada);
     setEditObs(row.observacao ?? '');
-    setEditMp({ cod_excel: row.cod_mp_excel, descricao: row.materia_prima, tipo: null });
+    setEditMp({ cod_tid: row.cod_tid, materia_prima: row.materia_prima });
     setEditBusca('');
     setEditSugestoes([]);
     setEditShowSugestoes(false);
@@ -561,8 +548,8 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setSalvandoEdicao(true);
     const { error } = await (supabase as any).from('consumo_mp').update({
       setor: editSetor,
-      cod_mp_excel: editMp.cod_excel,
-      materia_prima: editMp.descricao,
+      cod_tid: editMp.cod_tid,
+      materia_prima: editMp.materia_prima,
       quantidade_kg: qtd,
       data_retirada: editData,
       observacao: editObs.trim() || null,
@@ -574,16 +561,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
     fetchRetiradas();
     fetchRelatorio();
   };
-
-  // ── Mapa cod_excel → cod_tid ─────────────────────────────────────────────
-  useEffect(() => {
-    supabase.from('mp_depara').select('cod_excel, cod_tid').then(({ data }) => {
-      if (!data) return;
-      const m = new Map<string, string | null>();
-      for (const row of data) m.set(row.cod_excel, (row as any).cod_tid ?? null);
-      setDeparaMap(m);
-    });
-  }, []);
 
   // ── Relatório ───────────────────────────────────────────────────────────────
   const fetchRelatorio = useCallback(async () => {
@@ -610,11 +587,10 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const totaisPorMp: TotalPorMp[] = useMemo(() => {
     const map = new Map<string, TotalPorMp>();
     for (const r of relatorioFiltrado) {
-      const key = r.cod_mp_excel;
+      const key = r.cod_tid;
       if (!map.has(key)) {
         map.set(key, {
-          cod_mp_excel: r.cod_mp_excel,
-          cod_tid: deparaMap.get(r.cod_mp_excel) ?? null,
+          cod_tid: r.cod_tid,
           materia_prima: r.materia_prima,
           total_kg: 0,
           kg_lab: 0,
@@ -633,7 +609,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     const total = arr.reduce((s, t) => s + t.total_kg, 0);
     arr.forEach((t) => { t.pct = total > 0 ? (t.total_kg / total) * 100 : 0; });
     return arr;
-  }, [relatorioFiltrado, deparaMap]);
+  }, [relatorioFiltrado]);
 
   const totalGeralKg = useMemo(() => totaisPorMp.reduce((s, t) => s + t.total_kg, 0), [totaisPorMp]);
   const numMpDistintas = totaisPorMp.length;
@@ -653,12 +629,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
   // ── Exportar CSV (relatório ao vivo) ────────────────────────────────────────
   const exportarCSV = () => {
     const totalRows = [
-      ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
+      ['Matéria-Prima', 'Cód. TID', 'Total (kg)', '% do total',
         ...(filtroSetor === 'ambos' ? ['Kg Laboratório', 'Kg Produção'] : [])],
       ...totaisPorMp.map((t) => [
         t.materia_prima,
-        t.cod_mp_excel,
-        t.cod_tid ?? '',
+        t.cod_tid,
         t.total_kg.toFixed(3).replace('.', ','),
         fmtPct(t.pct),
         ...(filtroSetor === 'ambos' ? [
@@ -671,12 +646,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
     const detailRows = [
       [],
       ['--- Histórico Detalhado ---'],
-      ['Data', 'Setor', 'Cód. Excel', 'Cód. TID', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
+      ['Data', 'Setor', 'Cód. TID', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
       ...relatorioFiltrado.map((r) => [
         fmt(r.data_retirada),
         r.setor ? SETOR_LABEL[r.setor] : '',
-        r.cod_mp_excel,
-        deparaMap.get(r.cod_mp_excel) ?? '',
+        r.cod_tid,
         r.materia_prima,
         String(r.quantidade_kg).replace('.', ','),
         r.retirado_por,
@@ -726,8 +700,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
           itens.push({
             relatorio_id: cab.id,
             materia_prima: t.materia_prima,
-            cod_mp_excel: t.cod_mp_excel,
-            cod_tid: t.cod_tid ?? null,
+            cod_tid: t.cod_tid,
             total_kg: t.kg_lab,
             percentual: totalGeralKg > 0 ? (t.kg_lab / totalGeralKg) * 100 : 0,
             setor: 'laboratorio',
@@ -737,8 +710,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
           itens.push({
             relatorio_id: cab.id,
             materia_prima: t.materia_prima,
-            cod_mp_excel: t.cod_mp_excel,
-            cod_tid: t.cod_tid ?? null,
+            cod_tid: t.cod_tid,
             total_kg: t.kg_prod,
             percentual: totalGeralKg > 0 ? (t.kg_prod / totalGeralKg) * 100 : 0,
             setor: 'producao',
@@ -749,8 +721,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
           itens.push({
             relatorio_id: cab.id,
             materia_prima: t.materia_prima,
-            cod_mp_excel: t.cod_mp_excel,
-            cod_tid: t.cod_tid ?? null,
+            cod_tid: t.cod_tid,
             total_kg: t.total_kg,
             percentual: t.pct,
             setor: 'ambos',
@@ -760,8 +731,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
         itens.push({
           relatorio_id: cab.id,
           materia_prima: t.materia_prima,
-          cod_mp_excel: t.cod_mp_excel,
-          cod_tid: t.cod_tid ?? null,
+          cod_tid: t.cod_tid,
           total_kg: t.total_kg,
           percentual: t.pct,
           setor: filtroSetor,
@@ -834,7 +804,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
   const exportarRelatorioSalvoCSV = (rel: RelatorioSalvo, itens: RelatorioSalvoItem[]) => {
     const mostrarSetores = rel.setor === 'ambos';
     const linhas = mostrarSetores ? pivotarItens(itens) : itens.map((t) => ({
-      cod_mp_excel: t.cod_mp_excel,
       cod_tid: t.cod_tid,
       materia_prima: t.materia_prima,
       total_kg: t.total_kg,
@@ -844,12 +813,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
     } as RelatorioSalvoItemDisplay));
 
     const rows = [
-      ['Matéria-Prima', 'Cód. Excel', 'Cód. TID', 'Total (kg)', '% do total',
+      ['Matéria-Prima', 'Cód. TID', 'Total (kg)', '% do total',
         ...(mostrarSetores ? ['Kg Laboratório', 'Kg Produção'] : [])],
       ...linhas.map((t) => [
         t.materia_prima,
-        t.cod_mp_excel,
-        t.cod_tid ?? '',
+        t.cod_tid,
         t.total_kg.toFixed(3).replace('.', ','),
         fmtPct(t.percentual),
         ...(mostrarSetores ? [
@@ -900,7 +868,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                   <Input
                     ref={buscaRef}
                     placeholder="Buscar por código ou descrição…"
-                    value={mpSelecionada ? `${mpSelecionada.cod_excel} – ${mpSelecionada.descricao}` : busca}
+                    value={mpSelecionada ? `${mpSelecionada.cod_tid} – ${mpSelecionada.materia_prima}` : busca}
                     onChange={e => {
                       if (mpSelecionada) setMpSelecionada(null);
                       setBusca(e.target.value);
@@ -922,14 +890,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
                   <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-56 overflow-y-auto">
                     {sugestoes.map(mp => (
                       <button
-                        key={mp.cod_excel}
+                        key={mp.cod_tid}
                         className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => { setMpSelecionada(mp); setBusca(''); setShowSugestoes(false); }}
                       >
-                        <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_excel}</span>
-                        <span className="leading-tight">{mp.descricao}</span>
-                        {mp.tipo && <Badge variant="secondary" className="ml-auto shrink-0 text-[10px]">{mp.tipo}</Badge>}
+                        <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_tid}</span>
+                        <span className="leading-tight">{mp.materia_prima}</span>
                       </button>
                     ))}
                   </div>
@@ -1084,7 +1051,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                         <>
                           {linhaOp}
                           <p className="text-xs text-muted-foreground">
-                            {mpSelecionada.descricao} não consta na fórmula base — o acerto será registrado sem impacto em %.
+                            {mpSelecionada.materia_prima} não consta na fórmula base — o acerto será registrado sem impacto em %.
                           </p>
                         </>
                       );
@@ -1236,7 +1203,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                               onChange={(s) => handleAtualizarSetor(r.id, s)}
                             />
                           </td>
-                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
+                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_tid}</td>
                           <td className="py-2 pr-3">{r.materia_prima}</td>
                           <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
                           <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
@@ -1394,7 +1361,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           <thead>
                             <tr className="border-b text-muted-foreground text-xs">
                               <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
-                              <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
                               <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                               <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
                               {mostrarColunaSetor && <>
@@ -1406,10 +1372,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           </thead>
                           <tbody>
                             {totaisPorMp.map((t, i) => (
-                              <tr key={t.cod_mp_excel} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
+                              <tr key={t.cod_tid} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
                                 <td className="py-2 pr-3">{t.materia_prima}</td>
-                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
-                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid}</td>
                                 <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
                                 {mostrarColunaSetor && <>
                                   <td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">
@@ -1425,7 +1390,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           </tbody>
                           <tfoot>
                             <tr className="border-t font-semibold text-xs">
-                              <td colSpan={3} className="py-2 pr-3 text-muted-foreground">Total</td>
+                              <td colSpan={2} className="py-2 pr-3 text-muted-foreground">Total</td>
                               <td className="py-2 pr-3 text-right font-mono">{formatKg(totalGeralKg)}</td>
                               {mostrarColunaSetor && <>
                                 <td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">{formatKg(totalLabKg)}</td>
@@ -1452,7 +1417,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
                               <th className="text-left pb-2 pr-3 font-medium">Data</th>
                               <th className="text-left pb-2 pr-3 font-medium">Setor</th>
                               <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
-                              <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
                               <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                               <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
                               <th className="text-left pb-2 pr-3 font-medium">Retirado por</th>
@@ -1473,8 +1437,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                                   />
                                 </td>
                                 <td className="py-2 pr-3">{r.materia_prima}</td>
-                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_mp_excel}</td>
-                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{deparaMap.get(r.cod_mp_excel) ?? '—'}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_tid}</td>
                                 <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
                                 <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
                                 <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[160px] truncate">{r.observacao ?? '—'}</td>
@@ -1717,7 +1680,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="Buscar por código ou descrição…"
-                  value={editMp ? `${editMp.cod_excel} – ${editMp.descricao}` : editBusca}
+                  value={editMp ? `${editMp.cod_tid} – ${editMp.materia_prima}` : editBusca}
                   onChange={e => {
                     if (editMp) setEditMp(null);
                     setEditBusca(e.target.value);
@@ -1739,14 +1702,13 @@ export default function ConsumoMP({ perfilNome }: Props) {
                 <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
                   {editSugestoes.map(mp => (
                     <button
-                      key={mp.cod_excel}
+                      key={mp.cod_tid}
                       className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                       onMouseDown={e => e.preventDefault()}
                       onClick={() => { setEditMp(mp); setEditBusca(''); setEditShowSugestoes(false); }}
                     >
-                      <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_excel}</span>
-                      <span className="leading-tight">{mp.descricao}</span>
-                      {mp.tipo && <Badge variant="secondary" className="ml-auto shrink-0 text-[10px]">{mp.tipo}</Badge>}
+                      <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_tid}</span>
+                      <span className="leading-tight">{mp.materia_prima}</span>
                     </button>
                   ))}
                 </div>
@@ -1867,7 +1829,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
               const linhasDisplay: RelatorioSalvoItemDisplay[] = isAmbos
                 ? pivotarItens(itensAbertos)
                 : itensAbertos.map((t) => ({
-                    cod_mp_excel: t.cod_mp_excel,
                     cod_tid: t.cod_tid,
                     materia_prima: t.materia_prima,
                     total_kg: t.total_kg,
@@ -1881,7 +1842,6 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     <thead className="sticky top-0 bg-background">
                       <tr className="border-b text-muted-foreground text-xs">
                         <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
-                        <th className="text-left pb-2 pr-3 font-medium">Cód. Excel</th>
                         <th className="text-left pb-2 pr-3 font-medium">Cód. TID</th>
                         <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
                         {isAmbos && <>
@@ -1893,10 +1853,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     </thead>
                     <tbody>
                       {linhasDisplay.map((t, i) => (
-                        <tr key={t.cod_mp_excel} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
+                        <tr key={t.cod_tid} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
                           <td className="py-2 pr-3">{t.materia_prima}</td>
-                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_mp_excel}</td>
-                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid ?? '—'}</td>
+                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid}</td>
                           <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
                           {isAmbos && <>
                             <td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">
@@ -1912,7 +1871,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     </tbody>
                     <tfoot>
                       <tr className="border-t font-semibold text-xs">
-                        <td colSpan={3} className="py-2 pr-3 text-muted-foreground">Total</td>
+                        <td colSpan={2} className="py-2 pr-3 text-muted-foreground">Total</td>
                         <td className="py-2 pr-3 text-right font-mono">
                           {formatKg(relatorioAberto?.total_kg ?? 0)}
                         </td>
@@ -1959,10 +1918,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
 function pivotarItens(itens: RelatorioSalvoItem[]): RelatorioSalvoItemDisplay[] {
   const map = new Map<string, RelatorioSalvoItemDisplay>();
   for (const item of itens) {
-    const key = item.cod_mp_excel;
+    const key = item.cod_tid;
     if (!map.has(key)) {
       map.set(key, {
-        cod_mp_excel: item.cod_mp_excel,
         cod_tid: item.cod_tid,
         materia_prima: item.materia_prima,
         total_kg: 0,
