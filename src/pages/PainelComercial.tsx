@@ -546,6 +546,21 @@ export default function PainelComercial() {
                               const confirmada = op.programacao_confirmada === true;
                               const isEstoque = op.tipo_op === 'estoque';
                               const dotClass = isEstoque ? 'bg-purple-500' : (concluida || confirmada) ? 'bg-green-500' : 'bg-orange-400';
+                              const isOpen = openIds.has(op.id);
+                              const emissaoFmt = op.data_emissao
+                                ? format(new Date(op.data_emissao + 'T12:00:00'), 'dd/MM')
+                                : null;
+                              const conclusaoFmt = op.data_conclusao
+                                ? format(new Date(op.data_conclusao.substring(0,10) + 'T12:00:00'), 'dd/MM')
+                                : null;
+                              const dispStr = concluida
+                                ? op.data_conclusao!.substring(0,10)
+                                : (confirmada || isEstoque)
+                                  ? proximoDiaUtil(op.data_programacao)
+                                  : op.data_emissao ? somarDiasUteis(op.data_emissao, 7) : null;
+                              const dispFmt = dispStr
+                                ? format(new Date(dispStr + 'T12:00:00'), 'dd/MM')
+                                : null;
                               return (
                                 <button
                                   key={op.id}
@@ -565,8 +580,33 @@ export default function PainelComercial() {
                                       <p className="text-[9px] tabular-nums text-muted-foreground leading-tight">{formatKg(op.quantidade)}kg</p>
                                     </div>
                                   </div>
-                                  {openIds.has(op.id) && (
-                                    <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">Lote {op.lote}</p>
+                                  {isOpen && (
+                                    <div className="mt-0.5 pt-0.5 border-t border-black/10 dark:border-white/10 space-y-0.5">
+                                      <p className="text-[9px] text-muted-foreground leading-tight">Lote {op.lote}</p>
+                                      {op.quantidade_real != null && (
+                                        <p className="text-[9px] text-green-600 dark:text-green-400 font-medium leading-tight">
+                                          Prod: {formatKg(op.quantidade_real)}kg
+                                        </p>
+                                      )}
+                                      {emissaoFmt && (
+                                        <p className="text-[9px] text-muted-foreground leading-tight">Emit: {emissaoFmt}</p>
+                                      )}
+                                      {conclusaoFmt && (
+                                        <p className="text-[9px] text-green-600 dark:text-green-400 leading-tight">Conc: {conclusaoFmt}</p>
+                                      )}
+                                      {dispFmt && (
+                                        <p className={cn('text-[9px] font-medium leading-tight',
+                                          concluida ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
+                                        )}>
+                                          {concluida ? 'Disp:' : dispStr! <= hj ? 'Disp:' : 'Est:'} {dispFmt}
+                                        </p>
+                                      )}
+                                      {isEstoque && (
+                                        <span className="inline-block text-[8px] font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded px-0.5 leading-tight">
+                                          Estoque
+                                        </span>
+                                      )}
+                                    </div>
                                   )}
                                 </button>
                               );
