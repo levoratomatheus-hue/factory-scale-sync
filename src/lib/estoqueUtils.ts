@@ -197,3 +197,50 @@ export async function estornarEstoqueOP(
     (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
   ]);
 }
+
+// ── Verificação de saldo antes de criar OP ────────────────────────────────────
+
+export interface MpFaltante {
+  cod_tid: string;
+  materia_prima: string;
+  saldoAtual: number;
+  consumo: number;
+  saldoApos: number;
+}
+
+/**
+ * Verifica se a baixa da OP deixaria alguma MP com saldo negativo.
+ * MPs sem cadastro no estoque são ignoradas (não bloqueiam).
+ * Retorna array vazio se não houver problemas.
+ */
+export async function verificarEstoqueOP(
+  formulaId: string,
+  quantidade: number,
+): Promise<MpFaltante[]> {
+  const formulaItens = await fetchFormulaItens(formulaId);
+  if (formulaItens.length === 0) return [];
+
+  type MP = { codTid: string; materia_prima: string; consumo: number };
+  const mps: MP[] = [];
+  for (const item of formulaItens) {
+    const codTid = item.cod_mp;
+    if (!codTid) continue;
+    const consumo = (item.percentual / 100) * quantidade;
+    if (consumo <= 0) continue;
+    mps.push({ codTid, materia_prima: item.materia_prima, consumo });
+  }
+  if (mps.length === 0) return [];
+
+  const saldoMap = await fetchSaldos(mps.map((m) => m.codTid));
+
+  const faltantes: MpFaltante[] = [];
+  for (const { codTid, materia_prima, consumo } of mps) {
+    if (!saldoMap.has(codTid)) continue; // sem cadastro → ignora
+    const saldoAtual = saldoMap.get(codTid) ?? 0;
+    const saldoApos = saldoAtual - consumo;
+    if (saldoApos < 0) {
+      faltantes.push({ cod_tid: codTid, materia_prima, saldoAtual, consumo, saldoApos });
+    }
+  }
+  return faltantes;
+}

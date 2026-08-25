@@ -13,7 +13,7 @@ import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
-import { baixarEstoqueOP } from '@/lib/estoqueUtils';
+import { baixarEstoqueOP, verificarEstoqueOP, type MpFaltante } from '@/lib/estoqueUtils';
 import { useAuth } from '@/hooks/useAuth';
 
 interface LoteDisponivel {
@@ -104,6 +104,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [comparatorLoading, setComparatorLoading] = useState(false);
   const [sdrsAlerta, setSdrsAlerta] = useState<SdrAlerta[]>([]);
   const [acertosEnriquecidos, setAcertosEnriquecidos] = useState<AcertoEnriquecido[]>([]);
+  const [mpsFaltantes, setMpsFaltantes] = useState<MpFaltante[] | null>(null);
+  const [valuesParaForcar, setValuesParaForcar] = useState<OrdemFormValues | null>(null);
 
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade, setItens } = useFormula(formulaId, tamanhoBatelada);
   const [itensSdrId, setItensSdrId] = useState<string | null>(null);
@@ -348,7 +350,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     return () => { cancelled = true; };
   }, [formulaId, loteEncontrado]);
 
-  const onSubmit = async (values: OrdemFormValues) => {
+  const criarOrdem = async (values: OrdemFormValues) => {
     setSaving(true);
 
     const { data: novaOrdem, error } = await supabase
@@ -386,7 +388,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
     // Tudo que não bloqueia o UX roda em paralelo após o insert
     await Promise.all([
-      // Baixa automática de estoque (agora batch internamente: 3 RT fixos)
+      // Baixa automática de estoque
       formulaId
         ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome).catch((err: any) => {
             toast({ title: 'Aviso: falha ao baixar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
@@ -416,7 +418,6 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         : Promise.resolve(),
     ]);
 
-
     setSaving(false);
     toast({ title: 'Ordem criada com sucesso! Acesse Pré-Programação para datá-la.' });
     fetchLotesDisponiveis();
@@ -434,6 +435,30 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setOrientacoes('');
     setDataEmissao(new Date().toISOString().split("T")[0]);
     setAcertosEnriquecidos([]);
+  };
+
+  const onSubmit = async (values: OrdemFormValues) => {
+    if (formulaId) {
+      try {
+        const faltantes = await verificarEstoqueOP(formulaId, values.quantidade);
+        if (faltantes.length > 0) {
+          setMpsFaltantes(faltantes);
+          setValuesParaForcar(values);
+          return; // não cria — abre o dialog
+        }
+      } catch (e) {
+        console.error('Falha ao verificar estoque', e); // fail-open
+      }
+    }
+    await criarOrdem(values);
+  };
+
+  const forcarCriacao = async () => {
+    if (!valuesParaForcar) return;
+    const v = valuesParaForcar;
+    setMpsFaltantes(null);
+    setValuesParaForcar(null);
+    await criarOrdem(v);
   };
 
   const lotesFiltrados = lotesDisponiveis.filter((l) =>
@@ -841,6 +866,58 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
           </div>
         </div>
       </div>
+      {/* ── Dialog: estoque insuficiente ── */}
+      {mpsFaltantes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-lg bg-background border shadow-lg p-6 space-y-4">
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <h2 className="text-base font-semibold">Estoque insuficiente</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              As matérias-primas abaixo ficariam com saldo negativo após a baixa desta OP.
+            </p>
+            <div className="overflow-x-auto rounded border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-left">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Matéria-Prima</th>
+                    <th className="px-3 py-2 text-right font-medium">Saldo atual (kg)</th>
+                    <th className="px-3 py-2 text-right font-medium">Consumo (kg)</th>
+                    <th className="px-3 py-2 text-right font-medium">Ficaria (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mpsFaltantes.map((mp) => (
+                    <tr key={mp.cod_tid} className="border-t">
+                      <td className="px-3 py-1.5 font-medium">{mp.materia_prima}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatKg(mp.saldoAtual)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatKg(mp.consumo)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-red-600 dark:text-red-400">
+                        {formatKg(mp.saldoApos)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => { setMpsFaltantes(null); setValuesParaForcar(null); }}
+              >
+                Cancelar
+              </Button>
+              {perfil?.papel === 'gestor' && (
+                <Button variant="destructive" onClick={forcarCriacao} disabled={saving}>
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Criar mesmo assim
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
