@@ -55,6 +55,12 @@ export function useFormula(formulaId: string | null, tamanhoBatelada: number | n
             quantidade_kg: parseFloat(((row.percentual / 100) * tamanhoBatelada).toFixed(3)),
           }))
         );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setError('Erro de conexão ao buscar fórmula');
+        }
       });
 
     return () => { cancelled = true; };

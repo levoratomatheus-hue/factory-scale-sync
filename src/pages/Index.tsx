@@ -227,7 +227,7 @@ const TAB_LOADING = (
   </div>
 );
 
-function UserProfile({ nome, papel, email }: { nome: string; papel: string; email: string | null }) {
+const UserProfile = memo(function UserProfile({ nome, papel, email }: { nome: string; papel: string; email: string | null }) {
   const inicial = nome?.trim()[0]?.toUpperCase() ?? '?';
   const bg = avatarColor[papel] ?? '#6b7280';
   return (
@@ -250,7 +250,7 @@ function UserProfile({ nome, papel, email }: { nome: string; papel: string; emai
       </div>
     </div>
   );
-}
+});
 
 export default function Index() {
   const { perfil, email, loading, logout } = useAuth();

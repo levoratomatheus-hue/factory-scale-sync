@@ -554,7 +554,7 @@ function StatusBadgeInline({ status }: { status: "pendente" | "utilizado" }) {
 
 // ── ResultPanel ───────────────────────────────────────────────────────────────
 
-function ResultPanel({ qtdUtilizada, percReaproveitado, itens }: { qtdUtilizada: number; percReaproveitado: number; itens: ItemForm[] }) {
+const ResultPanel = memo(function ResultPanel({ qtdUtilizada, percReaproveitado, itens }: { qtdUtilizada: number; percReaproveitado: number; itens: ItemForm[] }) {
   const D = useContext(PaletteCtx);
   const somaItens = itens.reduce((s, i) => s + (parseFloat(i.percentual) || 0), 0);
   const somaTotal = percReaproveitado + somaItens;
@@ -593,7 +593,7 @@ function ResultPanel({ qtdUtilizada, percReaproveitado, itens }: { qtdUtilizada:
       </div>
     </div>
   );
-}
+});
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -604,7 +604,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     obs.observe(document.documentElement, { attributeFilter: ["class"] });
     return () => obs.disconnect();
   }, []);
-  const D = buildPalette(dark);
+  const D = useMemo(() => buildPalette(dark), [dark]);
 
   // ── List state ──────────────────────────────────────────────────────────────
   const [lista, setLista] = useState<ReaprovFull[]>([]);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -81,9 +81,11 @@ const PAGE_SIZE = 100;
 export default function HistoricoMovimentacoesMP() {
   const [movs, setMovs] = useState<Movimentacao[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Filtros
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos');
   const [dataInicio, setDataInicio] = useState(() => {
     const d = new Date();
@@ -92,32 +94,51 @@ export default function HistoricoMovimentacoesMP() {
   });
   const [dataFim, setDataFim] = useState(() => toInputDate(new Date()));
 
-  // Paginação
+  // Paginação server-side
   const [page, setPage] = useState(0);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  const fetchMovs = useCallback(async () => {
+  // Debounce da busca: 300ms após o usuário parar de digitar
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Quando filtros mudam (exceto page), volta para página 0
+  useEffect(() => { setPage(0); }, [dataInicio, dataFim, filtroTipo, debouncedSearch]);
+
+  const fetchMovs = useCallback(async (targetPage: number) => {
     setLoading(true);
-    setPage(0);
 
     const inicio = dataInicio ? `${dataInicio}T00:00:00` : undefined;
     const fim    = dataFim    ? `${dataFim}T23:59:59`    : undefined;
 
-    // Para saida_op e saida_manual, filtramos por tipo='saida' e depois pelo ordem_id no cliente
-    const tipoDb = filtroTipo === 'saida_op' || filtroTipo === 'saida_manual'
-      ? 'saida'
-      : filtroTipo !== 'todos' ? filtroTipo : undefined;
-
     let query = (supabase as any)
       .from('estoque_movimentacoes')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('criado_em', { ascending: false })
-      .limit(2000);
+      .range(targetPage * PAGE_SIZE, (targetPage + 1) * PAGE_SIZE - 1);
 
-    if (tipoDb) query = query.eq('tipo', tipoDb);
+    // Filtro por tipo: saida_op e saida_manual usam ordem_id IS / IS NOT NULL
+    if (filtroTipo === 'saida_op') {
+      query = query.eq('tipo', 'saida').not('ordem_id', 'is', null);
+    } else if (filtroTipo === 'saida_manual') {
+      query = query.eq('tipo', 'saida').is('ordem_id', null);
+    } else if (filtroTipo !== 'todos') {
+      query = query.eq('tipo', filtroTipo);
+    }
+
     if (inicio) query = query.gte('criado_em', inicio);
     if (fim)    query = query.lte('criado_em', fim);
 
-    const { data, error } = await query;
+    const q = debouncedSearch.trim();
+    if (q) {
+      query = query.or(
+        `materia_prima.ilike.%${q}%,cod_tid.ilike.%${q}%,ordem_lote.ilike.%${q}%,observacao.ilike.%${q}%`
+      );
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       toast({ title: 'Erro ao carregar histórico', description: error.message, variant: 'destructive' });
@@ -126,32 +147,14 @@ export default function HistoricoMovimentacoesMP() {
     }
 
     setMovs((data ?? []) as Movimentacao[]);
+    setTotalCount(count ?? 0);
     setLoading(false);
-  }, [dataInicio, dataFim, filtroTipo]);
+  }, [dataInicio, dataFim, filtroTipo, debouncedSearch]);
 
-  useEffect(() => { fetchMovs(); }, [fetchMovs]);
+  // Rebusca sempre que filtros ou página mudarem
+  useEffect(() => { fetchMovs(page); }, [fetchMovs, page]);
 
-  // Filtro cliente: busca por nome/cod + saida_op vs saida_manual
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return movs.filter((m) => {
-      if (filtroTipo === 'saida_op'     && categoria(m) !== 'saida_op')     return false;
-      if (filtroTipo === 'saida_manual' && categoria(m) !== 'saida_manual') return false;
-      if (!q) return true;
-      return (
-        m.materia_prima.toLowerCase().includes(q) ||
-        (m.cod_tid ?? '').toLowerCase().includes(q) ||
-        (m.ordem_lote ?? '').toLowerCase().includes(q) ||
-        (m.observacao ?? '').toLowerCase().includes(q)
-      );
-    });
-  }, [movs, search, filtroTipo]);
-
-  // Paginação
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
-  const clearSearch = () => { setSearch(''); setPage(0); };
+  const clearSearch = () => setSearch('');
 
   return (
     <div className="p-4 space-y-4">
@@ -160,10 +163,10 @@ export default function HistoricoMovimentacoesMP() {
         <div>
           <h2 className="text-lg font-semibold">Histórico Geral de Movimentações — MP ZC</h2>
           <p className="text-xs text-muted-foreground">
-            {loading ? 'Carregando...' : `${filtered.length} registro${filtered.length !== 1 ? 's' : ''}`}
+            {loading ? 'Carregando...' : `${totalCount} registro${totalCount !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchMovs} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => fetchMovs(page)} disabled={loading}>
           <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
         </Button>
@@ -177,7 +180,7 @@ export default function HistoricoMovimentacoesMP() {
           <Input
             placeholder="Buscar MP, código, lote..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-8 pr-8 h-8 text-sm"
           />
           {search && (
@@ -190,7 +193,7 @@ export default function HistoricoMovimentacoesMP() {
         {/* Tipo */}
         <select
           value={filtroTipo}
-          onChange={(e) => { setFiltroTipo(e.target.value as FiltroTipo); setPage(0); }}
+          onChange={(e) => setFiltroTipo(e.target.value as FiltroTipo)}
           className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         >
           {TIPO_OPTIONS.map((o) => (
@@ -204,7 +207,7 @@ export default function HistoricoMovimentacoesMP() {
           <Input
             type="date"
             value={dataInicio}
-            onChange={(e) => { setDataInicio(e.target.value); setPage(0); }}
+            onChange={(e) => setDataInicio(e.target.value)}
             className="h-8 text-sm w-36"
           />
         </div>
@@ -213,7 +216,7 @@ export default function HistoricoMovimentacoesMP() {
           <Input
             type="date"
             value={dataFim}
-            onChange={(e) => { setDataFim(e.target.value); setPage(0); }}
+            onChange={(e) => setDataFim(e.target.value)}
             className="h-8 text-sm w-36"
           />
         </div>
@@ -234,7 +237,7 @@ export default function HistoricoMovimentacoesMP() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : movs.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-16">Nenhuma movimentação encontrada.</p>
         ) : (
           <table className="w-full text-xs">
@@ -252,7 +255,7 @@ export default function HistoricoMovimentacoesMP() {
               </tr>
             </thead>
             <tbody>
-              {paginated.map((mov) => (
+              {movs.map((mov) => (
                 <tr key={mov.id} className="border-t hover:bg-muted/30 transition-colors">
                   <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{fmtDatetime(mov.criado_em)}</td>
                   <td className="px-3 py-1.5"><TipoBadge mov={mov} /></td>
@@ -284,13 +287,13 @@ export default function HistoricoMovimentacoesMP() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Exibindo {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
+            Exibindo {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} de {totalCount}
           </span>
           <div className="flex gap-1">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            <Button variant="outline" size="sm" disabled={page === 0 || loading} onClick={() => setPage((p) => p - 1)}>
               ← Anterior
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
+            <Button variant="outline" size="sm" disabled={page >= totalPages - 1 || loading} onClick={() => setPage((p) => p + 1)}>
               Próxima →
             </Button>
           </div>

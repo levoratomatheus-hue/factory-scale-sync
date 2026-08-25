@@ -118,18 +118,12 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
   const fetchLotesDisponiveis = useCallback(async () => {
     setLoadingLotes(true);
-    // Queries em paralelo: lotes em aberto + ordens existentes (campo lote apenas)
-    const [{ data: lotes }, { data: ordensExistentes }] = await Promise.all([
-      (supabase as any)
-        .from('cadastro_lotes')
-        .select('lote, produto, quantidade')
-        .eq('status', 'Em Aberto')
-        .order('lote', { ascending: true }),
-      (supabase as any)
-        .from('ordens')
-        .select('lote')
-        .limit(5000),
-    ]);
+    // 1) Busca apenas os lotes em aberto
+    const { data: lotes } = await (supabase as any)
+      .from('cadastro_lotes')
+      .select('lote, produto, quantidade')
+      .eq('status', 'Em Aberto')
+      .order('lote', { ascending: true });
 
     if (!lotes || lotes.length === 0) {
       setLotesDisponiveis([]);
@@ -137,8 +131,15 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       return;
     }
 
+    // 2) Busca ordens filtradas somente pelos lotes em aberto (query pequena)
+    const loteStrs = (lotes as any[]).map((l) => String(l.lote));
+    const { data: ordensExistentes } = await (supabase as any)
+      .from('ordens')
+      .select('lote')
+      .in('lote', loteStrs);
+
     const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
-    setLotesDisponiveis(lotes.filter((l: any) => !lotesComOP.has(String(l.lote))));
+    setLotesDisponiveis((lotes as any[]).filter((l) => !lotesComOP.has(String(l.lote))));
     setLoadingLotes(false);
   }, []);
 
