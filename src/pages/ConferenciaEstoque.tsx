@@ -1,577 +1,415 @@
-import { useState, useMemo, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Upload, Search, ArrowLeftRight } from 'lucide-react';
-import { cn, formatKg } from '@/lib/utils';
-import { parseEstoqueTid, normalizeCod, TidItem } from '@/lib/parseEstoqueTid';
+// src/pages/ConferenciaEstoque.tsx
+//
+// Conferência de Estoque — confronta o saldo de matéria-prima do relatório do
+// TID com o saldo cadastrado no sistema. SOMENTE LEITURA (não altera saldos).
+//
+// Após a migração para código TID, as duas marcas comparam DIRETO (sem de-para):
+//   ZC → tabela estoque_mp,     coluna cod_tid
+//   PG → tabela estoque_mp_pg,  coluna cod_pg
+// Em ambas: casa o cod_tid do relatório do TID com o código do estoque,
+// com tolerância a zeros à esquerda ("000141" == "141").
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+import { useMemo, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { formatKg } from "@/lib/utils";
+import {
+  parseEstoqueTidFile,
+  normalizarCodTid,
+  type EstoqueTidItem,
+} from "@/lib/parseEstoqueTid";
 
-type Marca = 'ZC' | 'PG';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
 
-type StatusConf =
-  | 'ok'
-  | 'divergente'
-  | 'sem_sistema'  // TID tem a MP mas ela não está na tabela de estoque
-  | 'so_sistema';  // MP está no estoque do sistema mas não veio no TID
+type Marca = "ZC" | "PG";
 
-interface LinhaConf {
-  cod_tid: string | null;
-  cod_pg: string | null;    // apenas PG; null para ZC
-  nome: string;
-  saldo_tid: number | null;
-  saldo_sistema: number | null;
-  diferenca: number | null; // saldo_tid - saldo_sistema
-  status: StatusConf;
+// Configuração por marca: qual tabela e qual coluna de código consultar.
+const CONFIG_MARCA: Record<Marca, { tabela: string; coluna: string; nome: string }> = {
+  ZC: { tabela: "estoque_mp", coluna: "cod_tid", nome: "Zan Collor" },
+  PG: { tabela: "estoque_mp_pg", coluna: "cod_pg", nome: "Pigma" },
+};
+
+type StatusComparacao =
+  | "ok"
+  | "divergente"
+  | "sem_sistema" // está no TID mas não no estoque da marca
+  | "so_sistema"; // está no estoque da marca mas não veio no relatório do TID
+
+interface LinhaComparacao {
+  codTid: string | null;
+  materiaPrima: string;
+  saldoTid: number | null;
+  saldoSistema: number | null;
+  diff: number | null; // saldoTid - saldoSistema
+  status: StatusComparacao;
 }
 
-// ── Constantes ─────────────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<StatusConf, string> = {
-  ok:          'OK',
-  divergente:  'Divergente',
-  sem_sistema: 'Só no TID',
-  so_sistema:  'Só no sistema',
-};
-
-const STATUS_BADGE: Record<StatusConf, string> = {
-  ok:          'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  divergente:  'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  sem_sistema: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-  so_sistema:  'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-};
-
-const STATUS_CARD_COLOR: Record<StatusConf, string> = {
-  ok:          'text-green-600 dark:text-green-400',
-  divergente:  'text-red-600 dark:text-red-400',
-  sem_sistema: 'text-orange-600 dark:text-orange-400',
-  so_sistema:  'text-blue-600 dark:text-blue-400',
-};
-
-const TOLERANCE = 0.001; // kg
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatDiferenca(d: number): string {
-  const prefix = d >= 0 ? '+' : '';
-  return prefix + formatKg(d);
-}
-
-// ── Componente principal ────────────────────────────────────────────────────────
+// Tolerância (kg) para considerar "sem divergência". Saldos têm 3 casas.
+const TOLERANCIA_KG = 0.001;
 
 export default function ConferenciaEstoque() {
-  const [marca, setMarca] = useState<Marca>('ZC');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [marca, setMarca] = useState<Marca>("ZC");
+  const [itensTid, setItensTid] = useState<EstoqueTidItem[] | null>(null);
+  const [nomeArquivo, setNomeArquivo] = useState<string>("");
+  const [ignoradas, setIgnoradas] = useState(0);
+
+  const [estoqueRows, setEstoqueRows] = useState<{ cod: string; materia_prima: string; saldo_kg: number }[]>([]);
+
   const [loading, setLoading] = useState(false);
-  const [linhas, setLinhas] = useState<LinhaConf[]>([]);
-  const [filtroStatus, setFiltroStatus] = useState<StatusConf | 'todos'>('divergente');
-  const [busca, setBusca] = useState('');
-  const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [erro, setErro] = useState<string>("");
 
-  // ── Lógica de processamento ──────────────────────────────────────────────────
+  const [busca, setBusca] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState<StatusComparacao | "todos">("divergente");
 
-  async function processarArquivo(file: File) {
+  // ---- Carrega o estoque do sistema para a marca escolhida ----
+  async function carregarEstoque(marcaAtual: Marca) {
+    const cfg = CONFIG_MARCA[marcaAtual];
+    const { data, error } = await (supabase as any)
+      .from(cfg.tabela)
+      .select(`${cfg.coluna}, materia_prima, saldo_kg`);
+
+    if (error) throw error;
+
+    const rows = ((data ?? []) as any[]).map((r) => ({
+      cod: String(r[cfg.coluna] ?? "").trim(),
+      materia_prima: r.materia_prima ?? "",
+      saldo_kg: Number(r.saldo_kg ?? 0),
+    }));
+    setEstoqueRows(rows);
+  }
+
+  // ---- Upload do relatório do TID ----
+  async function handleArquivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     setLoading(true);
-    setLinhas([]);
-    setBusca('');
-    setFiltroStatus('divergente');
+    setErro("");
     try {
-      const buffer = await file.arrayBuffer();
-      const tidRows = parseEstoqueTid(buffer);
-      if (marca === 'ZC') {
-        await processarZC(tidRows);
-      } else {
-        await processarPG(tidRows);
-      }
-    } catch (err) {
-      console.error('[ConferenciaEstoque] erro ao processar arquivo:', err);
+      const resultado = await parseEstoqueTidFile(file);
+      setItensTid(resultado.itens);
+      setIgnoradas(resultado.ignoradas);
+      setNomeArquivo(file.name);
+      await carregarEstoque(marca);
+    } catch (err: any) {
+      setErro(err?.message ?? "Falha ao ler o arquivo.");
+      setItensTid(null);
     } finally {
       setLoading(false);
+      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
-  /**
-   * ZC: match direto por cod_tid — estoque_mp já usa cod_tid como chave primária.
-   */
-  async function processarZC(tidRows: TidItem[]) {
-    const { data: estoqueData, error: estoqueErr } = await (supabase as any)
-      .from('estoque_mp')
-      .select('cod_tid, materia_prima, saldo_kg');
-    if (estoqueErr) throw estoqueErr;
-
-    // Map: normCodTid → {cod_tid_raw, nome, saldo_kg}
-    const sistemaMap = new Map<string, { cod_tid: string; nome: string; saldo_kg: number }>();
-    for (const row of (estoqueData ?? [])) {
-      sistemaMap.set(normalizeCod(row.cod_tid), {
-        cod_tid:  row.cod_tid,
-        nome:     row.materia_prima,
-        saldo_kg: Number(row.saldo_kg),
-      });
-    }
-
-    const resultado: LinhaConf[] = [];
-    const normUsados = new Set<string>();
-
-    for (const tid of tidRows) {
-      const normTid = normalizeCod(tid.cod_tid);
-      const sistema = sistemaMap.get(normTid);
-
-      if (!sistema) {
-        resultado.push({
-          cod_tid:       tid.cod_tid,
-          cod_pg:        null,
-          nome:          tid.nome,
-          saldo_tid:     tid.saldo_kg,
-          saldo_sistema: null,
-          diferenca:     null,
-          status:        'sem_sistema',
-        });
-        continue;
-      }
-
-      normUsados.add(normTid);
-      const diferenca = tid.saldo_kg - sistema.saldo_kg;
-      resultado.push({
-        cod_tid:       tid.cod_tid,
-        cod_pg:        null,
-        nome:          tid.nome,
-        saldo_tid:     tid.saldo_kg,
-        saldo_sistema: sistema.saldo_kg,
-        diferenca,
-        status:        Math.abs(diferenca) <= TOLERANCE ? 'ok' : 'divergente',
-      });
-    }
-
-    // Itens no estoque_mp sem correspondência no TID
-    for (const [normCod, item] of sistemaMap) {
-      if (!normUsados.has(normCod)) {
-        resultado.push({
-          cod_tid:       item.cod_tid,
-          cod_pg:        null,
-          nome:          item.nome,
-          saldo_tid:     null,
-          saldo_sistema: item.saldo_kg,
-          diferenca:     null,
-          status:        'so_sistema',
-        });
-      }
-    }
-
-    setLinhas(resultado);
-  }
-
-  /**
-   * PG: match direto cod_tid (normalizado) vs cod_pg (normalizado), sem mp_depara.
-   * A tabela estoque_mp_pg é separada e usa cod_pg como identificador.
-   */
-  async function processarPG(tidRows: TidItem[]) {
-    const { data: estoqueData, error: estoqueErr } = await (supabase as any)
-      .from('estoque_mp_pg')
-      .select('cod_pg, materia_prima, saldo_kg');
-    if (estoqueErr) throw estoqueErr;
-
-    // Map: normCodPg → {cod_pg_raw, nome, saldo_kg}
-    const sistemaMap = new Map<string, { cod_pg: string; nome: string; saldo_kg: number }>();
-    for (const row of (estoqueData ?? [])) {
-      sistemaMap.set(normalizeCod(row.cod_pg), {
-        cod_pg:   row.cod_pg,
-        nome:     row.materia_prima,
-        saldo_kg: Number(row.saldo_kg),
-      });
-    }
-
-    const resultado: LinhaConf[] = [];
-    const normUsados = new Set<string>();
-
-    for (const tid of tidRows) {
-      const normTid = normalizeCod(tid.cod_tid);
-      const sistema = sistemaMap.get(normTid);
-
-      if (!sistema) {
-        resultado.push({
-          cod_tid:       tid.cod_tid,
-          cod_pg:        null,
-          nome:          tid.nome,
-          saldo_tid:     tid.saldo_kg,
-          saldo_sistema: null,
-          diferenca:     null,
-          status:        'sem_sistema',
-        });
-        continue;
-      }
-
-      normUsados.add(normTid);
-      const diferenca = tid.saldo_kg - sistema.saldo_kg;
-      resultado.push({
-        cod_tid:       tid.cod_tid,
-        cod_pg:        sistema.cod_pg,
-        nome:          tid.nome,
-        saldo_tid:     tid.saldo_kg,
-        saldo_sistema: sistema.saldo_kg,
-        diferenca,
-        status:        Math.abs(diferenca) <= TOLERANCE ? 'ok' : 'divergente',
-      });
-    }
-
-    // Itens presentes no estoque_mp_pg mas sem correspondência no TID
-    for (const [normCod, item] of sistemaMap) {
-      if (!normUsados.has(normCod)) {
-        resultado.push({
-          cod_tid:       null,
-          cod_pg:        item.cod_pg,
-          nome:          item.nome,
-          saldo_tid:     null,
-          saldo_sistema: item.saldo_kg,
-          diferenca:     null,
-          status:        'so_sistema',
-        });
-      }
-    }
-
-    setLinhas(resultado);
-  }
-
-  // ── Derivados ────────────────────────────────────────────────────────────────
-
-  const contadores = useMemo(() => {
-    const c: Record<StatusConf, number> = {
-      ok: 0, divergente: 0, sem_sistema: 0, so_sistema: 0,
-    };
-    for (const l of linhas) c[l.status]++;
-    return c;
-  }, [linhas]);
-
-  const filtered = useMemo(() => {
-    let result = linhas;
-    if (filtroStatus !== 'todos') {
-      result = result.filter((l) => l.status === filtroStatus);
-    }
-    if (busca.trim()) {
-      const q = busca.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.nome.toLowerCase().includes(q) ||
-          (l.cod_tid ?? '').toLowerCase().includes(q) ||
-          (l.cod_pg ?? '').toLowerCase().includes(q),
-      );
-    }
-    return result;
-  }, [linhas, filtroStatus, busca]);
-
-  const hasResults = linhas.length > 0;
-  const mostrarCodPg = marca === 'PG';
-
-  // ── Eventos ──────────────────────────────────────────────────────────────────
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (f) {
-      setNomeArquivo(f.name);
-      processarArquivo(f);
-    }
-    e.target.value = '';
-  }
-
-  function handleMarcaChange(nova: Marca) {
-    if (nova === marca) return;
+  // ---- Trocar de marca recarrega o estoque (se já houver relatório) ----
+  async function trocarMarca(nova: Marca) {
     setMarca(nova);
-    setLinhas([]);
-    setNomeArquivo(null);
-    setBusca('');
-    setFiltroStatus('divergente');
+    if (itensTid) {
+      setLoading(true);
+      try {
+        await carregarEstoque(nova);
+      } catch (err: any) {
+        setErro(err?.message ?? "Falha ao carregar o estoque.");
+      } finally {
+        setLoading(false);
+      }
+    }
   }
 
-  // ── Cards de resumo ──────────────────────────────────────────────────────────
+  // ---- Cálculo do comparativo ----
+  const comparacao = useMemo<LinhaComparacao[]>(() => {
+    if (!itensTid) return [];
 
-  const SUMMARY_CARDS: { key: StatusConf; label: string }[] = [
-    { key: 'divergente',  label: 'Divergentes'   },
-    { key: 'ok',          label: 'OK'            },
-    { key: 'sem_sistema', label: 'Só no TID'     },
-    { key: 'so_sistema',  label: 'Só no sistema' },
-  ];
+    // Mapa do estoque: cod normalizado -> linha
+    const estoquePorCod = new Map<string, { cod: string; materia_prima: string; saldo_kg: number }>();
+    for (const r of estoqueRows) {
+      if (r.cod) estoquePorCod.set(normalizarCodTid(r.cod), r);
+    }
 
-  const STATUS_ORDER: StatusConf[] = [
-    'divergente', 'ok', 'sem_sistema', 'so_sistema',
-  ];
+    const linhas: LinhaComparacao[] = [];
+    const codsCasados = new Set<string>();
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+    // 1) Percorre o relatório do TID
+    for (const item of itensTid) {
+      const chave = normalizarCodTid(item.codTid);
+      const est = estoquePorCod.get(chave);
+
+      if (!est) {
+        linhas.push({
+          codTid: item.codTid,
+          materiaPrima: item.materiaPrima,
+          saldoTid: item.saldoKg,
+          saldoSistema: null,
+          diff: null,
+          status: "sem_sistema",
+        });
+        continue;
+      }
+
+      codsCasados.add(chave);
+      const diff = item.saldoKg - est.saldo_kg;
+      linhas.push({
+        codTid: item.codTid,
+        materiaPrima: item.materiaPrima || est.materia_prima,
+        saldoTid: item.saldoKg,
+        saldoSistema: est.saldo_kg,
+        diff,
+        status: Math.abs(diff) <= TOLERANCIA_KG ? "ok" : "divergente",
+      });
+    }
+
+    // 2) MPs no sistema que não vieram no relatório do TID
+    for (const r of estoqueRows) {
+      const chave = normalizarCodTid(r.cod);
+      if (r.cod && !codsCasados.has(chave)) {
+        linhas.push({
+          codTid: r.cod,
+          materiaPrima: r.materia_prima,
+          saldoTid: null,
+          saldoSistema: r.saldo_kg,
+          diff: null,
+          status: "so_sistema",
+        });
+      }
+    }
+
+    return linhas;
+  }, [itensTid, estoqueRows]);
+
+  // ---- Resumo ----
+  const resumo = useMemo(() => {
+    const acc = { total: comparacao.length, ok: 0, divergente: 0, sem_sistema: 0, so_sistema: 0 };
+    for (const l of comparacao) acc[l.status]++;
+    return acc;
+  }, [comparacao]);
+
+  // ---- Filtro da tabela ----
+  const linhasVisiveis = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return comparacao.filter((l) => {
+      if (filtroStatus !== "todos" && l.status !== filtroStatus) return false;
+      if (!termo) return true;
+      return (
+        l.materiaPrima.toLowerCase().includes(termo) ||
+        (l.codTid ?? "").toLowerCase().includes(termo)
+      );
+    });
+  }, [comparacao, busca, filtroStatus]);
 
   return (
-    <div className="space-y-4">
-      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ArrowLeftRight className="h-6 w-6 shrink-0" />
-            Conferência de Estoque
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Somente leitura — confronta o saldo do TID com o saldo cadastrado no sistema
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Seletor de marca */}
-          <div className="flex rounded-lg border overflow-hidden text-sm font-medium">
-            <button
-              className={cn(
-                'px-3 py-1.5 transition-colors',
-                marca === 'ZC'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-background text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => handleMarcaChange('ZC')}
-            >
-              Zan Collor
-            </button>
-            <button
-              className={cn(
-                'px-3 py-1.5 transition-colors border-l',
-                marca === 'PG'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-background text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => handleMarcaChange('PG')}
-            >
-              Pigma
-            </button>
-          </div>
-
-          {/* Upload */}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".txt"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <Button
-            onClick={() => fileRef.current?.click()}
-            disabled={loading}
-            size="sm"
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-            ) : (
-              <Upload className="h-4 w-4 mr-1.5" />
-            )}
-            {nomeArquivo ? 'Trocar arquivo' : 'Enviar relatório TID'}
-          </Button>
-        </div>
+    <div className="p-4 md:p-6 space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold">Conferência de Estoque</h1>
+        <p className="text-sm text-muted-foreground">
+          Confronta o saldo de matéria-prima do relatório do TID com o saldo
+          cadastrado no sistema. Somente leitura — nenhum saldo é alterado.
+        </p>
       </div>
 
-      {/* Nome do arquivo e total */}
-      {nomeArquivo && !loading && (
-        <p className="text-xs text-muted-foreground">
-          Arquivo:{' '}
-          <span className="font-mono">{nomeArquivo}</span>
-          {' · '}
-          <span className="font-medium text-foreground">{linhas.length}</span> itens processados
-          {' · Marca: '}
-          <span className="font-medium text-foreground">{marca === 'ZC' ? 'Zan Collor' : 'Pigma'}</span>
-        </p>
-      )}
+      {/* Controles */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">1. Selecione a marca e envie o relatório</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Marca:</span>
+              <Button
+                variant={marca === "ZC" ? "default" : "outline"}
+                size="sm"
+                onClick={() => trocarMarca("ZC")}
+                disabled={loading}
+              >
+                Zan Collor
+              </Button>
+              <Button
+                variant={marca === "PG" ? "default" : "outline"}
+                size="sm"
+                onClick={() => trocarMarca("PG")}
+                disabled={loading}
+              >
+                Pigma
+              </Button>
+            </div>
 
-      {/* ── Carregando ────────────────────────────────────────────────────── */}
-      {loading && (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-3 text-muted-foreground text-sm">Processando arquivo e consultando banco…</span>
-        </div>
-      )}
-
-      {/* ── Cards de resumo ───────────────────────────────────────────────── */}
-      {hasResults && !loading && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {SUMMARY_CARDS.map(({ key, label }) => (
-            <Card
-              key={key}
-              className={cn(
-                'cursor-pointer transition-all hover:shadow-md select-none',
-                filtroStatus === key && 'ring-2 ring-primary',
-                contadores[key] === 0 && 'opacity-50 pointer-events-none',
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".txt,.csv"
+                className="hidden"
+                onChange={handleArquivo}
+              />
+              <Button onClick={() => inputRef.current?.click()} disabled={loading}>
+                <Upload className="mr-2 h-4 w-4" />
+                {loading ? "Carregando..." : "Enviar relatório do TID"}
+              </Button>
+              {nomeArquivo && (
+                <span className="text-sm text-muted-foreground">
+                  {nomeArquivo}
+                  {ignoradas > 0 && ` · ${ignoradas} linha(s) ignorada(s)`}
+                </span>
               )}
-              onClick={() =>
-                setFiltroStatus((prev) => (prev === key ? 'todos' : key))
-              }
-            >
-              <CardContent className="p-3 text-center">
-                <p className={cn('text-3xl font-bold tabular-nums leading-tight', STATUS_CARD_COLOR[key])}>
-                  {contadores[key]}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{label}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* ── Filtros ───────────────────────────────────────────────────────── */}
-      {hasResults && !loading && (
-        <div className="flex flex-wrap gap-2 items-center">
-          <Button
-            variant={filtroStatus === 'todos' ? 'default' : 'outline'}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setFiltroStatus('todos')}
-          >
-            Todos ({linhas.length})
-          </Button>
-          {STATUS_ORDER.map((s) => (
-            <Button
-              key={s}
-              variant={filtroStatus === s ? 'default' : 'outline'}
-              size="sm"
-              className="h-7 text-xs"
-              disabled={contadores[s] === 0}
-              onClick={() =>
-                setFiltroStatus((prev) => (prev === s ? 'todos' : s))
-              }
-            >
-              {STATUS_LABELS[s]} ({contadores[s]})
-            </Button>
-          ))}
-
-          <div className="relative ml-auto">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar nome ou código…"
-              className="pl-7 h-7 text-xs w-60"
-            />
+            </div>
           </div>
+
+          {erro && (
+            <div className="flex items-center gap-2 rounded-md bg-red-50 p-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              <AlertTriangle className="h-4 w-4" /> {erro}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Resumo */}
+      {itensTid && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <ResumoCard rotulo="Divergentes" valor={resumo.divergente} tom="red" />
+          <ResumoCard rotulo="Conferem (OK)" valor={resumo.ok} tom="green" />
+          <ResumoCard rotulo="Só no TID" valor={resumo.sem_sistema} tom="amber" />
+          <ResumoCard rotulo="Só no sistema" valor={resumo.so_sistema} tom="gray" />
         </div>
       )}
 
-      {/* ── Tabela ────────────────────────────────────────────────────────── */}
-      {hasResults && !loading && (
-        <div className="rounded-lg border overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50 text-muted-foreground">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium">Cód. TID</th>
-                <th className="text-left px-3 py-2 font-medium">Matéria-Prima</th>
-                {mostrarCodPg && <th className="text-left px-3 py-2 font-medium">Cód. PG</th>}
-                <th className="text-right px-3 py-2 font-medium">Saldo TID (kg)</th>
-                <th className="text-right px-3 py-2 font-medium">Saldo Sistema (kg)</th>
-                <th className="text-right px-3 py-2 font-medium">Diferença (kg)</th>
-                <th className="text-left px-3 py-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={mostrarCodPg ? 7 : 6} className="px-3 py-10 text-center text-muted-foreground">
-                    Nenhum item encontrado com os filtros aplicados.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((l, i) => {
-                  const difPos = l.diferenca !== null && l.diferenca > TOLERANCE;
-                  const difNeg = l.diferenca !== null && l.diferenca < -TOLERANCE;
-                  return (
+      {/* Tabela */}
+      {itensTid && (
+        <Card>
+          <CardHeader className="gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-base">
+                Comparativo — {CONFIG_MARCA[marca].nome}
+              </CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    ["divergente", "Divergentes"],
+                    ["todos", "Todos"],
+                    ["ok", "OK"],
+                    ["sem_sistema", "Só no TID"],
+                    ["so_sistema", "Só no sistema"],
+                  ] as [StatusComparacao | "todos", string][]
+                ).map(([key, label]) => (
+                  <Button
+                    key={key}
+                    size="sm"
+                    variant={filtroStatus === key ? "default" : "outline"}
+                    onClick={() => setFiltroStatus(key)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+                <Input
+                  placeholder="Buscar MP ou código..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="h-9 w-56"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-muted/50 text-left">
+                  <tr>
+                    <th className="p-2 font-medium">Cód. TID</th>
+                    <th className="p-2 font-medium">Matéria-prima</th>
+                    <th className="p-2 text-right font-medium">Saldo TID (kg)</th>
+                    <th className="p-2 text-right font-medium">Saldo Sistema (kg)</th>
+                    <th className="p-2 text-right font-medium">Diferença (kg)</th>
+                    <th className="p-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {linhasVisiveis.map((l, i) => (
                     <tr
-                      key={i}
-                      className="border-t hover:bg-muted/30 transition-colors"
+                      key={`${l.codTid}-${i}`}
+                      className="border-b last:border-0 hover:bg-muted/40"
                     >
-                      {/* Cód. TID */}
-                      <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">
-                        {l.cod_tid ?? '—'}
+                      <td className="p-2 font-mono text-xs">{l.codTid ?? "—"}</td>
+                      <td className="p-2">{l.materiaPrima}</td>
+                      <td className="p-2 text-right tabular-nums">
+                        {l.saldoTid == null ? "—" : formatKg(l.saldoTid)}
                       </td>
-
-                      {/* Nome */}
+                      <td className="p-2 text-right tabular-nums">
+                        {l.saldoSistema == null ? "—" : formatKg(l.saldoSistema)}
+                      </td>
                       <td
-                        className="px-3 py-2 font-medium max-w-[200px] truncate"
-                        title={l.nome}
+                        className={`p-2 text-right tabular-nums font-medium ${
+                          l.diff != null && Math.abs(l.diff) > TOLERANCIA_KG
+                            ? l.diff > 0
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-orange-600 dark:text-orange-400"
+                            : ""
+                        }`}
                       >
-                        {l.nome || '—'}
+                        {l.diff == null ? "—" : `${l.diff > 0 ? "+" : ""}${formatKg(l.diff)}`}
                       </td>
-
-                      {/* Cód. PG (somente PG) */}
-                      {mostrarCodPg && (
-                        <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">
-                          {l.cod_pg ?? '—'}
-                        </td>
-                      )}
-
-                      {/* Saldo TID */}
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {l.saldo_tid !== null ? formatKg(l.saldo_tid) : '—'}
-                      </td>
-
-                      {/* Saldo sistema */}
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {l.saldo_sistema !== null ? formatKg(l.saldo_sistema) : '—'}
-                      </td>
-
-                      {/* Diferença */}
-                      <td
-                        className={cn(
-                          'px-3 py-2 text-right tabular-nums font-semibold',
-                          difPos && 'text-red-600 dark:text-red-400',
-                          difNeg && 'text-orange-600 dark:text-orange-400',
-                        )}
-                      >
-                        {l.diferenca !== null ? formatDiferenca(l.diferenca) : '—'}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span
-                          className={cn(
-                            'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                            STATUS_BADGE[l.status],
-                          )}
-                        >
-                          {STATUS_LABELS[l.status]}
-                        </span>
+                      <td className="p-2">
+                        <StatusBadge status={l.status} />
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-
-            {/* Rodapé com totais dos filtrados */}
-            {filtered.length > 0 && (
-              <tfoot className="bg-muted/30 text-muted-foreground font-medium border-t-2">
-                <tr>
-                  <td colSpan={mostrarCodPg ? 3 : 2} className="px-3 py-2 text-xs">
-                    {filtered.length} item{filtered.length !== 1 ? 's' : ''}
-                    {filtroStatus !== 'todos' && ` · filtro: ${STATUS_LABELS[filtroStatus as StatusConf]}`}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-foreground">
-                    {formatKg(
-                      filtered.reduce((acc, l) => acc + (l.saldo_tid ?? 0), 0),
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-foreground">
-                    {formatKg(
-                      filtered.reduce((acc, l) => acc + (l.saldo_sistema ?? 0), 0),
-                    )}
-                  </td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
-
-      {/* ── Estado vazio ─────────────────────────────────────────────────── */}
-      {!hasResults && !loading && (
-        <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-          <ArrowLeftRight className="h-14 w-14 mb-4 opacity-15" />
-          <p className="text-sm font-medium">Nenhum dado carregado</p>
-          <p className="text-xs mt-1 text-center max-w-sm">
-            Selecione a marca (<strong>Zan Collor</strong> ou <strong>Pigma</strong>) e envie o
-            relatório de estoque exportado do TID (.txt) para iniciar a conferência.
-          </p>
-        </div>
+                  ))}
+                  {linhasVisiveis.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                        Nenhum item para este filtro.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
+}
+
+function ResumoCard({
+  rotulo,
+  valor,
+  tom,
+}: {
+  rotulo: string;
+  valor: number;
+  tom: "red" | "green" | "amber" | "gray";
+}) {
+  const cores: Record<string, string> = {
+    red: "text-red-600 dark:text-red-400",
+    green: "text-green-600 dark:text-green-400",
+    amber: "text-amber-600 dark:text-amber-400",
+    gray: "text-muted-foreground",
+  };
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className={`text-2xl font-bold ${cores[tom]}`}>{valor}</div>
+        <div className="text-xs text-muted-foreground">{rotulo}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusBadge({ status }: { status: StatusComparacao }) {
+  switch (status) {
+    case "ok":
+      return (
+        <Badge className="bg-green-600 hover:bg-green-600">
+          <CheckCircle2 className="mr-1 h-3 w-3" /> OK
+        </Badge>
+      );
+    case "divergente":
+      return <Badge variant="destructive">Divergente</Badge>;
+    case "sem_sistema":
+      return <Badge variant="outline">Só no TID</Badge>;
+    case "so_sistema":
+      return <Badge variant="outline">Só no sistema</Badge>;
+  }
 }

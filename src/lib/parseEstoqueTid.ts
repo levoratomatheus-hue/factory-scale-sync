@@ -1,65 +1,94 @@
-/**
- * parseEstoqueTid.ts
- * Parsing do relatório de estoque exportado pelo TID (ERP).
- *
- * Formato: Windows-1252, separador ";", sem cabeçalho, 14+ colunas.
- *   col[0] = código TID   (ex.: "000141")
- *   col[1] = nome da MP
- *   col[4] = unidade       (ex.: "KG")
- *   col[9] = saldo atual   (formato BR: "1.076,291")
- */
+// src/lib/parseEstoqueTid.ts
+//
+// Leitor do relatório de estoque de matéria-prima exportado do TID.
+// Formato do arquivo (confirmado no arquivo real):
+//   - Encoding: Windows-1252 / ISO-8859-1 (latin-1)
+//   - Separador: ";"
+//   - SEM cabeçalho
+//   - 14 colunas por linha
+//
+// Colunas relevantes (índice 0-based):
+//   col[0]  = código TID          (ex.: "000141")
+//   col[1]  = nome da matéria-prima
+//   col[4]  = unidade             (ex.: "KG")
+//   col[9]  = SALDO ATUAL em kg   (ex.: "1.076,291")  ← coluna-chave
+//
+// Números vêm no formato brasileiro: "." separa milhar e "," separa decimal.
 
-export interface TidItem {
-  cod_tid: string;  // raw, ex.: "000141"
-  nome: string;
+export interface EstoqueTidItem {
+  codTid: string;
+  materiaPrima: string;
   unidade: string;
-  saldo_kg: number;
+  saldoKg: number;
+  linhaOriginal: number;
 }
 
-/** Converte número no formato pt-BR para float. "9.148,47" → 9148.47 */
-function parseBrNumber(s: string): number {
-  const v = parseFloat(s.trim().replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(v) ? v : 0;
+export interface ParseEstoqueTidResult {
+  itens: EstoqueTidItem[];
+  ignoradas: number;
+  totalLinhas: number;
 }
 
-/**
- * Remove zeros à esquerda para comparação tolerante.
- * "000141" → "141"   |   "5500" → "5500"
- */
-export function normalizeCod(cod: string): string {
-  const trimmed = cod.trim();
-  const n = parseInt(trimmed, 10);
-  return Number.isNaN(n) ? trimmed : String(n);
+/** Converte um número no formato brasileiro ("9.148,47") para float (9148.47). */
+export function parseNumeroBR(valor: string): number {
+  if (!valor) return 0;
+  const limpo = valor.trim().replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(limpo);
+  return Number.isNaN(n) ? 0 : n;
 }
 
-/**
- * Parseia o buffer do arquivo .txt do TID (encoding Windows-1252).
- * Retorna apenas linhas com unidade "KG" e com pelo menos 10 colunas.
- */
-export function parseEstoqueTid(buffer: ArrayBuffer): TidItem[] {
-  const text = new TextDecoder('windows-1252').decode(buffer);
-  const items: TidItem[] = [];
+/** Faz o parse a partir do texto já decodificado. */
+export function parseEstoqueTidTexto(texto: string): ParseEstoqueTidResult {
+  const linhas = texto.split(/\r?\n/);
+  const itens: EstoqueTidItem[] = [];
+  let ignoradas = 0;
 
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
+  linhas.forEach((linha, idx) => {
+    if (!linha.trim()) return; // linha vazia
 
-    const cols = line.split(';');
-    if (cols.length < 10) continue;
+    const cols = linha.split(";");
+    // precisa ter pelo menos até a coluna de saldo (índice 9)
+    if (cols.length < 10) {
+      ignoradas++;
+      return;
+    }
 
-    const codTid  = (cols[0] ?? '').trim();
-    const nome    = (cols[1] ?? '').trim();
-    const unidade = (cols[4] ?? '').trim().toUpperCase();
+    const codTid = (cols[0] || "").trim();
+    const materiaPrima = (cols[1] || "").trim();
+    const unidade = (cols[4] || "").trim();
+    const saldoKg = parseNumeroBR(cols[9] || "");
 
-    if (!codTid || unidade !== 'KG') continue;
+    if (!codTid) {
+      ignoradas++;
+      return;
+    }
 
-    items.push({
-      cod_tid: codTid,
-      nome,
+    itens.push({
+      codTid,
+      materiaPrima,
       unidade,
-      saldo_kg: parseBrNumber(cols[9] ?? '0'),
+      saldoKg,
+      linhaOriginal: idx + 1,
     });
-  }
+  });
 
-  return items;
+  return { itens, ignoradas, totalLinhas: linhas.length };
+}
+
+/** Lê o arquivo (File) decodificando em Windows-1252 e faz o parse. */
+export async function parseEstoqueTidFile(
+  file: File
+): Promise<ParseEstoqueTidResult> {
+  const buffer = await file.arrayBuffer();
+  // O TID exporta em latin-1; windows-1252 é o superset correto para PT-BR.
+  const texto = new TextDecoder("windows-1252").decode(buffer);
+  return parseEstoqueTidTexto(texto);
+}
+
+/**
+ * Normaliza um código TID para casamento tolerante a zeros à esquerda.
+ * Ex.: "000141" e "141" viram ambos "141".
+ */
+export function normalizarCodTid(cod: string): string {
+  return (cod || "").trim().replace(/^0+/, "") || "0";
 }
