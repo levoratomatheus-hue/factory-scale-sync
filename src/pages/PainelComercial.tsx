@@ -399,7 +399,7 @@ export default function PainelComercial() {
 
   return (
     /* Ocupa a altura disponível entre o header do app e o fim da viewport */
-    <div className="flex flex-col h-[calc(100dvh-3.75rem)] sm:h-[calc(100dvh-4.5rem)] max-w-5xl mx-auto">
+    <div className="flex flex-col h-[calc(100dvh-6.75rem)] md:h-[calc(100dvh-4.5rem)] max-w-5xl mx-auto">
 
       {/* ── Cabeçalho fixo: título, busca, legenda ───────────────────────── */}
       <div className="shrink-0 pb-3 space-y-3 bg-background z-20">
@@ -507,68 +507,73 @@ export default function PainelComercial() {
            * Cabeçalhos são sticky top-0 (funciona porque não há overflow-x
            * em nenhum ancestral).
            */
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-auto">
+            {/* min-w garante que as 5 colunas caibem com tamanho legível;
+                em telas largas o flex-1 distribui o espaço disponível */}
+            <div className="min-w-[520px]">
 
-            {/* Cabeçalhos dos dias — sticky no topo do scroll */}
-            <div className="sticky top-0 z-10 bg-background flex gap-2 pb-0.5">
-              {diasSemana.map((dia) => {
-                const isHoje = dia === hj;
-                const nomeDia = capitalize(
-                  format(new Date(dia + 'T12:00:00'), 'EEEE', { locale: ptBR })
-                );
-                const dataDia = format(new Date(dia + 'T12:00:00'), 'dd/MM');
-                return (
-                  <div
-                    key={dia}
-                    className={cn(
-                      'flex-1 min-w-0 px-2 py-2 rounded-t-xl border-t border-l border-r border-b flex items-center justify-between gap-1',
-                      isHoje
-                        ? 'border-primary/60 bg-primary/5 border-b-primary/30'
-                        : 'border-border bg-card'
-                    )}
-                  >
-                    <span className={cn('font-semibold text-xs truncate', isHoje && 'text-primary')}>
-                      {nomeDia}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{dataDia}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Cards — dividem a largura igualmente, sem scroll horizontal */}
-            <div className="flex gap-2 pb-4">
-              {diasSemana.map((dia) => {
-                const ops = ordPorDia.get(dia) ?? [];
-                const isHoje = dia === hj;
-                return (
-                  <div
-                    key={dia}
-                    className={cn(
-                      'flex-1 min-w-0 rounded-b-xl border-b border-l border-r',
-                      isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
-                    )}
-                  >
-                    <div className="px-1.5 py-2 space-y-1.5">
-                      {ops.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic px-1 py-1">
-                          Nenhum produto previsto
-                        </p>
-                      ) : (
-                        ops.map((op) => (
-                          <CardSemana
-                            key={op.id}
-                            op={op}
-                            isOpen={openIds.has(op.id)}
-                            onToggle={() => toggleCard(op.id)}
-                            hj={hj}
-                          />
-                        ))
+              {/* Cabeçalhos dos dias — sticky no topo do scroll */}
+              <div className="sticky top-0 z-10 bg-background flex gap-2 pb-0.5">
+                {diasSemana.map((dia) => {
+                  const isHoje = dia === hj;
+                  const nomeDia = capitalize(
+                    format(new Date(dia + 'T12:00:00'), 'EEEE', { locale: ptBR })
+                  );
+                  const dataDia = format(new Date(dia + 'T12:00:00'), 'dd/MM');
+                  return (
+                    <div
+                      key={dia}
+                      className={cn(
+                        'flex-1 min-w-0 px-2 py-2 rounded-t-xl border-t border-l border-r border-b flex items-center justify-between gap-1',
+                        isHoje
+                          ? 'border-primary/60 bg-primary/5 border-b-primary/30'
+                          : 'border-border bg-card'
                       )}
+                    >
+                      <span className={cn('font-semibold text-xs truncate', isHoje && 'text-primary')}>
+                        {nomeDia}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{dataDia}</span>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {/* Cards — dividem a largura igualmente */}
+              <div className="flex gap-2 pb-4">
+                {diasSemana.map((dia) => {
+                  const ops = ordPorDia.get(dia) ?? [];
+                  const isHoje = dia === hj;
+                  return (
+                    <div
+                      key={dia}
+                      className={cn(
+                        'flex-1 min-w-0 rounded-b-xl border-b border-l border-r',
+                        isHoje ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                      )}
+                    >
+                      <div className="px-1.5 py-2 space-y-1.5">
+                        {ops.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic px-1 py-1">
+                            Nenhum produto previsto
+                          </p>
+                        ) : (
+                          ops.map((op) => (
+                            <CardSemana
+                              key={op.id}
+                              op={op}
+                              isOpen={openIds.has(op.id)}
+                              onToggle={() => toggleCard(op.id)}
+                              hj={hj}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
             </div>
           </div>
         )}
