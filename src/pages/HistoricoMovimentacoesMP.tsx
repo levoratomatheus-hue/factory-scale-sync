@@ -10,7 +10,7 @@ import { Loader2, Search, RefreshCw, X } from 'lucide-react';
 
 interface Movimentacao {
   id: string;
-  cod_mp_excel: string;
+  cod_tid: string;
   materia_prima: string;
   tipo: 'entrada' | 'saida' | 'estorno' | 'ajuste' | 'saldo_inicial';
   quantidade_kg: number;
@@ -140,7 +140,7 @@ export default function HistoricoMovimentacoesMP() {
       if (!q) return true;
       return (
         m.materia_prima.toLowerCase().includes(q) ||
-        m.cod_mp_excel.toLowerCase().includes(q) ||
+        (m.cod_tid ?? '').toLowerCase().includes(q) ||
         (m.ordem_lote ?? '').toLowerCase().includes(q) ||
         (m.observacao ?? '').toLowerCase().includes(q)
       );
@@ -243,7 +243,7 @@ export default function HistoricoMovimentacoesMP() {
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Tipo</th>
                 <th className="text-left px-3 py-2 font-medium">Matéria-Prima</th>
-                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Cód. Excel</th>
+                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Cód. TID</th>
                 <th className="text-right px-3 py-2 font-medium whitespace-nowrap">Qtd (kg)</th>
                 <th className="text-right px-3 py-2 font-medium whitespace-nowrap">Saldo após</th>
                 <th className="text-left px-3 py-2 font-medium whitespace-nowrap">OP / Lote</th>
@@ -257,7 +257,7 @@ export default function HistoricoMovimentacoesMP() {
                   <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{fmtDatetime(mov.criado_em)}</td>
                   <td className="px-3 py-1.5"><TipoBadge mov={mov} /></td>
                   <td className="px-3 py-1.5 font-medium max-w-[200px] truncate" title={mov.materia_prima}>{mov.materia_prima}</td>
-                  <td className="px-3 py-1.5 font-mono text-muted-foreground">{mov.cod_mp_excel}</td>
+                  <td className="px-3 py-1.5 font-mono text-muted-foreground">{mov.cod_tid}</td>
                   <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${mov.quantidade_kg >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {mov.quantidade_kg >= 0 ? '+' : ''}{formatKg(mov.quantidade_kg)}
                   </td>

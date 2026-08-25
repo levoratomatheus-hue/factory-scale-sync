@@ -14,13 +14,12 @@ type Marca = 'ZC' | 'PG';
 type StatusConf =
   | 'ok'
   | 'divergente'
-  | 'sem_depara'   // TID tem a MP mas não há de-para cadastrado (apenas ZC)
-  | 'sem_sistema'  // de-para existe (ou cod_pg direto) mas MP não está na tabela de estoque
+  | 'sem_sistema'  // TID tem a MP mas ela não está na tabela de estoque
   | 'so_sistema';  // MP está no estoque do sistema mas não veio no TID
 
 interface LinhaConf {
   cod_tid: string | null;
-  cod_excel: string | null; // cod_mp_excel (ZC) ou cod_pg (PG)
+  cod_pg: string | null;    // apenas PG; null para ZC
   nome: string;
   saldo_tid: number | null;
   saldo_sistema: number | null;
@@ -33,7 +32,6 @@ interface LinhaConf {
 const STATUS_LABELS: Record<StatusConf, string> = {
   ok:          'OK',
   divergente:  'Divergente',
-  sem_depara:  'Sem de-para',
   sem_sistema: 'Só no TID',
   so_sistema:  'Só no sistema',
 };
@@ -41,7 +39,6 @@ const STATUS_LABELS: Record<StatusConf, string> = {
 const STATUS_BADGE: Record<StatusConf, string> = {
   ok:          'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   divergente:  'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  sem_depara:  'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   sem_sistema: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
   so_sistema:  'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
 };
@@ -49,7 +46,6 @@ const STATUS_BADGE: Record<StatusConf, string> = {
 const STATUS_CARD_COLOR: Record<StatusConf, string> = {
   ok:          'text-green-600 dark:text-green-400',
   divergente:  'text-red-600 dark:text-red-400',
-  sem_depara:  'text-amber-600 dark:text-amber-400',
   sem_sistema: 'text-orange-600 dark:text-orange-400',
   so_sistema:  'text-blue-600 dark:text-blue-400',
 };
@@ -97,66 +93,35 @@ export default function ConferenciaEstoque() {
   }
 
   /**
-   * ZC: TID cod_tid → mp_depara.cod_tid → mp_depara.cod_excel → estoque_mp.cod_mp_excel
+   * ZC: match direto por cod_tid — estoque_mp já usa cod_tid como chave primária.
    */
   async function processarZC(tidRows: TidItem[]) {
-    // 1. Carrega mp_depara (todo o conjunto)
-    const { data: deparaData, error: deparaErr } = await supabase
-      .from('mp_depara')
-      .select('cod_excel, cod_tid');
-    if (deparaErr) throw deparaErr;
-
-    // Map: normCodTid → cod_excel
-    const deparaMap = new Map<string, string>();
-    for (const row of (deparaData ?? [])) {
-      if (row.cod_tid) {
-        deparaMap.set(normalizeCod(row.cod_tid), row.cod_excel);
-      }
-    }
-
-    // 2. Carrega estoque_mp (toda a tabela ZC)
     const { data: estoqueData, error: estoqueErr } = await (supabase as any)
       .from('estoque_mp')
-      .select('cod_mp_excel, materia_prima, saldo_kg');
+      .select('cod_tid, materia_prima, saldo_kg');
     if (estoqueErr) throw estoqueErr;
 
-    // Map: cod_excel → {nome, saldo_kg}
-    const sistemaMap = new Map<string, { nome: string; saldo_kg: number }>();
+    // Map: normCodTid → {cod_tid_raw, nome, saldo_kg}
+    const sistemaMap = new Map<string, { cod_tid: string; nome: string; saldo_kg: number }>();
     for (const row of (estoqueData ?? [])) {
-      sistemaMap.set(row.cod_mp_excel, {
+      sistemaMap.set(normalizeCod(row.cod_tid), {
+        cod_tid:  row.cod_tid,
         nome:     row.materia_prima,
         saldo_kg: Number(row.saldo_kg),
       });
     }
 
     const resultado: LinhaConf[] = [];
-    const codExcelUsados = new Set<string>();
+    const normUsados = new Set<string>();
 
-    // Processa cada item do TID
     for (const tid of tidRows) {
-      const normTid  = normalizeCod(tid.cod_tid);
-      const codExcel = deparaMap.get(normTid);
-
-      if (!codExcel) {
-        resultado.push({
-          cod_tid:       tid.cod_tid,
-          cod_excel:     null,
-          nome:          tid.nome,
-          saldo_tid:     tid.saldo_kg,
-          saldo_sistema: null,
-          diferenca:     null,
-          status:        'sem_depara',
-        });
-        continue;
-      }
-
-      const sistema = sistemaMap.get(codExcel);
+      const normTid = normalizeCod(tid.cod_tid);
+      const sistema = sistemaMap.get(normTid);
 
       if (!sistema) {
-        codExcelUsados.add(codExcel);
         resultado.push({
           cod_tid:       tid.cod_tid,
-          cod_excel:     codExcel,
+          cod_pg:        null,
           nome:          tid.nome,
           saldo_tid:     tid.saldo_kg,
           saldo_sistema: null,
@@ -166,11 +131,11 @@ export default function ConferenciaEstoque() {
         continue;
       }
 
-      codExcelUsados.add(codExcel);
+      normUsados.add(normTid);
       const diferenca = tid.saldo_kg - sistema.saldo_kg;
       resultado.push({
         cod_tid:       tid.cod_tid,
-        cod_excel:     codExcel,
+        cod_pg:        null,
         nome:          tid.nome,
         saldo_tid:     tid.saldo_kg,
         saldo_sistema: sistema.saldo_kg,
@@ -179,12 +144,12 @@ export default function ConferenciaEstoque() {
       });
     }
 
-    // Itens presentes no estoque_mp mas sem correspondência no TID
-    for (const [codExcel, item] of sistemaMap) {
-      if (!codExcelUsados.has(codExcel)) {
+    // Itens no estoque_mp sem correspondência no TID
+    for (const [normCod, item] of sistemaMap) {
+      if (!normUsados.has(normCod)) {
         resultado.push({
-          cod_tid:       null,
-          cod_excel:     codExcel,
+          cod_tid:       item.cod_tid,
+          cod_pg:        null,
           nome:          item.nome,
           saldo_tid:     null,
           saldo_sistema: item.saldo_kg,
@@ -227,7 +192,7 @@ export default function ConferenciaEstoque() {
       if (!sistema) {
         resultado.push({
           cod_tid:       tid.cod_tid,
-          cod_excel:     null,
+          cod_pg:        null,
           nome:          tid.nome,
           saldo_tid:     tid.saldo_kg,
           saldo_sistema: null,
@@ -241,7 +206,7 @@ export default function ConferenciaEstoque() {
       const diferenca = tid.saldo_kg - sistema.saldo_kg;
       resultado.push({
         cod_tid:       tid.cod_tid,
-        cod_excel:     sistema.cod_pg,
+        cod_pg:        sistema.cod_pg,
         nome:          tid.nome,
         saldo_tid:     tid.saldo_kg,
         saldo_sistema: sistema.saldo_kg,
@@ -255,7 +220,7 @@ export default function ConferenciaEstoque() {
       if (!normUsados.has(normCod)) {
         resultado.push({
           cod_tid:       null,
-          cod_excel:     item.cod_pg,
+          cod_pg:        item.cod_pg,
           nome:          item.nome,
           saldo_tid:     null,
           saldo_sistema: item.saldo_kg,
@@ -272,7 +237,7 @@ export default function ConferenciaEstoque() {
 
   const contadores = useMemo(() => {
     const c: Record<StatusConf, number> = {
-      ok: 0, divergente: 0, sem_depara: 0, sem_sistema: 0, so_sistema: 0,
+      ok: 0, divergente: 0, sem_sistema: 0, so_sistema: 0,
     };
     for (const l of linhas) c[l.status]++;
     return c;
@@ -289,14 +254,14 @@ export default function ConferenciaEstoque() {
         (l) =>
           l.nome.toLowerCase().includes(q) ||
           (l.cod_tid ?? '').toLowerCase().includes(q) ||
-          (l.cod_excel ?? '').toLowerCase().includes(q),
+          (l.cod_pg ?? '').toLowerCase().includes(q),
       );
     }
     return result;
   }, [linhas, filtroStatus, busca]);
 
   const hasResults = linhas.length > 0;
-  const codExcelLabel = marca === 'ZC' ? 'Cód. Excel' : 'Cód. PG';
+  const mostrarCodPg = marca === 'PG';
 
   // ── Eventos ──────────────────────────────────────────────────────────────────
 
@@ -323,13 +288,12 @@ export default function ConferenciaEstoque() {
   const SUMMARY_CARDS: { key: StatusConf; label: string }[] = [
     { key: 'divergente',  label: 'Divergentes'   },
     { key: 'ok',          label: 'OK'            },
-    { key: 'sem_depara',  label: 'Sem de-para'   },
     { key: 'sem_sistema', label: 'Só no TID'     },
     { key: 'so_sistema',  label: 'Só no sistema' },
   ];
 
   const STATUS_ORDER: StatusConf[] = [
-    'divergente', 'ok', 'sem_depara', 'sem_sistema', 'so_sistema',
+    'divergente', 'ok', 'sem_sistema', 'so_sistema',
   ];
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -490,7 +454,7 @@ export default function ConferenciaEstoque() {
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Cód. TID</th>
                 <th className="text-left px-3 py-2 font-medium">Matéria-Prima</th>
-                <th className="text-left px-3 py-2 font-medium">{codExcelLabel}</th>
+                {mostrarCodPg && <th className="text-left px-3 py-2 font-medium">Cód. PG</th>}
                 <th className="text-right px-3 py-2 font-medium">Saldo TID (kg)</th>
                 <th className="text-right px-3 py-2 font-medium">Saldo Sistema (kg)</th>
                 <th className="text-right px-3 py-2 font-medium">Diferença (kg)</th>
@@ -500,7 +464,7 @@ export default function ConferenciaEstoque() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={mostrarCodPg ? 7 : 6} className="px-3 py-10 text-center text-muted-foreground">
                     Nenhum item encontrado com os filtros aplicados.
                   </td>
                 </tr>
@@ -526,10 +490,12 @@ export default function ConferenciaEstoque() {
                         {l.nome || '—'}
                       </td>
 
-                      {/* Cód. Excel / Cód. PG */}
-                      <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">
-                        {l.cod_excel ?? '—'}
-                      </td>
+                      {/* Cód. PG (somente PG) */}
+                      {mostrarCodPg && (
+                        <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">
+                          {l.cod_pg ?? '—'}
+                        </td>
+                      )}
 
                       {/* Saldo TID */}
                       <td className="px-3 py-2 text-right tabular-nums">
@@ -573,7 +539,7 @@ export default function ConferenciaEstoque() {
             {filtered.length > 0 && (
               <tfoot className="bg-muted/30 text-muted-foreground font-medium border-t-2">
                 <tr>
-                  <td colSpan={3} className="px-3 py-2 text-xs">
+                  <td colSpan={mostrarCodPg ? 3 : 2} className="px-3 py-2 text-xs">
                     {filtered.length} item{filtered.length !== 1 ? 's' : ''}
                     {filtroStatus !== 'todos' && ` · filtro: ${STATUS_LABELS[filtroStatus as StatusConf]}`}
                   </td>
