@@ -440,6 +440,9 @@ export default function Index() {
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="overflow-x-hidden">
+          <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
+            <SidebarTrigger />
+          </div>
           <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
@@ -513,6 +516,9 @@ export default function Index() {
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="overflow-x-hidden">
+          <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
+            <SidebarTrigger />
+          </div>
           <main className="p-3 sm:p-6 overflow-x-hidden">
             <ErrorBoundary>
               <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
@@ -729,6 +735,9 @@ export default function Index() {
         </Sidebar>
 
         <SidebarInset className="overflow-x-hidden flex flex-col">
+          <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
+            <SidebarTrigger />
+          </div>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Selecione uma opção no menu
@@ -863,6 +872,9 @@ export default function Index() {
         </Sidebar>
 
         <SidebarInset className="overflow-x-hidden flex flex-col">
+          <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
+            <SidebarTrigger />
+          </div>
           {!activeTab ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Selecione uma opção no menu
@@ -1194,6 +1206,9 @@ export default function Index() {
       </Sidebar>
 
       <SidebarInset className="overflow-x-hidden flex flex-col">
+        <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
+          <SidebarTrigger />
+        </div>
         {activeTab === null ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             Selecione uma opção no menu
@@ -1462,6 +1477,9 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
       </Sidebar>
 
       <SidebarInset>
+        <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
+          <SidebarTrigger />
+        </div>
         <main className="p-3 sm:p-6">
           {children}
         </main>
