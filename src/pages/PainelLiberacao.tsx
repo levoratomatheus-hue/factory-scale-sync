@@ -1054,6 +1054,7 @@ export default function PainelLiberacao() {
                           <div key={ii} className="flex items-center gap-2">
                             <input
                               type="number"
+                              inputMode="numeric"
                               min={0}
                               value={item.qty}
                               onChange={(e) =>
@@ -1134,6 +1135,7 @@ export default function PainelLiberacao() {
                     <div key={idx} className="flex items-center gap-2">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         value={item.qty}
                         onChange={(e) =>

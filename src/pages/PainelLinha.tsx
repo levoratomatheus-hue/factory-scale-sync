@@ -586,7 +586,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             </button>
             {tempOpen && (
               <div className="px-4 pb-4 pt-1 space-y-3 border-t border-blue-200">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                   {(["zona1", "zona2", "zona3", "zona9", "zona10", "zona12"] as const).map((z) => (
                     <div key={z} className="space-y-1">
                       <label className="text-xs font-medium text-blue-700 capitalize">

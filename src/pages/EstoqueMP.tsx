@@ -572,6 +572,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                 <label className="text-xs font-medium">Quantidade (kg)</label>
                 <Input
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="0.001"
                   value={entradaQty}
@@ -629,6 +630,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                 <label className="text-xs font-medium">Novo saldo (kg)</label>
                 <Input
                   type="number"
+                  inputMode="decimal"
                   step="0.001"
                   value={ajusteNovoSaldo}
                   onChange={(e) => setAjusteNovoSaldo(e.target.value)}
@@ -680,6 +682,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                 <label className="text-xs font-medium">Mínimo (kg)</label>
                 <Input
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="0.001"
                   value={minimoValue}

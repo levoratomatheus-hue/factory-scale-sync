@@ -476,9 +476,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         <span>A OP criada vai para <strong>Pré-Programação</strong>. Data e linha são definidas lá, antes de entrar no kanban.</span>
       </div>
 
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
         {/* ── Coluna esquerda: formulário ── */}
-        <div className="flex-1 min-w-0 bg-card rounded-lg border p-4">
+        <div className="flex-1 min-w-0 w-full bg-card rounded-lg border p-4">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
 
@@ -524,18 +524,18 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
             )}
 
             {/* Quantidade + Batelada + Dt. Emissão */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <FormField control={form.control} name="quantidade" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs">Qtd (kg)</FormLabel>
-                  <FormControl><Input className="h-8 text-sm" type="number" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
+                  <FormControl><Input className="h-8 text-sm" type="number" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               {loteEncontrado === true && (
                 <div>
                   <label className="text-xs font-medium">Batelada (kg)</label>
-                  <Input className="h-8 text-sm mt-1" type="number" value={tamanhoBatelada ?? ''}
+                  <Input className="h-8 text-sm mt-1" type="number" inputMode="decimal" value={tamanhoBatelada ?? ''}
                     onWheel={(e) => e.currentTarget.blur()}
                     onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); setItensSdrId(null); }} />
                 </div>
@@ -730,7 +730,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
                             <td className="px-2 py-1 text-muted-foreground w-px">{item.unidade ?? '-'}</td>
                             <td className="px-2 py-1 text-right text-muted-foreground w-px">{item.percentual}%</td>
                             <td className="px-2 py-1 w-px">
-                              <Input type="number" value={item.quantidade_kg} onWheel={(e) => e.currentTarget.blur()}
+                              <Input type="number" inputMode="decimal" value={item.quantidade_kg} onWheel={(e) => e.currentTarget.blur()}
                                 onChange={(e) => setQuantidade(item.id, Number(e.target.value))}
                                 className="h-6 w-20 text-right ml-auto text-xs" />
                             </td>
@@ -800,7 +800,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
         </div>
 
         {/* ── Coluna direita: lotes disponíveis ── */}
-        <div className="w-80 shrink-0 bg-card rounded-lg border overflow-hidden sticky top-4">
+        <div className="w-full lg:w-80 shrink-0 bg-card rounded-lg border overflow-hidden lg:sticky top-4">
           <div className="px-4 py-3 border-b bg-muted/40 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <PackageSearch className="h-4 w-4 text-primary shrink-0" />
@@ -870,7 +870,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       {/* ── Dialog: estoque insuficiente ── */}
       {mpsFaltantes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-lg bg-background border shadow-lg p-6 space-y-4">
+          <div className="w-full max-w-lg mx-3 sm:mx-auto rounded-lg bg-background border shadow-lg p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <h2 className="text-base font-semibold">Estoque insuficiente</h2>
