@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, PackageSearch, Loader2, AlertCircle, ChevronDown } from 'lucide-react';
+import { Search, PackageSearch, Loader2, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, formatKg } from '@/lib/utils';
 import { feriadosDoAno, proximoDiaUtil, diasUteis, somarDiasUteis, subDias } from '@/lib/diasUteis';
 
@@ -283,6 +283,12 @@ export default function PainelComercial() {
   const diasSemana = useMemo(() => diasUteisSemanAtual(), []);
   const hj = format(new Date(), 'yyyy-MM-dd');
 
+  // Mobile: dia ativo na navegação ←/→
+  const [diaAtivoIdx, setDiaAtivoIdx] = useState<number>(() => {
+    const idx = diasUteisSemanAtual().indexOf(format(new Date(), 'yyyy-MM-dd'));
+    return idx >= 0 ? idx : 0;
+  });
+
   const toggleCard = (id: string) => {
     setOpenIds((prev) => {
       const next = new Set(prev);
@@ -500,19 +506,77 @@ export default function PainelComercial() {
 
         {/* ── Modo semanal ── */}
         {!loading && !modoTexto && (
-          /*
-           * Um único overflow-y-auto — sem overflow-x aninhado.
-           * Colunas usam flex-1 para dividir a largura disponível igualmente,
-           * todos os dias cabem na tela sem scroll horizontal.
-           * Cabeçalhos são sticky top-0 (funciona porque não há overflow-x
-           * em nenhum ancestral).
-           */
-          <div className="flex-1 min-h-0 overflow-auto">
-            {/* min-w garante que as 5 colunas caibem com tamanho legível;
-                em telas largas o flex-1 distribui o espaço disponível */}
-            <div className="min-w-[520px]">
+          <>
+            {/* ══ MOBILE: um dia por vez com nav ←/→ (hidden em md+) ══ */}
+            <div className="flex flex-col flex-1 min-h-0 md:hidden">
+              {/* Navegação de dia */}
+              <div className="shrink-0 flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => setDiaAtivoIdx((i) => Math.max(0, i - 1))}
+                  disabled={diaAtivoIdx === 0}
+                  className="p-2 rounded-lg border bg-card disabled:opacity-30 active:bg-muted"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className={cn(
+                  'flex-1 text-center px-3 py-2 rounded-xl border',
+                  diasSemana[diaAtivoIdx] === hj
+                    ? 'border-primary/60 bg-primary/5'
+                    : 'border-border bg-card'
+                )}>
+                  <p className={cn('font-semibold text-sm', diasSemana[diaAtivoIdx] === hj && 'text-primary')}>
+                    {capitalize(format(new Date(diasSemana[diaAtivoIdx] + 'T12:00:00'), 'EEEE', { locale: ptBR }))}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(diasSemana[diaAtivoIdx] + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDiaAtivoIdx((i) => Math.min(diasSemana.length - 1, i + 1))}
+                  disabled={diaAtivoIdx === diasSemana.length - 1}
+                  className="p-2 rounded-lg border bg-card disabled:opacity-30 active:bg-muted"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
 
-              {/* Cabeçalhos dos dias — sticky no topo do scroll */}
+              {/* Indicador de posição */}
+              <div className="shrink-0 flex justify-center gap-1 mb-2">
+                {diasSemana.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setDiaAtivoIdx(i)}
+                    className={cn(
+                      'h-1.5 rounded-full transition-all',
+                      i === diaAtivoIdx ? 'w-4 bg-primary' : 'w-1.5 bg-muted-foreground/30'
+                    )}
+                  />
+                ))}
+              </div>
+
+              {/* Cards do dia ativo */}
+              <div className="flex-1 overflow-y-auto space-y-2 pb-4">
+                {(ordPorDia.get(diasSemana[diaAtivoIdx]) ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic text-center py-8">
+                    Nenhum produto previsto para este dia
+                  </p>
+                ) : (
+                  (ordPorDia.get(diasSemana[diaAtivoIdx]) ?? []).map((op) => (
+                    <CardBusca
+                      key={op.id}
+                      op={op}
+                      isOpen={openIds.has(op.id)}
+                      onToggle={() => toggleCard(op.id)}
+                      hj={hj}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* ══ DESKTOP: 5 colunas lado a lado (hidden abaixo de md) ══ */}
+            <div className="hidden md:flex md:flex-1 md:min-h-0 md:overflow-y-auto md:flex-col">
+              {/* Cabeçalhos sticky */}
               <div className="sticky top-0 z-10 bg-background flex gap-2 pb-0.5">
                 {diasSemana.map((dia) => {
                   const isHoje = dia === hj;
@@ -538,8 +602,7 @@ export default function PainelComercial() {
                   );
                 })}
               </div>
-
-              {/* Cards — dividem a largura igualmente */}
+              {/* Cards */}
               <div className="flex gap-2 pb-4">
                 {diasSemana.map((dia) => {
                   const ops = ordPorDia.get(dia) ?? [];
@@ -573,9 +636,8 @@ export default function PainelComercial() {
                   );
                 })}
               </div>
-
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
