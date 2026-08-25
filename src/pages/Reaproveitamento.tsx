@@ -90,7 +90,7 @@ type ReaprovItem = {
   reaproveitamento_id: string;
   sequencia: number;
   materia_prima: string;
-  cod_mp_excel: string | null;
+  cod_tid: string | null;
   percentual: number;
   eh_reaproveitado: boolean;
 };
@@ -100,11 +100,11 @@ type ReaprovFull = Reaprov & { itens: ReaprovItem[] };
 type ItemForm = {
   _key: string;
   materia_prima: string;
-  cod_mp_excel: string | null;
+  cod_tid: string | null;
   percentual: string;
 };
 
-type MpSug = { cod_excel: string; cod_tid: string | null; descricao: string };
+type MpSug = { cod_tid: string; materia_prima: string };
 type ProdutoSug = { formula_id: string; produto: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ let _keyCounter = 0;
 function newKey() { return String(++_keyCounter); }
 
 function newItem(): ItemForm {
-  return { _key: newKey(), materia_prima: "", cod_mp_excel: null, percentual: "" };
+  return { _key: newKey(), materia_prima: "", cod_tid: null, percentual: "" };
 }
 
 // ── SummaryCard ───────────────────────────────────────────────────────────────
@@ -258,10 +258,10 @@ function ProdutoInput({
 // ── MpInput ───────────────────────────────────────────────────────────────────
 
 function MpInput({
-  materia_prima, cod_mp_excel, onChange, disabled,
+  materia_prima, cod_tid, onChange, disabled,
 }: {
   materia_prima: string;
-  cod_mp_excel: string | null;
+  cod_tid: string | null;
   onChange: (mp: string, cod: string | null) => void;
   disabled?: boolean;
 }) {
@@ -285,18 +285,18 @@ function MpInput({
     if (v.trim().length < 2) { setSugestoes([]); setShow(false); return; }
     debRef.current = setTimeout(async () => {
       const { data } = await (supabase as any)
-        .from("mp_depara")
-        .select("cod_excel, cod_tid, descricao")
-        .or(`descricao.ilike.%${v.trim()}%,cod_excel.ilike.%${v.trim()}%`)
-        .order("descricao")
+        .from("estoque_mp")
+        .select("cod_tid, materia_prima")
+        .or(`materia_prima.ilike.%${v.trim()}%,cod_tid.ilike.%${v.trim()}%`)
+        .order("materia_prima")
         .limit(15);
-      setSugestoes(data ?? []);
+      setSugestoes((data ?? []) as MpSug[]);
       setShow((data ?? []).length > 0);
     }, 250);
   }
 
   function select(s: MpSug) {
-    onChange(s.descricao, s.cod_excel);
+    onChange(s.materia_prima, s.cod_tid);
     setSugestoes([]);
     setShow(false);
   }
@@ -308,7 +308,7 @@ function MpInput({
         value={materia_prima}
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => { if (sugestoes.length > 0) setShow(true); }}
-        placeholder="Nome ou código (texto livre aceito)"
+        placeholder="Nome ou código TID (texto livre aceito)"
         disabled={disabled}
         style={inputStyle(D, { fontSize: 12 })}
       />
@@ -320,7 +320,7 @@ function MpInput({
         }}>
           {sugestoes.map((s) => (
             <button
-              key={s.cod_excel}
+              key={s.cod_tid}
               type="button"
               onMouseDown={() => select(s)}
               style={{
@@ -332,10 +332,8 @@ function MpInput({
               onMouseEnter={(e) => (e.currentTarget.style.background = D.cardAlt)}
               onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
             >
-              <span style={{ fontWeight: 500 }}>{s.descricao}</span>
-              <span style={{ fontSize: 10, color: D.muted, marginLeft: 6 }}>
-                {s.cod_excel}{s.cod_tid ? ` · ${s.cod_tid}` : ""}
-              </span>
+              <span style={{ fontWeight: 500 }}>{s.materia_prima}</span>
+              <span style={{ fontSize: 10, color: D.muted, marginLeft: 6 }}>{s.cod_tid}</span>
             </button>
           ))}
         </div>
@@ -452,7 +450,7 @@ const DetalheModal = memo(function DetalheModal({
                 return (
                   <tr key={item.id} style={{ background: i % 2 === 0 ? "transparent" : D.cardAlt }}>
                     <td style={{ padding: "0.45rem 0.75rem", color: D.text }}>{item.materia_prima}</td>
-                    <td style={{ padding: "0.45rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{item.cod_mp_excel ?? "—"}</td>
+                    <td style={{ padding: "0.45rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{item.cod_tid ?? "—"}</td>
                     <td style={{ padding: "0.45rem 0.75rem", textAlign: "right", color: D.text, fontFamily: "monospace" }}>{item.percentual.toFixed(2)}%</td>
                     <td style={{ padding: "0.45rem 0.75rem", textAlign: "right", color: D.text, fontFamily: "monospace", fontWeight: 600 }}>
                       {kgItem !== null ? formatKg(kgItem) : "—"}
@@ -739,7 +737,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       sdr.itens.sort((a, b) => a.sequencia - b.sequencia).map((i) => ({
         _key: newKey(),
         materia_prima: i.materia_prima,
-        cod_mp_excel: i.cod_mp_excel,
+        cod_tid: i.cod_tid,
         percentual: String(i.percentual),
       }))
     );
@@ -795,7 +793,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       reaproveitamento_id: reaprovId,
       sequencia: idx + 1,
       materia_prima: it.materia_prima.trim(),
-      cod_mp_excel: it.cod_mp_excel ?? null,
+      cod_tid: it.cod_tid ?? null,
       percentual: parseFloat(it.percentual),
     }));
 
@@ -1045,8 +1043,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                               ) : (
                                 <MpInput
                                   materia_prima={item.materia_prima}
-                                  cod_mp_excel={item.cod_mp_excel}
-                                  onChange={(mp, cod) => updateItem(item._key, { materia_prima: mp, cod_mp_excel: cod })}
+                                  cod_tid={item.cod_tid}
+                                  onChange={(mp, cod) => updateItem(item._key, { materia_prima: mp, cod_tid: cod })}
                                 />
                               )}
                             </td>
