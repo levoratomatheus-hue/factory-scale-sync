@@ -5,13 +5,18 @@ import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
 import { formatKg } from '@/lib/utils';
 import {
   Loader2, Search, PackageOpen, ArrowDownToLine, SlidersHorizontal,
-  History, FileUp, Download, AlertTriangle, RefreshCw, Pencil,
+  History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useComprasConsumo } from '@/hooks/useCompras';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -131,6 +136,106 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importando, setImportando] = useState(false);
+
+  // Atualizar Mínimo
+  const [atualizarMinimoOpen, setAtualizarMinimoOpen] = useState(false);
+  const [atualizandoMinimo, setAtualizandoMinimo] = useState(false);
+
+  // Janela móvel: max(01/05/2026, hoje-12 meses)
+  const { dataInicio: minimoDataInicio, dataFim: minimoDataFim } = useMemo(() => {
+    const hoje = new Date();
+    const dozeMesesAtras = new Date(hoje);
+    dozeMesesAtras.setMonth(hoje.getMonth() - 12);
+    const piso = new Date('2026-05-01T00:00:00');
+    const inicio = dozeMesesAtras > piso ? dozeMesesAtras : piso;
+    return {
+      dataInicio: inicio.toISOString().split('T')[0],
+      dataFim: hoje.toISOString().split('T')[0],
+    };
+  }, []);
+
+  const { resultado: minimoResultado, refetch: minimoRefetch } = useComprasConsumo(
+    minimoDataInicio,
+    minimoDataFim,
+  );
+
+  const handleAtualizarMinimo = async () => {
+    setAtualizandoMinimo(true);
+    try {
+      await minimoRefetch();
+      // minimoResultado ainda é o estado anterior; re-lemos via refetch que atualiza o estado
+      // Usamos o resultado retornado de forma assíncrona pelo re-render; precisamos buscar
+      // diretamente para ter o valor atualizado no mesmo handler.
+      // Refetch retorna void, por isso reconstruímos o cálculo com o resultado do hook
+      // após o await — o estado react ainda não atualizou; invocamos o fetch manualmente.
+      const hoje = new Date();
+      const dozeMesesAtras = new Date(hoje);
+      dozeMesesAtras.setMonth(hoje.getMonth() - 12);
+      const piso = new Date('2026-05-01T00:00:00');
+      const inicio = dozeMesesAtras > piso ? dozeMesesAtras : piso;
+      const dataInicio = inicio.toISOString().split('T')[0];
+      const dataFim = hoje.toISOString().split('T')[0];
+
+      // Importamos o cálculo diretamente para ter os dados frescos
+      const { fetchAllFormulas } = await import('@/lib/formulasCache');
+      function diaSeguinte(d: string) {
+        const dt = new Date(d + 'T00:00:00'); dt.setDate(dt.getDate() + 1);
+        return dt.toISOString().split('T')[0];
+      }
+      const { data: ordensData } = await (supabase as any)
+        .from('ordens')
+        .select('id, lote, produto, quantidade, formula_id, marca, linha, criado_em')
+        .gte('criado_em', dataInicio)
+        .lt('criado_em', diaSeguinte(dataFim))
+        .limit(2000);
+
+      if (!ordensData) { toast({ title: 'Erro ao buscar OPs', variant: 'destructive' }); return; }
+
+      const fRows = await fetchAllFormulas();
+      const fIndex = new Map<string, Array<{ cod_mp: string | null; fracao: number }>>();
+      for (const r of fRows) {
+        const key = String(r.formula_id);
+        if (!fIndex.has(key)) fIndex.set(key, []);
+        fIndex.get(key)!.push({ cod_mp: r.cod_mp ?? null, fracao: (r.percentual ?? 0) / 100 });
+      }
+
+      // Acumula total_kg por cod_mp
+      const totalPorCod = new Map<string, number>();
+      const opsPorMes: Record<string, number> = {};
+      for (const op of ordensData as any[]) {
+        const mes = (op.criado_em ?? '').slice(0, 7);
+        if (mes.length === 7) opsPorMes[mes] = (opsPorMes[mes] ?? 0) + 1;
+        if (!op.formula_id) continue;
+        const items = fIndex.get(String(op.formula_id));
+        if (!items) continue;
+        for (const it of items) {
+          if (!it.cod_mp) continue;
+          totalPorCod.set(it.cod_mp, (totalPorCod.get(it.cod_mp) ?? 0) + it.fracao * (op.quantidade ?? 0));
+        }
+      }
+      const numMeses = Object.keys(opsPorMes).length || 1;
+
+      // Para cada MP do estoque, calcula o mínimo
+      const updates = estoque.map((item) => {
+        const total = totalPorCod.get(item.cod_tid) ?? 0;
+        const media = total / numMeses;
+        return { cod_tid: item.cod_tid, minimo_kg: parseFloat((media * 1.5).toFixed(3)) };
+      });
+
+      // Aplica em lote
+      await Promise.all(
+        updates.map(({ cod_tid, minimo_kg }) =>
+          (supabase as any).from('estoque_mp').update({ minimo_kg }).eq('cod_tid', cod_tid),
+        ),
+      );
+
+      toast({ title: `${updates.length} mínimos atualizados` });
+      fetchEstoque();
+    } finally {
+      setAtualizandoMinimo(false);
+      setAtualizarMinimoOpen(false);
+    }
+  };
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
@@ -420,8 +525,39 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Exportar
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAtualizarMinimoOpen(true)}
+            disabled={atualizandoMinimo || estoque.length === 0}
+          >
+            {atualizandoMinimo
+              ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : <TrendingUp className="h-3.5 w-3.5 mr-1.5" />}
+            Atualizar Mínimo
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={atualizarMinimoOpen} onOpenChange={setAtualizarMinimoOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Atualizar estoque mínimo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso vai recalcular o estoque mínimo de todas as matérias-primas com base no
+              consumo médio mensal (× 1,5) desde 01/05/2026. Matérias-primas sem consumo no
+              período terão o mínimo zerado. Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={atualizandoMinimo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAtualizarMinimo} disabled={atualizandoMinimo}>
+              {atualizandoMinimo && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Resumo ── */}
       <div className="grid grid-cols-3 gap-3">
