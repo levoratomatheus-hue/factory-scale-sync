@@ -269,12 +269,14 @@ export default function Index() {
     return () => clearTimeout(t);
   }, []);
 
-  // Pré-aquece o cache de fórmulas em background para usuários que usam
-  // ComprasConsumo / ComprasMediaMensal (evita espera longa na primeira abertura)
+  // Pré-aquece caches em background para evitar espera na primeira abertura das telas
   useEffect(() => {
     if (!perfil) return;
     if (perfil.papel === 'compras' || perfil.papel === 'gestor') {
       import('@/lib/formulasCache').then(({ fetchAllFormulas }) => fetchAllFormulas());
+    }
+    if (perfil.papel === 'gestor') {
+      import('@/lib/deparaCache').then(({ fetchAllDepara }) => fetchAllDepara());
     }
   }, [perfil?.papel]);
 
