@@ -440,6 +440,38 @@ export default function ConsumoMP({ perfilNome }: Props) {
       ]);
     }
 
+    // ── Entrada automática de borra (apenas produção) ──────────────────────────
+    if (setor === 'producao') {
+      const COD_BORRA = '7519';
+      const { data: borraRow } = await (supabase as any)
+        .from('estoque_mp')
+        .select('saldo_kg, materia_prima')
+        .eq('cod_tid', COD_BORRA)
+        .maybeSingle();
+
+      if (borraRow) {
+        const novoSaldoBorra = (borraRow.saldo_kg ?? 0) + qtd;
+        await Promise.all([
+          (supabase as any)
+            .from('estoque_mp')
+            .update({ saldo_kg: novoSaldoBorra, atualizado_em: agora })
+            .eq('cod_tid', COD_BORRA),
+          (supabase as any)
+            .from('estoque_movimentacoes')
+            .insert({
+              cod_tid: COD_BORRA,
+              materia_prima: borraRow.materia_prima ?? 'BORRA PRODUÇÃO',
+              tipo: 'entrada',
+              quantidade_kg: qtd,
+              saldo_apos: novoSaldoBorra,
+              observacao: `Borra gerada — retirada de produção (${mpSelecionada.materia_prima})`,
+              criado_por: perfilNome,
+              criado_em: agora,
+            }),
+        ]);
+      }
+    }
+
     setSalvando(false);
     toast({ title: 'Retirada registrada com sucesso!' });
     setBusca('');
@@ -465,7 +497,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     // Buscar dados da retirada antes de excluir para poder estornar o estoque
     const { data: consumoRow, error: fetchErr } = await (supabase as any)
       .from('consumo_mp')
-      .select('cod_tid, materia_prima, quantidade_kg')
+      .select('cod_tid, materia_prima, quantidade_kg, setor')
       .eq('id', id)
       .maybeSingle();
 
@@ -503,6 +535,38 @@ export default function ConsumoMP({ perfilNome }: Props) {
               criado_em: agora,
             }),
         ]);
+      }
+
+      // ── Estorno de borra (apenas se era retirada de produção) ───────────────
+      if (consumoRow.setor === 'producao') {
+        const COD_BORRA = '7519';
+        const { data: borraRow } = await (supabase as any)
+          .from('estoque_mp')
+          .select('saldo_kg, materia_prima')
+          .eq('cod_tid', COD_BORRA)
+          .maybeSingle();
+
+        if (borraRow) {
+          const novoSaldoBorra = (borraRow.saldo_kg ?? 0) - consumoRow.quantidade_kg;
+          await Promise.all([
+            (supabase as any)
+              .from('estoque_mp')
+              .update({ saldo_kg: novoSaldoBorra, atualizado_em: agora })
+              .eq('cod_tid', COD_BORRA),
+            (supabase as any)
+              .from('estoque_movimentacoes')
+              .insert({
+                cod_tid: COD_BORRA,
+                materia_prima: borraRow.materia_prima ?? 'BORRA PRODUÇÃO',
+                tipo: 'estorno',
+                quantidade_kg: -consumoRow.quantidade_kg,
+                saldo_apos: novoSaldoBorra,
+                observacao: 'Estorno de borra — retirada de produção excluída',
+                criado_por: perfilNome,
+                criado_em: agora,
+              }),
+          ]);
+        }
       }
     }
 
