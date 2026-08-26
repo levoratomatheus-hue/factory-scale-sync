@@ -202,11 +202,10 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
         return { cod_pg: item.cod_pg, minimo_kg: parseFloat((media * 1.5).toFixed(3)) };
       });
 
-      await Promise.all(
-        updates.map(({ cod_pg, minimo_kg }) =>
-          (supabase as any).from('estoque_mp_pg').update({ minimo_kg }).eq('cod_pg', cod_pg),
-        ),
-      );
+      // Aplica em lote — 1 upsert no lugar de N updates
+      await (supabase as any)
+        .from('estoque_mp_pg')
+        .upsert(updates, { onConflict: 'cod_pg' });
 
       toast({ title: `${updates.length} mínimos atualizados` });
       fetchEstoque();

@@ -222,12 +222,10 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
         return { cod_tid: item.cod_tid, minimo_kg: parseFloat((media * 1.5).toFixed(3)) };
       });
 
-      // Aplica em lote
-      await Promise.all(
-        updates.map(({ cod_tid, minimo_kg }) =>
-          (supabase as any).from('estoque_mp').update({ minimo_kg }).eq('cod_tid', cod_tid),
-        ),
-      );
+      // Aplica em lote — 1 upsert no lugar de N updates
+      await (supabase as any)
+        .from('estoque_mp')
+        .upsert(updates, { onConflict: 'cod_tid' });
 
       toast({ title: `${updates.length} mínimos atualizados` });
       fetchEstoque();
