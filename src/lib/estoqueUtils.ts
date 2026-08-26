@@ -1,8 +1,24 @@
 import { supabase } from '@/integrations/supabase/client';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
+//
+// CÓDIGO TID + DUAS MARCAS (ZC e PG):
+// A baixa por OP funciona por EXISTÊNCIA do código:
+//   - estoque_mp     (ZC): coluna cod_tid
+//   - estoque_mp_pg  (PG): coluna cod_pg
+// Cada MP baixa da tabela onde o código existir. Os códigos NÃO colidem entre
+// as duas tabelas, então a busca é inequívoca.
+//
+// formulas.cod_mp já é o código TID/PG da MP.
 
-/** Busca itens da fórmula pelo formula_id. */
+interface EstoqueRef {
+  tabela: 'estoque_mp' | 'estoque_mp_pg';
+  coluna: 'cod_tid' | 'cod_pg';
+  saldo: number;
+  materia_prima: string;
+}
+
+/** Busca os itens da fórmula (cod_mp já é o código da MP). */
 async function fetchFormulaItens(formulaId: string): Promise<
   { cod_mp: string; materia_prima: string; percentual: number }[]
 > {
@@ -10,30 +26,47 @@ async function fetchFormulaItens(formulaId: string): Promise<
     .from('formulas')
     .select('cod_mp, materia_prima, percentual')
     .eq('formula_id', formulaId);
+
   return (data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
 }
 
-/** Busca saldos atuais de uma lista de cod_tid em UMA query. */
-async function fetchSaldos(codsTid: string[]): Promise<Map<string, number>> {
-  if (codsTid.length === 0) return new Map();
-  const { data } = await (supabase as any)
-    .from('estoque_mp')
-    .select('cod_tid, saldo_kg')
-    .in('cod_tid', codsTid);
-  const map = new Map<string, number>();
-  for (const e of (data ?? []) as any[]) map.set(e.cod_tid, e.saldo_kg ?? 0);
-  return map;
+/**
+ * Para uma lista de códigos, descobre em qual tabela cada um existe (ZC ou PG)
+ * e devolve um mapa cod -> { tabela, coluna, saldo, materia_prima }.
+ * Faz 2 queries (uma em cada tabela). Códigos não colidem entre as tabelas.
+ */
+async function localizarEstoque(cods: string[]): Promise<Map<string, EstoqueRef>> {
+  const mapa = new Map<string, EstoqueRef>();
+  if (cods.length === 0) return mapa;
+
+  const [zc, pg] = await Promise.all([
+    (supabase as any).from('estoque_mp').select('cod_tid, saldo_kg, materia_prima').in('cod_tid', cods),
+    (supabase as any).from('estoque_mp_pg').select('cod_pg, saldo_kg, materia_prima').in('cod_pg', cods),
+  ]);
+
+  for (const r of (zc.data ?? []) as any[]) {
+    mapa.set(String(r.cod_tid), {
+      tabela: 'estoque_mp', coluna: 'cod_tid',
+      saldo: r.saldo_kg ?? 0, materia_prima: r.materia_prima ?? '',
+    });
+  }
+  for (const r of (pg.data ?? []) as any[]) {
+    const cod = String(r.cod_pg);
+    if (!mapa.has(cod)) { // ZC tem prioridade só por segurança; não colidem
+      mapa.set(cod, {
+        tabela: 'estoque_mp_pg', coluna: 'cod_pg',
+        saldo: r.saldo_kg ?? 0, materia_prima: r.materia_prima ?? '',
+      });
+    }
+  }
+  return mapa;
 }
 
 // ── Baixar estoque ────────────────────────────────────────────────────────────
 
 /**
  * Baixa o consumo teórico de cada MP da fórmula quando uma OP é criada.
- *
- * 3 round trips fixos, independente do tamanho da fórmula:
- *   1. formulas
- *   2. estoque_mp WHERE IN (todos os cod_tid de uma vez)
- *   3. upsert estoque_mp + insert movimentacoes em paralelo
+ * Cada MP baixa da tabela onde seu código existe (ZC ou PG).
  */
 export async function baixarEstoqueOP(
   ordemId: string,
@@ -45,29 +78,33 @@ export async function baixarEstoqueOP(
   const formulaItens = await fetchFormulaItens(formulaId);
   if (formulaItens.length === 0) return;
 
-  // Calcular MPs e quantidades — cod_mp da fórmula já é o cod_tid
-  type MPBaixa = { codTid: string; materia_prima: string; qty: number };
+  type MPBaixa = { cod: string; materia_prima: string; qty: number };
   const mps: MPBaixa[] = [];
   for (const item of formulaItens) {
-    if (!item.cod_mp) continue;
+    const cod = item.cod_mp;
+    if (!cod) continue;
     const qty = (item.percentual / 100) * quantidade;
     if (qty <= 0) continue;
-    mps.push({ codTid: item.cod_mp, materia_prima: item.materia_prima, qty });
+    mps.push({ cod, materia_prima: item.materia_prima, qty });
   }
   if (mps.length === 0) return;
 
-  // Buscar todos os saldos em uma query
-  const saldoMap = await fetchSaldos(mps.map((m) => m.codTid));
-
+  const refMap = await localizarEstoque(mps.map((m) => m.cod));
   const agora = new Date().toISOString();
-  const upsertRows: any[] = [];
+
+  // Agrupa updates por tabela
+  const updatesZC: any[] = [];
+  const updatesPG: any[] = [];
   const movimentacoes: any[] = [];
 
-  for (const { codTid, materia_prima, qty } of mps) {
-    const novoSaldo = (saldoMap.get(codTid) ?? 0) - qty;
-    upsertRows.push({ cod_tid: codTid, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
+  for (const { cod, materia_prima, qty } of mps) {
+    const ref = refMap.get(cod);
+    if (!ref) continue; // MP sem cadastro em nenhuma tabela -> ignora
+    const novoSaldo = ref.saldo - qty;
+    const row = { [ref.coluna]: cod, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora };
+    if (ref.tabela === 'estoque_mp') updatesZC.push(row); else updatesPG.push(row);
     movimentacoes.push({
-      cod_tid: codTid, materia_prima, tipo: 'saida',
+      cod_tid: cod, materia_prima, tipo: 'saida',
       quantidade_kg: -qty, saldo_apos: novoSaldo,
       ordem_id: ordemId, ordem_lote: lote,
       observacao: `Baixa automática — OP Lote ${lote}`,
@@ -75,19 +112,15 @@ export async function baixarEstoqueOP(
     });
   }
 
-  // Upsert + insert em paralelo
-  await Promise.all([
-    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_tid' }),
-    (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
-  ]);
+  const ops: Promise<any>[] = [];
+  if (updatesZC.length) ops.push((supabase as any).from('estoque_mp').upsert(updatesZC, { onConflict: 'cod_tid' }));
+  if (updatesPG.length) ops.push((supabase as any).from('estoque_mp_pg').upsert(updatesPG, { onConflict: 'cod_pg' }));
+  if (movimentacoes.length) ops.push((supabase as any).from('estoque_movimentacoes').insert(movimentacoes));
+  await Promise.all(ops);
 }
 
 // ── Ajustar estoque ───────────────────────────────────────────────────────────
 
-/**
- * Ajusta o estoque quando a quantidade de uma OP muda (mesma fórmula).
- * Aplica apenas a diferença (qtdNova − qtdAntiga), sem duplicar a baixa original.
- */
 export async function ajustarEstoqueOP(
   ordemId: string,
   formulaId: string,
@@ -102,28 +135,33 @@ export async function ajustarEstoqueOP(
   const formulaItens = await fetchFormulaItens(formulaId);
   if (formulaItens.length === 0) return;
 
-  type MPAjuste = { codTid: string; materia_prima: string; deltaKg: number };
+  type MPAjuste = { cod: string; materia_prima: string; deltaKg: number };
   const mps: MPAjuste[] = [];
   for (const item of formulaItens) {
-    if (!item.cod_mp) continue;
+    const cod = item.cod_mp;
+    if (!cod) continue;
     const deltaKg = (item.percentual / 100) * diferenca;
     if (deltaKg === 0) continue;
-    mps.push({ codTid: item.cod_mp, materia_prima: item.materia_prima, deltaKg });
+    mps.push({ cod, materia_prima: item.materia_prima, deltaKg });
   }
   if (mps.length === 0) return;
 
-  const saldoMap = await fetchSaldos(mps.map((m) => m.codTid));
-
+  const refMap = await localizarEstoque(mps.map((m) => m.cod));
   const agora = new Date().toISOString();
-  const upsertRows: any[] = [];
+
+  const updatesZC: any[] = [];
+  const updatesPG: any[] = [];
   const movimentacoes: any[] = [];
 
-  for (const { codTid, materia_prima, deltaKg } of mps) {
-    const novoSaldo = (saldoMap.get(codTid) ?? 0) - deltaKg;
+  for (const { cod, materia_prima, deltaKg } of mps) {
+    const ref = refMap.get(cod);
+    if (!ref) continue;
+    const novoSaldo = ref.saldo - deltaKg;
     const tipo = deltaKg > 0 ? 'saida' : 'estorno';
-    upsertRows.push({ cod_tid: codTid, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
+    const row = { [ref.coluna]: cod, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora };
+    if (ref.tabela === 'estoque_mp') updatesZC.push(row); else updatesPG.push(row);
     movimentacoes.push({
-      cod_tid: codTid, materia_prima, tipo,
+      cod_tid: cod, materia_prima, tipo,
       quantidade_kg: -deltaKg, saldo_apos: novoSaldo,
       ordem_id: ordemId, ordem_lote: lote,
       observacao: `Ajuste de quantidade — Lote ${lote} (${qtdAntiga} → ${qtdNova} kg)`,
@@ -131,20 +169,15 @@ export async function ajustarEstoqueOP(
     });
   }
 
-  await Promise.all([
-    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_tid' }),
-    (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
-  ]);
+  const ops: Promise<any>[] = [];
+  if (updatesZC.length) ops.push((supabase as any).from('estoque_mp').upsert(updatesZC, { onConflict: 'cod_tid' }));
+  if (updatesPG.length) ops.push((supabase as any).from('estoque_mp_pg').upsert(updatesPG, { onConflict: 'cod_pg' }));
+  if (movimentacoes.length) ops.push((supabase as any).from('estoque_movimentacoes').insert(movimentacoes));
+  await Promise.all(ops);
 }
 
 // ── Estornar estoque ──────────────────────────────────────────────────────────
 
-/**
- * Estorna o efeito líquido de uma OP no estoque quando ela é excluída.
- *
- * Considera TODOS os movimentos da OP (saida + estorno de ajustes anteriores),
- * calcula o efeito líquido por MP e reverte exatamente esse valor.
- */
 export async function estornarEstoqueOP(
   ordemId: string,
   criadoPor?: string,
@@ -157,34 +190,33 @@ export async function estornarEstoqueOP(
 
   if (!movimentos || movimentos.length === 0) return;
 
-  // Efeito líquido por cod_tid
+  // Efeito líquido por código
   const netByCod = new Map<string, { rep: any; net: number }>();
   for (const mov of movimentos as any[]) {
-    const key = mov.cod_tid;
-    if (!netByCod.has(key)) netByCod.set(key, { rep: mov, net: 0 });
-    netByCod.get(key)!.net += Number(mov.quantidade_kg);
+    if (!netByCod.has(mov.cod_tid)) netByCod.set(mov.cod_tid, { rep: mov, net: 0 });
+    netByCod.get(mov.cod_tid)!.net += Number(mov.quantidade_kg);
   }
 
   const entries = [...netByCod.entries()].filter(([, { net }]) => net !== 0);
   if (entries.length === 0) return;
 
-  const codsTid = entries.map(([cod]) => cod);
-  const saldoMap = await fetchSaldos(codsTid);
-
+  const refMap = await localizarEstoque(entries.map(([cod]) => cod));
   const agora = new Date().toISOString();
-  const upsertRows: any[] = [];
+
+  const updatesZC: any[] = [];
+  const updatesPG: any[] = [];
   const movimentacoes: any[] = [];
 
-  for (const [codTid, { rep, net }] of entries) {
-    const saldoAtual = saldoMap.get(codTid);
-    if (saldoAtual === undefined) continue; // MP sem registro — nada a estornar
+  for (const [cod, { rep, net }] of entries) {
+    const ref = refMap.get(cod);
+    if (!ref) continue; // MP sem registro -> nada a estornar
 
     const qtyRestaurar = -net;
-    const novoSaldo = saldoAtual + qtyRestaurar;
-
-    upsertRows.push({ cod_tid: codTid, materia_prima: rep.materia_prima, saldo_kg: novoSaldo, atualizado_em: agora });
+    const novoSaldo = ref.saldo + qtyRestaurar;
+    const row = { [ref.coluna]: cod, materia_prima: rep.materia_prima, saldo_kg: novoSaldo, atualizado_em: agora };
+    if (ref.tabela === 'estoque_mp') updatesZC.push(row); else updatesPG.push(row);
     movimentacoes.push({
-      cod_tid: codTid, materia_prima: rep.materia_prima, tipo: 'estorno',
+      cod_tid: cod, materia_prima: rep.materia_prima, tipo: 'estorno',
       quantidade_kg: qtyRestaurar, saldo_apos: novoSaldo,
       ordem_id: ordemId, ordem_lote: rep.ordem_lote,
       observacao: `Estorno — OP excluída (Lote ${rep.ordem_lote ?? ''})`,
@@ -192,13 +224,14 @@ export async function estornarEstoqueOP(
     });
   }
 
-  await Promise.all([
-    (supabase as any).from('estoque_mp').upsert(upsertRows, { onConflict: 'cod_tid' }),
-    (supabase as any).from('estoque_movimentacoes').insert(movimentacoes),
-  ]);
+  const ops: Promise<any>[] = [];
+  if (updatesZC.length) ops.push((supabase as any).from('estoque_mp').upsert(updatesZC, { onConflict: 'cod_tid' }));
+  if (updatesPG.length) ops.push((supabase as any).from('estoque_mp_pg').upsert(updatesPG, { onConflict: 'cod_pg' }));
+  if (movimentacoes.length) ops.push((supabase as any).from('estoque_movimentacoes').insert(movimentacoes));
+  await Promise.all(ops);
 }
 
-// ── Verificação de saldo antes de criar OP ────────────────────────────────────
+// ── Verificar estoque ANTES de criar a OP (não baixa nada) ──────────────────
 
 export interface MpFaltante {
   cod_tid: string;
@@ -209,9 +242,9 @@ export interface MpFaltante {
 }
 
 /**
- * Verifica se a baixa da OP deixaria alguma MP com saldo negativo.
- * MPs sem cadastro no estoque são ignoradas (não bloqueiam).
- * Retorna array vazio se não houver problemas.
+ * Verifica se criar uma OP deixaria alguma MP com saldo negativo.
+ * Procura cada MP na tabela onde seu código existe (ZC ou PG).
+ * MP sem cadastro em nenhuma tabela é ignorada (não bloqueia).
  */
 export async function verificarEstoqueOP(
   formulaId: string,
@@ -220,26 +253,26 @@ export async function verificarEstoqueOP(
   const formulaItens = await fetchFormulaItens(formulaId);
   if (formulaItens.length === 0) return [];
 
-  type MP = { codTid: string; materia_prima: string; consumo: number };
+  type MP = { cod: string; materia_prima: string; consumo: number };
   const mps: MP[] = [];
   for (const item of formulaItens) {
-    const codTid = item.cod_mp;
-    if (!codTid) continue;
+    const cod = item.cod_mp;
+    if (!cod) continue;
     const consumo = (item.percentual / 100) * quantidade;
     if (consumo <= 0) continue;
-    mps.push({ codTid, materia_prima: item.materia_prima, consumo });
+    mps.push({ cod, materia_prima: item.materia_prima, consumo });
   }
   if (mps.length === 0) return [];
 
-  const saldoMap = await fetchSaldos(mps.map((m) => m.codTid));
+  const refMap = await localizarEstoque(mps.map((m) => m.cod));
 
   const faltantes: MpFaltante[] = [];
-  for (const { codTid, materia_prima, consumo } of mps) {
-    if (!saldoMap.has(codTid)) continue; // sem cadastro → ignora
-    const saldoAtual = saldoMap.get(codTid) ?? 0;
-    const saldoApos = saldoAtual - consumo;
+  for (const { cod, materia_prima, consumo } of mps) {
+    const ref = refMap.get(cod);
+    if (!ref) continue; // sem cadastro -> não bloqueia
+    const saldoApos = ref.saldo - consumo;
     if (saldoApos < 0) {
-      faltantes.push({ cod_tid: codTid, materia_prima, saldoAtual, consumo, saldoApos });
+      faltantes.push({ cod_tid: cod, materia_prima, saldoAtual: ref.saldo, consumo, saldoApos });
     }
   }
   return faltantes;
