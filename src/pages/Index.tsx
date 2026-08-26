@@ -752,6 +752,7 @@ export default function Index() {
                   {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'estoque_mp'          && <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'estoque_mp_pg'       && <EstoqueMPPG perfilNome={perfil.nome} papel={perfil.papel} />}
+                  {activeTab === 'historico_mov_mp'    && <HistoricoMovimentacoesMP />}
                   {activeTab === 'conferencia_estoque' && <ConferenciaEstoque />}
                 </Suspense>
               </ErrorBoundary>
@@ -1145,6 +1146,17 @@ export default function Index() {
                   >
                     <Package className="h-3.5 w-3.5 shrink-0" />
                     <span>Estoque MP PG</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={activeTab === 'historico_mov_mp'}
+                    tooltip="Histórico de Movimentações"
+                    onClick={() => goToTab('historico_mov_mp')}
+                    size="sm"
+                  >
+                    <History className="h-3.5 w-3.5 shrink-0" />
+                    <span>Histórico de Movimentações</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
