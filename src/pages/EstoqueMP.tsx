@@ -100,6 +100,26 @@ function fmtDatetime(iso: string) {
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// ── Paginação ──────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 50;
+
+function PaginacaoBar({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between mt-2 px-1 text-xs text-muted-foreground">
+      <span>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} de {total}</span>
+      <div className="flex gap-1">
+        <button onClick={() => onChange(page - 1)} disabled={page === 0}
+          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">‹ Ant.</button>
+        <button onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}
+          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">Próx. ›</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function EstoqueMP({ perfilNome, papel }: Props) {
@@ -107,6 +127,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterBelowMin, setFilterBelowMin] = useState(false);
+  const [page, setPage] = useState(0);
 
   // Modais
   const [entradaItem, setEntradaItem] = useState<EstoqueItem | null>(null);
@@ -255,6 +276,14 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     }
     return list;
   }, [estoque, search, filterBelowMin]);
+
+  // Reseta página quando filtros mudam
+  useEffect(() => { setPage(0); }, [search, filterBelowMin]);
+
+  const pagina = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page],
+  );
 
   // ── Summary ─────────────────────────────────────────────────────────────────
 
@@ -603,7 +632,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                   </td>
                 </tr>
               ) : (
-                filtered.map((item) => (
+                pagina.map((item) => (
                   <tr key={item.id} className="border-t hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-medium">{item.materia_prima}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{item.cod_tid}</td>
@@ -662,6 +691,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
             </tbody>
           </table>
         </div>
+        <PaginacaoBar page={page} total={filtered.length} onChange={setPage} />
       )}
 
       {/* ── Modal Entrada ── */}
