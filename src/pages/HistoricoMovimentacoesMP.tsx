@@ -115,7 +115,7 @@ export default function HistoricoMovimentacoesMP() {
 
     let query = (supabase as any)
       .from('estoque_movimentacoes')
-      .select('*', { count: 'exact' })
+      .select('id, cod_tid, materia_prima, tipo, quantidade_kg, saldo_apos, ordem_id, ordem_lote, observacao, criado_por, criado_em', { count: 'estimated' })
       .order('criado_em', { ascending: false })
       .range(targetPage * PAGE_SIZE, (targetPage + 1) * PAGE_SIZE - 1);
 

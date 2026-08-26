@@ -184,7 +184,7 @@ export async function estornarEstoqueOP(
 ): Promise<void> {
   const { data: movimentos } = await (supabase as any)
     .from('estoque_movimentacoes')
-    .select('*')
+    .select('cod_tid, quantidade_kg, materia_prima')
     .eq('ordem_id', ordemId)
     .in('tipo', ['saida', 'estorno']);
 

@@ -16,7 +16,6 @@ import {
   History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { useComprasConsumo } from '@/hooks/useCompras';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -141,33 +140,9 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   const [atualizarMinimoOpen, setAtualizarMinimoOpen] = useState(false);
   const [atualizandoMinimo, setAtualizandoMinimo] = useState(false);
 
-  // Janela móvel: max(01/05/2026, hoje-12 meses)
-  const { dataInicio: minimoDataInicio, dataFim: minimoDataFim } = useMemo(() => {
-    const hoje = new Date();
-    const dozeMesesAtras = new Date(hoje);
-    dozeMesesAtras.setMonth(hoje.getMonth() - 12);
-    const piso = new Date('2026-05-01T00:00:00');
-    const inicio = dozeMesesAtras > piso ? dozeMesesAtras : piso;
-    return {
-      dataInicio: inicio.toISOString().split('T')[0],
-      dataFim: hoje.toISOString().split('T')[0],
-    };
-  }, []);
-
-  const { resultado: minimoResultado, refetch: minimoRefetch } = useComprasConsumo(
-    minimoDataInicio,
-    minimoDataFim,
-  );
-
   const handleAtualizarMinimo = async () => {
     setAtualizandoMinimo(true);
     try {
-      await minimoRefetch();
-      // minimoResultado ainda é o estado anterior; re-lemos via refetch que atualiza o estado
-      // Usamos o resultado retornado de forma assíncrona pelo re-render; precisamos buscar
-      // diretamente para ter o valor atualizado no mesmo handler.
-      // Refetch retorna void, por isso reconstruímos o cálculo com o resultado do hook
-      // após o await — o estado react ainda não atualizou; invocamos o fetch manualmente.
       const hoje = new Date();
       const dozeMesesAtras = new Date(hoje);
       dozeMesesAtras.setMonth(hoje.getMonth() - 12);
@@ -241,8 +216,9 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     setLoading(true);
     const { data: estoqueData, error } = await (supabase as any)
       .from('estoque_mp')
-      .select('*')
-      .order('materia_prima');
+      .select('id, cod_tid, materia_prima, saldo_kg, minimo_kg, atualizado_em')
+      .order('materia_prima')
+      .limit(2000);
 
     if (error) {
       toast({ title: 'Erro ao carregar estoque', description: error.message, variant: 'destructive' });

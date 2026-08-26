@@ -184,18 +184,21 @@ export function useComprasConsumo(
       // criado_em é timestamp: usar >= inicio e < (fim+1 dia) para incluir o dia inteiro do fim
       const fimExclusivo = diaSeguinte(dataFim);
 
-      const { data: ordensData } = await (supabase as any)
+      let q = (supabase as any)
         .from("ordens")
         .select("id, lote, produto, quantidade, formula_id, marca, linha, criado_em")
         .gte("criado_em", dataInicio)
         .lt("criado_em", fimExclusivo)
         .limit(2000);
 
+      if (filtros?.linha) q = q.eq("linha", String(filtros.linha));
+      if (filtros?.marca) q = q.eq("marca", filtros.marca);
+
+      const { data: ordensData } = await q;
+
       if (!ordensData) { setResultado(null); return; }
 
-      let ordens = ordensData as any[];
-      if (filtros?.linha) ordens = ordens.filter((o) => Number(o.linha) === filtros.linha);
-      if (filtros?.marca) ordens = ordens.filter((o) => o.marca === filtros.marca);
+      const ordens = ordensData as any[];
 
       const ordensMapped: OrdemInput[] = ordens.map((o) => ({
         id: o.id,

@@ -16,7 +16,6 @@ import {
   History, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { useComprasConsumo } from '@/hooks/useCompras';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -129,26 +128,9 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
   const [atualizarMinimoOpen, setAtualizarMinimoOpen] = useState(false);
   const [atualizandoMinimo, setAtualizandoMinimo] = useState(false);
 
-  // Janela móvel: max(01/05/2026, hoje-12 meses)
-  const { dataInicio: minimoDataInicio, dataFim: minimoDataFim } = useMemo(() => {
-    const hoje = new Date();
-    const dozeMesesAtras = new Date(hoje);
-    dozeMesesAtras.setMonth(hoje.getMonth() - 12);
-    const piso = new Date('2026-05-01T00:00:00');
-    const inicio = dozeMesesAtras > piso ? dozeMesesAtras : piso;
-    return {
-      dataInicio: inicio.toISOString().split('T')[0],
-      dataFim: hoje.toISOString().split('T')[0],
-    };
-  }, []);
-
-  const { refetch: minimoRefetch } = useComprasConsumo(minimoDataInicio, minimoDataFim);
-
   const handleAtualizarMinimo = async () => {
     setAtualizandoMinimo(true);
     try {
-      await minimoRefetch();
-
       const hoje = new Date();
       const dozeMesesAtras = new Date(hoje);
       dozeMesesAtras.setMonth(hoje.getMonth() - 12);
@@ -221,8 +203,9 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from('estoque_mp_pg')
-      .select('*')
-      .order('materia_prima');
+      .select('id, cod_pg, materia_prima, saldo_kg, minimo_kg, atualizado_em')
+      .order('materia_prima')
+      .limit(2000);
 
     if (error) {
       toast({ title: 'Erro ao carregar estoque PG', description: error.message, variant: 'destructive' });

@@ -351,7 +351,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setCarregandoRetiradas(true);
     let q = (supabase as any)
       .from('consumo_mp')
-      .select('*')
+      .select('id, cod_tid, materia_prima, quantidade_kg, data_retirada, observacao, retirado_por, criado_em, setor, eh_acerto, acerto_lote, acerto_formula_id')
       .order('criado_em', { ascending: false })
       .limit(500);
     if (dataInicioLista) q = q.gte('data_retirada', dataInicioLista);
@@ -631,10 +631,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setCarregandoRel(true);
     const { data: rows } = await (supabase as any)
       .from('consumo_mp')
-      .select('*')
+      .select('id, cod_tid, materia_prima, quantidade_kg, data_retirada, observacao, retirado_por, criado_em, setor, eh_acerto, acerto_lote, acerto_formula_id')
       .gte('data_retirada', dataInicio)
       .lte('data_retirada', dataFim)
-      .order('data_retirada', { ascending: false });
+      .order('data_retirada', { ascending: false })
+      .limit(5000);
     setRelatorio((rows ?? []) as ConsumoMpRow[]);
     setCarregandoRel(false);
   }, [dataInicio, dataFim]);
@@ -825,8 +826,9 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setCarregandoSalvos(true);
     let q = (supabase as any)
       .from('relatorios_consumo_mp')
-      .select('*')
-      .order('criado_em', { ascending: false });
+      .select('id, titulo, data_inicio, data_fim, setor, total_kg, num_mps, criado_por, criado_em')
+      .order('criado_em', { ascending: false })
+      .limit(100);
     if (filtroSalvosSetor !== 'todos') q = q.eq('setor', filtroSalvosSetor);
     if (filtroSalvosInicio) q = q.gte('criado_em', filtroSalvosInicio);
     if (filtroSalvosFim) q = q.lte('criado_em', filtroSalvosFim + 'T23:59:59');
