@@ -190,6 +190,27 @@ function SetorInline({
   );
 }
 
+// ── Paginação ─────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE_RET = 50;
+const PAGE_SIZE_REL = 100;
+
+function PaginacaoBar({ page, pageSize, total, onChange }: { page: number; pageSize: number; total: number; onChange: (p: number) => void }) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between mt-2 px-1 text-xs text-muted-foreground">
+      <span>{page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} de {total}</span>
+      <div className="flex gap-1">
+        <button onClick={() => onChange(page - 1)} disabled={page === 0}
+          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">‹ Ant.</button>
+        <button onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}
+          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">Próx. ›</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function ConsumoMP({ perfilNome }: Props) {
@@ -371,6 +392,11 @@ export default function ConsumoMP({ perfilNome }: Props) {
   }, [retiradas, filtroSetorLista]);
 
   const contSemSetor = useMemo(() => retiradas.filter((r) => r.setor === null).length, [retiradas]);
+
+  // Paginação
+  const [pageRet, setPageRet] = useState(0);
+  const [pageTotais, setPageTotais] = useState(0);
+  const [pageRelHist, setPageRelHist] = useState(0);
 
   // ── Registrar retirada ──────────────────────────────────────────────────────
   const handleRegistrar = async () => {
@@ -675,6 +701,22 @@ export default function ConsumoMP({ perfilNome }: Props) {
     arr.forEach((t) => { t.pct = total > 0 ? (t.total_kg / total) * 100 : 0; });
     return arr;
   }, [relatorioFiltrado]);
+
+  useEffect(() => { setPageRet(0); }, [filtroSetorLista, dataInicioLista, dataFimLista]);
+  useEffect(() => { setPageTotais(0); setPageRelHist(0); }, [dataInicio, dataFim, filtroSetor]);
+
+  const paginaRet = useMemo(
+    () => retiradasFiltradas.slice(pageRet * PAGE_SIZE_RET, (pageRet + 1) * PAGE_SIZE_RET),
+    [retiradasFiltradas, pageRet],
+  );
+  const paginaTotais = useMemo(
+    () => totaisPorMp.slice(pageTotais * PAGE_SIZE_REL, (pageTotais + 1) * PAGE_SIZE_REL),
+    [totaisPorMp, pageTotais],
+  );
+  const paginaRelHist = useMemo(
+    () => relatorioFiltrado.slice(pageRelHist * PAGE_SIZE_REL, (pageRelHist + 1) * PAGE_SIZE_REL),
+    [relatorioFiltrado, pageRelHist],
+  );
 
   const totalGeralKg = useMemo(() => totaisPorMp.reduce((s, t) => s + t.total_kg, 0), [totaisPorMp]);
   const numMpDistintas = totaisPorMp.length;
@@ -1258,7 +1300,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {retiradasFiltradas.map(r => (
+                      {paginaRet.map(r => (
                         <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                           <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
                           <td className="py-2 pr-3">
@@ -1301,6 +1343,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     </tbody>
                   </table>
                 </div>
+                <PaginacaoBar page={pageRet} pageSize={PAGE_SIZE_RET} total={retiradasFiltradas.length} onChange={setPageRet} />
               )}
             </CardContent>
           </Card>
@@ -1437,7 +1480,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                             </tr>
                           </thead>
                           <tbody>
-                            {totaisPorMp.map((t, i) => (
+                            {paginaTotais.map((t, i) => (
                               <tr key={t.cod_tid} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
                                 <td className="py-2 pr-3">{t.materia_prima}</td>
                                 <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_tid}</td>
@@ -1467,6 +1510,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           </tfoot>
                         </table>
                       </div>
+                      <PaginacaoBar page={pageTotais} pageSize={PAGE_SIZE_REL} total={totaisPorMp.length} onChange={setPageTotais} />
                     </CardContent>
                   </Card>
 
@@ -1491,7 +1535,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                             </tr>
                           </thead>
                           <tbody>
-                            {relatorioFiltrado.map(r => (
+                            {paginaRelHist.map(r => (
                               <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                                 <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
                                 <td className="py-2 pr-3">
@@ -1534,6 +1578,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                           </tbody>
                         </table>
                       </div>
+                      <PaginacaoBar page={pageRelHist} pageSize={PAGE_SIZE_REL} total={relatorioFiltrado.length} onChange={setPageRelHist} />
                     </CardContent>
                   </Card>
                 </>
