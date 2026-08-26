@@ -269,6 +269,15 @@ export default function Index() {
     return () => clearTimeout(t);
   }, []);
 
+  // Pré-aquece o cache de fórmulas em background para usuários que usam
+  // ComprasConsumo / ComprasMediaMensal (evita espera longa na primeira abertura)
+  useEffect(() => {
+    if (!perfil) return;
+    if (perfil.papel === 'compras' || perfil.papel === 'gestor') {
+      import('@/lib/formulasCache').then(({ fetchAllFormulas }) => fetchAllFormulas());
+    }
+  }, [perfil?.papel]);
+
   const goToTab = useCallback((tab: TabGestorId | null) => {
     setActiveTab(tab);
   }, []);

@@ -37,17 +37,32 @@ export async function fetchAllFormulas(): Promise<FormulaRow[]> {
     return _cache.rows;
   }
 
-  const rows: FormulaRow[] = [];
-  for (let offset = 0; ; offset += PAGE_SIZE) {
-    const { data, error } = await (supabase as any)
-      .from("formulas")
-      .select("formula_id, materia_prima, percentual, cod_mp")
-      .order("formula_id", { ascending: true })
-      .range(offset, offset + PAGE_SIZE - 1);
+  // 1. Conta total de linhas (head=true = sem dados, só o header count)
+  const { count } = await (supabase as any)
+    .from("formulas")
+    .select("*", { count: "exact", head: true });
 
-    if (error || !data || data.length === 0) break;
-    rows.push(...(data as FormulaRow[]));
-    if (data.length < PAGE_SIZE) break; // última página — acabou
+  const total = count ?? 0;
+  if (total === 0) {
+    _cache = { rows: [], fetchedAt: Date.now() };
+    return [];
+  }
+
+  // 2. Dispara todas as páginas em paralelo (antes eram sequenciais)
+  const numPages = Math.ceil(total / PAGE_SIZE);
+  const pages = await Promise.all(
+    Array.from({ length: numPages }, (_, i) =>
+      (supabase as any)
+        .from("formulas")
+        .select("formula_id, materia_prima, percentual, cod_mp")
+        .order("formula_id", { ascending: true })
+        .range(i * PAGE_SIZE, (i + 1) * PAGE_SIZE - 1),
+    ),
+  );
+
+  const rows: FormulaRow[] = [];
+  for (const page of pages) {
+    if (page.data) rows.push(...(page.data as FormulaRow[]));
   }
 
   _cache = { rows, fetchedAt: Date.now() };
