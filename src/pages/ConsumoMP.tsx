@@ -1285,6 +1285,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                     : 'Nenhuma retirada para os filtros selecionados.'}
                 </p>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1344,6 +1345,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
                   </table>
                 </div>
                 <PaginacaoBar page={pageRet} pageSize={PAGE_SIZE_RET} total={retiradasFiltradas.length} onChange={setPageRet} />
+                </>
               )}
             </CardContent>
           </Card>

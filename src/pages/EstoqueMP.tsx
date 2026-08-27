@@ -612,6 +612,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
           <p className="text-xs">Importe os saldos iniciais pela planilha.</p>
         </div>
       ) : (
+        <>
         <div className="rounded-lg border overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="bg-muted/50 text-muted-foreground">
@@ -692,6 +693,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
           </table>
         </div>
         <PaginacaoBar page={page} total={filtered.length} onChange={setPage} />
+        </>
       )}
 
       {/* ── Modal Entrada ── */}
