@@ -405,13 +405,6 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
         .limit(200),
     ]);
 
-    console.debug('[HistóricoPG] cod_pg buscado:', codPg,
-      '| _pg rows:', resPg.data?.length ?? 0, resPg.error ?? '',
-      '| geral rows:', resGeral.data?.length ?? 0, resGeral.error ?? '');
-    if (resGeral.data?.length) {
-      console.debug('[HistóricoPG] amostra geral:', resGeral.data[0]);
-    }
-
     const fromPg: Movimentacao[] = (resPg.data ?? []).map((r: any) => ({
       ...r,
       ordem_id: null,
