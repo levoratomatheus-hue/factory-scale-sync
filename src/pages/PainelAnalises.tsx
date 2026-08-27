@@ -1178,6 +1178,101 @@ export default function PainelAnalises() {
             })()}
           </div>
 
+          {/* Capacidade Real */}
+          <div>
+            <SectionTitle icon={Gauge}>Capacidade Real (descontando limpeza)</SectionTitle>
+            {(() => {
+              const LINHAS_ATIVAS = [1, 2, 4] as const;
+              const caps = LINHAS_ATIVAS.map((l) => {
+                const info  = porLinha.find((p) => p.linha === l);
+                const h     = horasPorLinha.find((p) => p.linha === l);
+                const media = info?.media ?? 0;
+                const temDados = media > 0 && !!h && h.diasAtivos > 0;
+
+                let horasUteis = 0;
+                let perdasPorDia = 0;
+                let limpezaPorDia = 0;
+
+                if (temDados && h) {
+                  limpezaPorDia  = h.horasLimpeza / h.diasAtivos;
+                  perdasPorDia   = limpezaPorDia;
+                  horasUteis     = Math.max(0, 9 - perdasPorDia);
+                }
+
+                return {
+                  linha: l,
+                  media,
+                  temDados,
+                  horasUteis,
+                  limpezaPorDia,
+                  dia:    temDados ? media * horasUteis : 0,
+                  semana: temDados ? media * horasUteis * 5 : 0,
+                  mes:    temDados ? media * horasUteis * 20 : 0,
+                };
+              });
+
+              const totalDia    = caps.reduce((s, c) => s + c.dia, 0);
+              const totalSemana = caps.reduce((s, c) => s + c.semana, 0);
+              const totalMes    = caps.reduce((s, c) => s + c.mes, 0);
+              const temTotal    = totalDia > 0;
+
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1rem" }}>
+                  {caps.map(({ linha, media, temDados, horasUteis, limpezaPorDia, dia, semana, mes }) => (
+                    <div key={linha} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                        <div className={`inline-flex items-center justify-center h-9 w-9 rounded-lg bg-gradient-to-br ${CORES_LINHA[linha - 1]} text-white flex-shrink-0`}>
+                          <span className="text-sm font-bold">{linha}</span>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Linha {linha}</p>
+                          <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>
+                            {temDados
+                              ? <><span style={{ color: D.text, fontWeight: 600 }}>{fmt(media)} kg/h</span> · <span style={{ color: D.emerald, fontWeight: 600 }}>{fmt(horasUteis, 1)}h</span> úteis/dia</>
+                              : <span>sem dados</span>}
+                          </p>
+                        </div>
+                      </div>
+
+                      {temDados && (
+                        <div style={{ fontSize: 10, color: D.muted, background: D.cardAlt, borderRadius: "0.375rem", padding: "0.375rem 0.5rem" }}>
+                          <span>🧹 Limpeza: <strong>{fmt(limpezaPorDia, 1)}h</strong>/dia</span>
+                        </div>
+                      )}
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem", borderTop: `1px solid ${D.border}`, paddingTop: "0.625rem" }}>
+                        {([["kg/dia", dia], ["kg/sem", semana], ["kg/mês", mes]] as const).map(([label, val]) => (
+                          <div key={label}>
+                            <p style={{ fontSize: "0.8125rem", fontWeight: 700, color: D.text, margin: 0 }}>{temDados ? fmt(val as number, 0) : "—"}</p>
+                            <p style={{ fontSize: 10, color: D.muted, margin: 0 }}>{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Card Total */}
+                  <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "0.75rem", borderColor: D.emerald }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                      <div className="inline-flex items-center justify-center h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex-shrink-0">
+                        <Gauge size={15} />
+                      </div>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Total Real L1 + L2 + L4</p>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem", borderTop: `1px solid ${D.border}`, paddingTop: "0.625rem" }}>
+                      {([["kg/dia", totalDia], ["kg/sem", totalSemana], ["kg/mês", totalMes]] as const).map(([label, val]) => (
+                        <div key={label}>
+                          <p style={{ fontSize: "0.8125rem", fontWeight: 700, color: D.emerald, margin: 0 }}>{temTotal ? fmt(val as number, 0) : "—"}</p>
+                          <p style={{ fontSize: 10, color: D.muted, margin: 0 }}>{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
           {/* Por Classe */}
           {dadosPorClasse.length > 1 && (
             <div>
