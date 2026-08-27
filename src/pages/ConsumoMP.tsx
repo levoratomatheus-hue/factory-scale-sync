@@ -141,7 +141,7 @@ function endOfWeek(d: Date) {
 
 function fmtDatetime(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' });
 }
 
 const SETOR_LABEL: Record<string, string> = {
