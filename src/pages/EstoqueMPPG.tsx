@@ -388,20 +388,29 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
     setHistoricoItem(item);
     setLoadingHistorico(true);
 
+    const codPg = String(item.cod_pg);
+
     const [resPg, resGeral] = await Promise.all([
       (supabase as any)
         .from('estoque_movimentacoes_pg')
         .select('*')
-        .eq('cod_pg', item.cod_pg)
+        .eq('cod_pg', codPg)
         .order('criado_em', { ascending: false })
         .limit(200),
       (supabase as any)
         .from('estoque_movimentacoes')
         .select('id, cod_tid, materia_prima, tipo, quantidade_kg, saldo_apos, ordem_id, ordem_lote, observacao, criado_por, criado_em')
-        .eq('cod_tid', item.cod_pg)
+        .eq('cod_tid', codPg)
         .order('criado_em', { ascending: false })
         .limit(200),
     ]);
+
+    console.debug('[HistóricoPG] cod_pg buscado:', codPg,
+      '| _pg rows:', resPg.data?.length ?? 0, resPg.error ?? '',
+      '| geral rows:', resGeral.data?.length ?? 0, resGeral.error ?? '');
+    if (resGeral.data?.length) {
+      console.debug('[HistóricoPG] amostra geral:', resGeral.data[0]);
+    }
 
     const fromPg: Movimentacao[] = (resPg.data ?? []).map((r: any) => ({
       ...r,
