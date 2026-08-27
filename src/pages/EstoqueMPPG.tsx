@@ -32,9 +32,11 @@ interface Movimentacao {
   id: string;
   cod_pg: string;
   materia_prima: string;
-  tipo: 'entrada' | 'saida' | 'ajuste' | 'saldo_inicial';
+  tipo: 'entrada' | 'saida' | 'ajuste' | 'saldo_inicial' | 'estorno';
   quantidade_kg: number;
   saldo_apos: number | null;
+  ordem_id: string | null;
+  ordem_lote: string | null;
   observacao: string | null;
   criado_por: string | null;
   criado_em: string;
@@ -78,6 +80,7 @@ function tipoBadge(tipo: Movimentacao['tipo']) {
   const map: Record<Movimentacao['tipo'], { label: string; cls: string }> = {
     entrada:       { label: 'Entrada',       cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
     saida:         { label: 'Saída',          cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+    estorno:       { label: 'Estorno',        cls: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
     ajuste:        { label: 'Ajuste',         cls: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
     saldo_inicial: { label: 'Saldo inicial',  cls: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300' },
   };
@@ -384,13 +387,47 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
   const abrirHistorico = useCallback(async (item: EstoqueItem) => {
     setHistoricoItem(item);
     setLoadingHistorico(true);
-    const { data } = await (supabase as any)
-      .from('estoque_movimentacoes_pg')
-      .select('*')
-      .eq('cod_pg', item.cod_pg)
-      .order('criado_em', { ascending: false })
-      .limit(200);
-    setHistorico((data ?? []) as Movimentacao[]);
+
+    const [resPg, resGeral] = await Promise.all([
+      (supabase as any)
+        .from('estoque_movimentacoes_pg')
+        .select('*')
+        .eq('cod_pg', item.cod_pg)
+        .order('criado_em', { ascending: false })
+        .limit(200),
+      (supabase as any)
+        .from('estoque_movimentacoes')
+        .select('id, cod_tid, materia_prima, tipo, quantidade_kg, saldo_apos, ordem_id, ordem_lote, observacao, criado_por, criado_em')
+        .eq('cod_tid', item.cod_pg)
+        .order('criado_em', { ascending: false })
+        .limit(200),
+    ]);
+
+    const fromPg: Movimentacao[] = (resPg.data ?? []).map((r: any) => ({
+      ...r,
+      ordem_id: null,
+      ordem_lote: null,
+    }));
+
+    const fromGeral: Movimentacao[] = (resGeral.data ?? []).map((r: any) => ({
+      id: r.id,
+      cod_pg: r.cod_tid,
+      materia_prima: r.materia_prima,
+      tipo: r.tipo,
+      quantidade_kg: r.quantidade_kg,
+      saldo_apos: r.saldo_apos ?? null,
+      ordem_id: r.ordem_id ?? null,
+      ordem_lote: r.ordem_lote ?? null,
+      observacao: r.observacao ?? null,
+      criado_por: r.criado_por ?? null,
+      criado_em: r.criado_em,
+    }));
+
+    const merged = [...fromPg, ...fromGeral].sort(
+      (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime(),
+    );
+
+    setHistorico(merged);
     setLoadingHistorico(false);
   }, []);
 
@@ -767,6 +804,7 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
                     <th className="text-left px-3 py-2 font-medium">Tipo</th>
                     <th className="text-right px-3 py-2 font-medium">Qtd (kg)</th>
                     <th className="text-right px-3 py-2 font-medium">Saldo após</th>
+                    <th className="text-left px-3 py-2 font-medium">OP / Lote</th>
                     <th className="text-left px-3 py-2 font-medium">Observação</th>
                     <th className="text-left px-3 py-2 font-medium">Por</th>
                   </tr>
@@ -781,6 +819,11 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
                         {mov.saldo_apos !== null ? formatKg(mov.saldo_apos) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap font-mono text-[10px]">
+                        {mov.ordem_id
+                          ? <span title={mov.ordem_id}>{mov.ordem_lote ?? mov.ordem_id}</span>
+                          : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-muted-foreground max-w-[200px] truncate" title={mov.observacao ?? ''}>
                         {mov.observacao ?? '—'}
