@@ -95,9 +95,12 @@ function tipoBadge(mov: Movimentacao) {
   );
 }
 
+function parseUtc(iso: string): Date {
+  return new Date(/[Z+]/.test(iso) ? iso : iso + 'Z');
+}
+
 function fmtDatetime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  return parseUtc(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 }
 
 // ── Paginação ──────────────────────────────────────────────────────────────────

@@ -26,9 +26,13 @@ type FiltroTipo = 'todos' | 'saida_op' | 'saida_manual' | 'entrada' | 'estorno' 
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+function parseUtc(iso: string): Date {
+  // Supabase retorna timestamp without time zone sem 'Z' — força UTC
+  return new Date(/[Z+]/.test(iso) ? iso : iso + 'Z');
+}
+
 function fmtDatetime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString('pt-BR', {
+  return parseUtc(iso).toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
     timeZone: 'America/Sao_Paulo',
