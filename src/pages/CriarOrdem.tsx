@@ -163,7 +163,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setItensSdrId(null);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
-      supabase.from('cadastro_lotes').select('lote, produto, quantidade, formula_id, tamanho_batelada, data_emissao').eq('lote', loteNum).single(),
+      supabase.from('cadastro_lotes').select('lote, produto, quantidade, formula_id, tamanho_batelada').eq('lote', loteNum).single(),
       supabase.from('ordens').select('id').eq('lote', loteStr).maybeSingle(),
     ]);
 
