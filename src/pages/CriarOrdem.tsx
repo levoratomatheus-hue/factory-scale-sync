@@ -163,7 +163,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     setItensSdrId(null);
 
     const [{ data, error }, { data: ordemExistente }] = await Promise.all([
-      supabase.from('cadastro_lotes').select('lote, produto, quantidade, formula_id, tamanho_batelada').eq('lote', loteNum).single(),
+      (supabase as any).from('cadastro_lotes').select('*').eq('lote', loteNum).maybeSingle(),
       supabase.from('ordens').select('id').eq('lote', loteStr).maybeSingle(),
     ]);
 
@@ -178,7 +178,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
     if (error || !data) {
       setLoteEncontrado(false);
-      toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
+toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
       return;
     }
 
