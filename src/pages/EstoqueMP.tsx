@@ -13,7 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { formatKg } from '@/lib/utils';
 import {
   Loader2, Search, PackageOpen, ArrowDownToLine, ArrowUpToLine, SlidersHorizontal,
-  History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp,
+  History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp, Plus,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -139,6 +139,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   const [minimoItem, setMinimoItem] = useState<EstoqueItem | null>(null);
   const [historicoItem, setHistoricoItem] = useState<EstoqueItem | null>(null);
   const [importarOpen, setImportarOpen] = useState(false);
+  const [cadastrarOpen, setCadastrarOpen] = useState(false);
 
   // Forms
   const [entradaQty, setEntradaQty] = useState('');
@@ -154,6 +155,13 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   const [savingSaida, setSavingSaida] = useState(false);
   const [savingAjuste, setSavingAjuste] = useState(false);
   const [savingMinimo, setSavingMinimo] = useState(false);
+  const [savingCadastro, setSavingCadastro] = useState(false);
+
+  // Cadastrar MP
+  const [cadastroCod, setCadastroCod] = useState('');
+  const [cadastroNome, setCadastroNome] = useState('');
+  const [cadastroSaldo, setCadastroSaldo] = useState('');
+  const [cadastroMinimo, setCadastroMinimo] = useState('');
 
   // Histórico
   const [historico, setHistorico] = useState<Movimentacao[]>([]);
@@ -538,6 +546,61 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     fetchEstoque();
   };
 
+  // ── Cadastrar MP ─────────────────────────────────────────────────────────────
+
+  const handleCadastrar = async () => {
+    const cod = cadastroCod.trim();
+    const nome = cadastroNome.trim();
+    if (!cod) { toast({ title: 'Informe o código TID', variant: 'destructive' }); return; }
+    if (!nome) { toast({ title: 'Informe o nome da matéria-prima', variant: 'destructive' }); return; }
+    const saldo = parseFloat(cadastroSaldo.replace(',', '.')) || 0;
+    const minimo = parseFloat(cadastroMinimo.replace(',', '.')) || 0;
+
+    setSavingCadastro(true);
+
+    const { data: existe } = await (supabase as any)
+      .from('estoque_mp')
+      .select('id')
+      .eq('cod_tid', cod)
+      .maybeSingle();
+
+    if (existe) {
+      toast({ title: 'Já existe uma MP com esse código', variant: 'destructive' });
+      setSavingCadastro(false); return;
+    }
+
+    const { error } = await (supabase as any).from('estoque_mp').insert({
+      cod_tid: cod,
+      materia_prima: nome,
+      saldo_kg: saldo,
+      minimo_kg: minimo,
+      atualizado_em: new Date().toISOString(),
+    });
+
+    if (error) {
+      toast({ title: 'Erro ao cadastrar MP', description: error.message, variant: 'destructive' });
+      setSavingCadastro(false); return;
+    }
+
+    if (saldo > 0) {
+      await (supabase as any).from('estoque_movimentacoes').insert({
+        cod_tid: cod,
+        materia_prima: nome,
+        tipo: 'saldo_inicial',
+        quantidade_kg: saldo,
+        saldo_apos: saldo,
+        observacao: 'Cadastro manual de MP',
+        criado_por: perfilNome,
+      });
+    }
+
+    toast({ title: 'Matéria-prima cadastrada' });
+    setSavingCadastro(false);
+    setCadastrarOpen(false);
+    setCadastroCod(''); setCadastroNome(''); setCadastroSaldo(''); setCadastroMinimo('');
+    fetchEstoque();
+  };
+
   // ── Exportar ─────────────────────────────────────────────────────────────────
 
   const handleExportar = () => {
@@ -584,6 +647,10 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
               ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
               : <TrendingUp className="h-3.5 w-3.5 mr-1.5" />}
             Atualizar Mínimo
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setCadastroCod(''); setCadastroNome(''); setCadastroSaldo(''); setCadastroMinimo(''); setCadastrarOpen(true); }}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Cadastrar MP
           </Button>
         </div>
       </div>
@@ -1026,6 +1093,73 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
               </table>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal Cadastrar MP ── */}
+      <Dialog open={cadastrarOpen} onOpenChange={(open) => !open && setCadastrarOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Matéria-Prima</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium">Código TID <span className="text-destructive">*</span></label>
+              <Input
+                value={cadastroCod}
+                onChange={(e) => setCadastroCod(e.target.value)}
+                className="mt-1 h-8 text-sm"
+                placeholder="Ex.: 000141"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">Nome / Matéria-prima <span className="text-destructive">*</span></label>
+              <Input
+                value={cadastroNome}
+                onChange={(e) => setCadastroNome(e.target.value)}
+                className="mt-1 h-8 text-sm"
+                placeholder="Ex.: Polietileno PEAD"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium">Saldo inicial (kg)</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.001"
+                  value={cadastroSaldo}
+                  onChange={(e) => setCadastroSaldo(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Estoque mínimo (kg)</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.001"
+                  value={cadastroMinimo}
+                  onChange={(e) => setCadastroMinimo(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCadastrarOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCadastrar} disabled={savingCadastro}>
+              {savingCadastro && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
