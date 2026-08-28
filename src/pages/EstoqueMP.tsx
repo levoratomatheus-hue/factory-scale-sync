@@ -12,7 +12,7 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { formatKg } from '@/lib/utils';
 import {
-  Loader2, Search, PackageOpen, ArrowDownToLine, SlidersHorizontal,
+  Loader2, Search, PackageOpen, ArrowDownToLine, ArrowUpToLine, SlidersHorizontal,
   History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -134,6 +134,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
 
   // Modais
   const [entradaItem, setEntradaItem] = useState<EstoqueItem | null>(null);
+  const [saidaItem, setSaidaItem] = useState<EstoqueItem | null>(null);
   const [ajusteItem, setAjusteItem] = useState<EstoqueItem | null>(null);
   const [minimoItem, setMinimoItem] = useState<EstoqueItem | null>(null);
   const [historicoItem, setHistoricoItem] = useState<EstoqueItem | null>(null);
@@ -142,12 +143,15 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
   // Forms
   const [entradaQty, setEntradaQty] = useState('');
   const [entradaObs, setEntradaObs] = useState('');
+  const [saidaQty, setSaidaQty] = useState('');
+  const [saidaObs, setSaidaObs] = useState('');
   const [ajusteNovoSaldo, setAjusteNovoSaldo] = useState('');
   const [ajusteObs, setAjusteObs] = useState('');
   const [minimoValue, setMinimoValue] = useState('');
 
   // Saving flags
   const [savingEntrada, setSavingEntrada] = useState(false);
+  const [savingSaida, setSavingSaida] = useState(false);
   const [savingAjuste, setSavingAjuste] = useState(false);
   const [savingMinimo, setSavingMinimo] = useState(false);
 
@@ -332,6 +336,45 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     setSavingEntrada(false);
     setEntradaItem(null);
     setEntradaQty(''); setEntradaObs('');
+    fetchEstoque();
+  };
+
+  // ── Saída ───────────────────────────────────────────────────────────────────
+
+  const handleSaida = async () => {
+    if (!saidaItem) return;
+    const qty = parseFloat(saidaQty.replace(',', '.'));
+    if (isNaN(qty) || qty <= 0) {
+      toast({ title: 'Informe uma quantidade válida', variant: 'destructive' }); return;
+    }
+    setSavingSaida(true);
+
+    const novoSaldo = saidaItem.saldo_kg - qty;
+
+    const { error } = await (supabase as any)
+      .from('estoque_mp')
+      .update({ saldo_kg: novoSaldo, atualizado_em: new Date().toISOString() })
+      .eq('id', saidaItem.id);
+
+    if (error) {
+      toast({ title: 'Erro ao registrar saída', description: error.message, variant: 'destructive' });
+      setSavingSaida(false); return;
+    }
+
+    await (supabase as any).from('estoque_movimentacoes').insert({
+      cod_tid: saidaItem.cod_tid,
+      materia_prima: saidaItem.materia_prima,
+      tipo: 'saida',
+      quantidade_kg: -qty,
+      saldo_apos: novoSaldo,
+      observacao: saidaObs.trim() || null,
+      criado_por: perfilNome,
+    });
+
+    toast({ title: `Saída registrada: -${formatKg(qty)} kg` });
+    setSavingSaida(false);
+    setSaidaItem(null);
+    setSaidaQty(''); setSaidaObs('');
     fetchEstoque();
   };
 
@@ -662,6 +705,16 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="h-6 px-2 text-[10px] text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-950/30"
+                          onClick={() => { setSaidaItem(item); setSaidaQty(''); setSaidaObs(''); }}
+                          title="Saída manual de material"
+                        >
+                          <ArrowUpToLine className="h-3 w-3 mr-1" />
+                          Saída
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="h-6 px-2 text-[10px]"
                           onClick={() => { setAjusteItem(item); setAjusteNovoSaldo(String(item.saldo_kg)); setAjusteObs(''); }}
                           title="Ajuste de saldo"
@@ -752,6 +805,76 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
             <Button onClick={handleEntrada} disabled={savingEntrada}>
               {savingEntrada && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Registrar Entrada
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal Saída ── */}
+      <Dialog open={!!saidaItem} onOpenChange={(open) => !open && setSaidaItem(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar saída — {saidaItem?.materia_prima}</DialogTitle>
+          </DialogHeader>
+          {saidaItem && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold">{saidaItem.materia_prima}</p>
+                <p className="text-xs text-muted-foreground">
+                  Saldo atual: <span className="font-medium text-foreground">{formatKg(saidaItem.saldo_kg)} kg</span>
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Quantidade a retirar (kg)</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.001"
+                  value={saidaQty}
+                  onChange={(e) => setSaidaQty(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="0,000"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Observação</label>
+                <Input
+                  value={saidaObs}
+                  onChange={(e) => setSaidaObs(e.target.value)}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="Motivo da saída (opcional)"
+                />
+              </div>
+              {saidaQty && !isNaN(parseFloat(saidaQty)) && (() => {
+                const novoSaldo = saidaItem.saldo_kg - parseFloat(saidaQty.replace(',', '.'));
+                return (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      Novo saldo:{' '}
+                      <span className={`font-semibold ${novoSaldo < 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
+                        {formatKg(novoSaldo)} kg
+                      </span>
+                    </p>
+                    {novoSaldo < 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Saldo ficará negativo.</p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaidaItem(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={handleSaida}
+              disabled={savingSaida}
+            >
+              {savingSaida && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Confirmar Saída
             </Button>
           </DialogFooter>
         </DialogContent>
