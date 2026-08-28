@@ -4,8 +4,9 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Minus, Play, Plus, Printer, Scale } from "lucide-react";
+import { CheckCircle2, Loader2, Minus, PauseCircle, Play, Plus, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { toast } from "@/hooks/use-toast";
@@ -46,6 +47,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [bateladaAtual, setBateladaAtual] = useState(1);
   const lastBateladaPress = useRef<{ type: '+' | '-'; time: number } | null>(null);
   const [bateladaConfirm, setBateladaConfirm] = useState<{ type: '+' | '-' } | null>(null);
+  const [obsPausaInicial, setObsPausaInicial] = useState<string | null>(null);
+  const [pausarOpen, setPausarOpen] = useState(false);
+  const [pausaObs, setPausaObs] = useState('');
+  const [pausando, setPausando] = useState(false);
 
   const balancaOrdens = useMemo(
     () => sortOrdens(ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))),
@@ -67,7 +72,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
     setCheckedItens(new Set());
     setCarga(1);
-    setBateladaAtual(1);
+    setObsPausaInicial(null);
     // Limpa imediatamente para não exibir dados de outra OP
     setFormulaId(null);
     setTamanhoBatelada(null);
@@ -78,7 +83,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     let cancelled = false;
 
     Promise.all([
-      supabase.from("ordens").select("formula_id, tamanho_batelada").eq("id", emPesagem.id).single(),
+      supabase.from("ordens").select("formula_id, tamanho_batelada, bateladas_feitas, obs_pausa").eq("id", emPesagem.id).single(),
       supabase.from("ordens_formula").select("sequencia, materia_prima, quantidade_kg").eq("ordem_id", emPesagem.id).order("sequencia", { ascending: true }),
     ]).then(([ordemRes, formulaRes]) => {
       if (cancelled) return;
@@ -86,6 +91,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       const hasC = !!(formulaRes.data && formulaRes.data.length > 0);
       setFormulaId(row?.formula_id ?? null);
       setTamanhoBatelada(row?.tamanho_batelada ?? null);
+      setBateladaAtual((row?.bateladas_feitas ?? 0) > 0 ? row.bateladas_feitas : 1);
+      setObsPausaInicial(row?.obs_pausa ?? null);
       if (hasC) {
         setCustomItens(formulaRes.data as FormulaRow[]);
         setHasCustom(true);
@@ -119,6 +126,31 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       status_anterior: "pendente",
       status_novo: "em_pesagem",
     });
+    await fetchOrdens();
+  };
+
+  const pausarOrdem = async () => {
+    if (!emPesagem) return;
+    setPausando(true);
+    const { error } = await (supabase as any).from("ordens").update({
+      status: 'pendente',
+      bateladas_feitas: bateladaAtual,
+      obs_pausa: pausaObs.trim() || null,
+    }).eq("id", emPesagem.id);
+    if (error) {
+      toast({ title: "Erro ao pausar", description: error.message, variant: "destructive" });
+      setPausando(false);
+      return;
+    }
+    await (supabase as any).from("historico").insert({
+      ordem_id: emPesagem.id,
+      status_anterior: "em_pesagem",
+      status_novo: "pendente",
+      obs: pausaObs.trim() ? `Pausado na batelada ${bateladaAtual}: ${pausaObs.trim()}` : `Pausado na batelada ${bateladaAtual}`,
+    });
+    setPausarOpen(false);
+    setPausaObs('');
+    setPausando(false);
     await fetchOrdens();
   };
 
@@ -300,7 +332,15 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
           )}
 
           {(displayItens.length === 0 || checkedItens.size === displayItens.length) && !isLoadingFormula && (
-            <div className="flex justify-end">
+            <div className="flex gap-2 justify-end flex-wrap">
+              <Button
+                variant="outline"
+                className="min-h-[44px] sm:min-h-0 text-base sm:text-sm"
+                onClick={() => { setPausaObs(''); setPausarOpen(true); }}
+              >
+                <PauseCircle className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />
+                Pausar
+              </Button>
               <Button
                 className="bg-status-done hover:bg-status-done/90 text-primary-foreground w-full sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm"
                 onClick={() => setConfirmOpen(true)}
@@ -349,9 +389,11 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <AlertDialogAction onClick={() => {
                   setConfirmOpen(false);
-                  concluirOrdem(emPesagem.id).then(async (err) => {
-                    if (err) toast({ title: "Erro ao concluir pesagem", description: err, variant: "destructive" });
-                    await fetchOrdens();
+                  (supabase as any).from("ordens").update({ bateladas_feitas: 0, obs_pausa: null }).eq("id", emPesagem.id).then(() => {
+                    concluirOrdem(emPesagem.id).then(async (err) => {
+                      if (err) toast({ title: "Erro ao concluir pesagem", description: err, variant: "destructive" });
+                      await fetchOrdens();
+                    });
                   });
                 }}>
                   Confirmar
@@ -359,6 +401,41 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <AlertDialog open={pausarOpen} onOpenChange={(open) => { if (!open) setPausarOpen(false); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Pausar pesagem</AlertDialogTitle>
+                <AlertDialogDescription>
+                  A OP voltará para a fila com o progresso salvo (batelada {bateladaAtual}).
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <Textarea
+                placeholder="Motivo da pausa (opcional)"
+                value={pausaObs}
+                onChange={(e) => setPausaObs(e.target.value)}
+                className="mt-1"
+                rows={3}
+              />
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={pausando}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction disabled={pausando} onClick={(e) => { e.preventDefault(); pausarOrdem(); }}>
+                  {pausando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Pausar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {obsPausaInicial && (
+            <div className="rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 flex items-start gap-2">
+              <PauseCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Retomada — pausa anterior</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">{obsPausaInicial}</p>
+              </div>
+            </div>
+          )}
 
           {emPesagem.obs && (
             <div className="rounded-lg border-2 border-blue-800 bg-blue-700 px-4 py-3 space-y-2 shadow-md">
@@ -398,30 +475,54 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             Fila de pesagem ({emAberto.length})
           </h2>
           <div className="space-y-2">
-            {emAberto.map((ordem, i) => (
-              <div key={ordem.id} className="bg-card rounded-lg border p-3 flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-status-open-bg text-status-open font-bold text-sm shrink-0">
-                  {i + 1}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                    Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
-                    <MarcaBadge marca={ordem.marca} size="sm" />
+            {emAberto.map((ordem, i) => {
+              const pausada = (ordem as any).bateladas_feitas > 0;
+              const obsPausa = (ordem as any).obs_pausa as string | null;
+              return (
+                <div key={ordem.id} className="bg-card rounded-lg border p-3 flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-status-open-bg text-status-open font-bold text-sm shrink-0">
+                    {i + 1}
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium truncate">{ordem.produto}</span>
+                      {pausada && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap">
+                          <PauseCircle className="h-3 w-3" />
+                          Pausada — bat. {(ordem as any).bateladas_feitas}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                      Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
+                      <MarcaBadge marca={ordem.marca} size="sm" />
+                    </div>
+                    {pausada && obsPausa && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 truncate" title={obsPausa}>{obsPausa}</p>
+                    )}
+                  </div>
+                  {!emPesagem && (
+                    <Button
+                      variant="outline"
+                      onClick={() => iniciarPesagem(ordem)}
+                      className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
+                    >
+                      {pausada ? (
+                        <>
+                          <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
+                          Retomar
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
+                          Iniciar Pesagem
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
-                {!emPesagem && (
-                  <Button
-                    variant="outline"
-                    onClick={() => iniciarPesagem(ordem)}
-                    className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
-                  >
-                    <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
-                    Iniciar Pesagem
-                  </Button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
