@@ -1462,17 +1462,26 @@ export default function PainelProgramacao() {
     return map;
   }, [ordens]);
 
+  const prevRegistrosPorLinhaRef = useRef<Record<number, Record<string, any[]>>>({});
   const registrosPorLinha = useMemo(() => {
-    const result: Record<number, Record<string, any[]>> = {};
+    const map: Record<number, Record<string, any[]>> = {};
     for (let l = 1; l <= 5; l++) {
-      const subset: Record<string, any[]> = {};
+      const prev = prevRegistrosPorLinhaRef.current[l];
+      const next: Record<string, any[]> = {};
       for (const op of ordensPerLinha[l] ?? []) {
         const regs = registrosDoDia[op.id];
-        if (regs) subset[op.id] = regs;
+        if (regs) next[op.id] = regs;
       }
-      result[l] = subset;
+      // Preserva referência se nenhum registro desta linha mudou — evita re-render das colunas não afetadas
+      const nextKeys = Object.keys(next);
+      map[l] = (
+        prev &&
+        nextKeys.length === Object.keys(prev).length &&
+        nextKeys.every((k) => next[k] === prev[k])
+      ) ? prev : next;
     }
-    return result;
+    prevRegistrosPorLinhaRef.current = map;
+    return map;
   }, [registrosDoDia, ordensPerLinha]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
