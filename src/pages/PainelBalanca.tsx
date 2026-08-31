@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { toast } from "@/hooks/use-toast";
-import { imprimirEtiqueta } from "@/lib/printEtiqueta";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -177,19 +176,24 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             <Button
               size="sm"
               variant="outline"
-              onClick={() =>
-                imprimirEtiqueta({
-                  ordemId: emPesagem.id,
-                  produto: emPesagem.produto,
-                  marca: emPesagem.marca,
-                  lote: emPesagem.lote,
-                  quantidade: emPesagem.quantidade,
-                  formulaId,
-                  tamanhoBatelada,
-                  itens: displayItens,
-                  obs: emPesagem.obs,
-                }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
-              }
+              onClick={async () => {
+                try {
+                  const { imprimirEtiqueta } = await import("@/lib/printEtiqueta");
+                  await imprimirEtiqueta({
+                    ordemId: emPesagem.id,
+                    produto: emPesagem.produto,
+                    marca: emPesagem.marca,
+                    lote: emPesagem.lote,
+                    quantidade: emPesagem.quantidade,
+                    formulaId,
+                    tamanhoBatelada,
+                    itens: displayItens,
+                    obs: emPesagem.obs,
+                  });
+                } catch {
+                  toast({ title: "Erro ao gerar etiqueta", variant: "destructive" });
+                }
+              }}
             >
               <Printer className="h-3.5 w-3.5 mr-1" />
               Etiqueta

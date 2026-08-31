@@ -8,7 +8,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CheckCircle2, Loader2, FlaskConical, Layers, Play, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { imprimirEtiqueta } from "@/lib/printEtiqueta";
 
 interface FormulaRow {
   sequencia: number | null;
@@ -159,23 +158,28 @@ export default function PainelMistura() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() =>
-                imprimirEtiqueta({
-                  ordemId: emMistura.id,
-                  produto: emMistura.produto,
-                  marca: emMistura.marca,
-                  lote: emMistura.lote,
-                  quantidade: emMistura.quantidade,
-                  formulaId: emMistura.formula_id,
-                  tamanhoBatelada: emMistura.tamanho_batelada,
-                  itens: displayItens.map((i) => ({
-                    sequencia: i.sequencia,
-                    materia_prima: i.materia_prima,
-                    quantidade_kg: i.quantidade_kg,
-                  })),
-                  obs: emMistura.obs,
-                }).catch(() => toast({ title: "Erro ao gerar etiqueta", variant: "destructive" }))
-              }
+              onClick={async () => {
+                try {
+                  const { imprimirEtiqueta } = await import("@/lib/printEtiqueta");
+                  await imprimirEtiqueta({
+                    ordemId: emMistura.id,
+                    produto: emMistura.produto,
+                    marca: emMistura.marca,
+                    lote: emMistura.lote,
+                    quantidade: emMistura.quantidade,
+                    formulaId: emMistura.formula_id,
+                    tamanhoBatelada: emMistura.tamanho_batelada,
+                    itens: displayItens.map((i) => ({
+                      sequencia: i.sequencia,
+                      materia_prima: i.materia_prima,
+                      quantidade_kg: i.quantidade_kg,
+                    })),
+                    obs: emMistura.obs,
+                  });
+                } catch {
+                  toast({ title: "Erro ao gerar etiqueta", variant: "destructive" });
+                }
+              }}
             >
               <Printer className="h-3.5 w-3.5 mr-1" />
               Etiqueta

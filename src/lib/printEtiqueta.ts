@@ -1,18 +1,15 @@
+// Impressão de etiqueta PDF via jsPDF — carregue este módulo via dynamic import()
+// para não incluir jsPDF e a fonte Anton (~593 KB) no bundle inicial.
+//
+// As funções ZPL (sem dependências pesadas) ficam em printZpl.ts e podem
+// ser importadas normalmente.
+
 import { jsPDF } from "jspdf";
 import { ANTON_FONT_BASE64 } from "./antonFont";
 
-export interface EtiquetaData {
-  ordemId: string;
-  produto: string;
-  marca: string | null | undefined;
-  lote: number | string;
-  quantidade: number;
-  formulaId?: string | null | undefined;
-  tamanhoBatelada: number | null | undefined;
-  itens?: { sequencia: number | null; materia_prima: string; quantidade_kg: number }[];
-  obs?: string | null | undefined;
-  dataProd?: string;
-}
+export type { EtiquetaData, EtiquetaLiberacaoData } from "./printZpl";
+export { gerarZplLiberacao, gerarZplBalancaMistura, sanitizeZpl } from "./printZpl";
+import type { EtiquetaData } from "./printZpl";
 
 const fmtKg0 = (n: number) =>
   n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -27,7 +24,6 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
 
   doc.addFileToVFS("Anton-Regular.ttf", ANTON_FONT_BASE64);
   doc.addFont("Anton-Regular.ttf", "Anton", "normal");
-
 
   const dataProd =
     data.dataProd ??
@@ -117,8 +113,6 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
   doc.line(PAD, sepY, W - PAD, sepY);
 
   // ── Campos de dados: 2 colunas × 2 linhas ────────────────────────────────
-  // Esquerda: LOTE (cima) + QUANTIDADE (baixo)
-  // Direita:  BATELADAS (cima) + PRODUÇÃO (baixo)
   const colMid = W / 2;
   const leftX  = PAD + (colMid - PAD) / 2;
   const rightX = colMid + (W - PAD - colMid) / 2;
@@ -140,7 +134,6 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
     doc.text(value, cx, valueY, { align: "center" });
   };
 
-  // Linha divisória vertical entre colunas
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.2);
   doc.line(colMid, sepY + 2, colMid, H - PAD);
@@ -160,143 +153,4 @@ export async function imprimirEtiqueta(data: EtiquetaData) {
   doc.roundedRect(0.5, 0.5, W - 1, H - 1, 1, 1, "S");
 
   doc.output("dataurlnewwindow");
-}
-
-// ── Etiqueta de Liberação — ZPL para Zebra ZD220 (106×65mm / 832×512 dots) ──
-
-export interface EtiquetaLiberacaoData {
-  produto: string;
-  lote: string | number;
-  formula_id?: string | null;
-  data_conclusao?: string | null;
-  registros: Array<{
-    registro_producao: Array<{ qty: number; peso: number }> | null | undefined;
-  }>;
-}
-
-// Transliterar acentos e remover caracteres ZPL especiais
-function sanitizeZpl(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[~^]/g, "");
-}
-
-export function gerarZplLiberacao(params: EtiquetaLiberacaoData): string {
-  const { produto, lote, formula_id, data_conclusao, registros } = params;
-
-  const allItems: Array<{ qty: number; peso: number }> = [];
-  registros.forEach((r) => {
-    const items = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-    items.filter((it) => (it.qty ?? 0) > 0 || (it.peso ?? 0) > 0).forEach((it) => allItems.push(it));
-  });
-
-  const totalKg = allItems.reduce((s, it) => s + (it.qty || 0) * (it.peso || 0), 0);
-
-  const fmtPeso = (n: number) =>
-    n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-
-  const dateFmt = data_conclusao
-    ? new Date(data_conclusao).toLocaleDateString("pt-BR")
-    : new Date().toLocaleDateString("pt-BR");
-
-  const prodSafe    = sanitizeZpl(produto);
-  const formulaSafe = formula_id ? sanitizeZpl(String(formula_id)) : "---";
-  const loteSafe    = sanitizeZpl(String(lote));
-
-  // Coluna direita: itens de produção empilhados a partir de Y=280
-  // Espaçamento 52 dots por linha com fonte 45×45 → caem 4-5 itens até Y=495
-  const KG_X = 400;
-  const KG_Y_START = 280;
-  const KG_LINE_H = 52;
-  const KG_MAX_Y = 460;
-
-  const kgLines: string[] = [];
-
-  // Cabeçalho "KG" na coluna direita
-  kgLines.push(`^FO${KG_X},${KG_Y_START - 55}^A0N,35,35^FDKG^FS`);
-
-  // Linha separadora vertical entre colunas
-  kgLines.push(`^FO395,130^GB2,375,2^FS`);
-
-  if (allItems.length === 0) {
-    kgLines.push(`^FO${KG_X},${KG_Y_START}^A0N,45,45^FD---^FS`);
-  } else {
-    allItems.forEach((it, i) => {
-      const y = KG_Y_START + i * KG_LINE_H;
-      if (y <= KG_MAX_Y) {
-        kgLines.push(
-          `^FO${KG_X},${y}^A0N,45,45^FD${it.qty}x ${fmtPeso(it.peso)} kg^FS`
-        );
-      }
-    });
-    // Total apenas quando há mais de um item
-    if (allItems.length > 1) {
-      const totalY = Math.min(KG_Y_START + allItems.length * KG_LINE_H + 6, 470);
-      kgLines.push(
-        `^FO${KG_X},${totalY}^A0N,38,38^FDTOTAL: ${fmtPeso(totalKg)} kg^FS`
-      );
-    }
-  }
-
-  const lines: string[] = [
-    "^XA",
-    "^PW832",
-    "^LL512",
-    // ── Cabeçalho preto ──────────────────────────────────────
-    "^FO0,0^GB832,120,120^FS",
-    // Texto branco (^FR = field reverse)
-    `^FO20,20^A0N,55,55^FR^FDZan Collor Masterbatches^FS`,
-    // ── Coluna esquerda ──────────────────────────────────────
-    `^FO20,140^A0N,40,40^FDCod.: ${formulaSafe}^FS`,
-    `^FO20,190^A0N,40,40^FDProd: ${prodSafe}^FS`,
-    `^FO20,240^A0N,40,40^FDLote: ${loteSafe}   24 MESES^FS`,
-    `^FO20,300^A0N,35,35^FD${dateFmt}^FS`,
-    // ── Coluna direita (KG) ───────────────────────────────────
-    ...kgLines,
-    "^XZ",
-  ];
-
-  return lines.join("\n");
-}
-
-// ── Etiqueta de Balança/Mistura — ZPL para Zebra ZD220 (106×65mm / 832×512 dots) ──
-
-export function gerarZplBalancaMistura(data: EtiquetaData): string {
-  const dataProd =
-    data.dataProd ??
-    new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-
-  const nBateladas =
-    data.tamanhoBatelada && data.tamanhoBatelada > 0
-      ? Math.round(data.quantidade / data.tamanhoBatelada)
-      : null;
-
-  const marcaSafe = sanitizeZpl(
-    data.marca === "Zan Collor" ? "Zan Collor Masterbatches" : data.marca ? data.marca : "---"
-  );
-  const prodSafe    = sanitizeZpl(data.produto);
-  const formulaSafe = data.formulaId ? sanitizeZpl(String(data.formulaId)) : "---";
-  const loteSafe    = sanitizeZpl(String(data.lote));
-  const batStr      = nBateladas && data.tamanhoBatelada
-    ? `${nBateladas}x ${data.tamanhoBatelada} kg`
-    : "---";
-
-  const lines: string[] = [
-    "^XA",
-    "^PW832",
-    "^LL512",
-    "^FO0,0^GB832,120,120^FS",
-    `^FO20,20^A0N,55,55^FR^FD${marcaSafe}^FS`,
-    `^FO20,140^A0N,40,40^FDCod.: ${formulaSafe}^FS`,
-    `^FO20,190^A0N,40,40^FDProd: ${prodSafe}^FS`,
-    `^FO20,240^A0N,40,40^FDLote: ${loteSafe}   24 MESES^FS`,
-    `^FO20,300^A0N,35,35^FD${dataProd}^FS`,
-    `^FO400,225^A0N,35,35^FDKG^FS`,
-    `^FO395,130^GB2,375,2^FS`,
-    `^FO400,280^A0N,45,45^FD${batStr}^FS`,
-    "^XZ",
-  ];
-
-  return lines.join("\n");
 }

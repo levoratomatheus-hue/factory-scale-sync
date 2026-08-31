@@ -15,7 +15,6 @@ import {
   Loader2, Search, PackageOpen, ArrowDownToLine, ArrowUpToLine, SlidersHorizontal,
   History, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp, Plus,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -544,7 +543,8 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
 
   // ── Exportar ─────────────────────────────────────────────────────────────────
 
-  const handleExportar = () => {
+  const handleExportar = async () => {
+    const XLSX = await import('xlsx');
     const rows = estoque.map((e) => ({
       'Matéria-Prima': e.materia_prima,
       'Cód. PG': e.cod_pg,

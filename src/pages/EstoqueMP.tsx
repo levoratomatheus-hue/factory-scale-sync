@@ -15,7 +15,6 @@ import {
   Loader2, Search, PackageOpen, ArrowDownToLine, ArrowUpToLine, SlidersHorizontal,
   History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp, Plus,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -483,8 +482,9 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(ev.target!.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
@@ -603,7 +603,8 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
 
   // ── Exportar ─────────────────────────────────────────────────────────────────
 
-  const handleExportar = () => {
+  const handleExportar = async () => {
+    const XLSX = await import('xlsx');
     const rows = estoque.map((e) => ({
       'Matéria-Prima': e.materia_prima,
       'Cód. TID': e.cod_tid,

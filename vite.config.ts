@@ -35,6 +35,10 @@ export default defineConfig(({ mode }) => ({
             '@radix-ui/react-select',
             '@radix-ui/react-tabs',
           ],
+          // Bibliotecas pesadas carregadas sob demanda (dynamic import)
+          // — ficam em chunks separados e só baixam quando o usuário aciona a função
+          'xlsx': ['xlsx'],
+          'jspdf': ['jspdf'],
         },
       },
     },

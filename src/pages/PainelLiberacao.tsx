@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { gerarZplLiberacao } from "@/lib/printEtiqueta";
+import { gerarZplLiberacao } from "@/lib/printZpl";
 import { ptBR } from "date-fns/locale";
 import {
   AlertDialog,
