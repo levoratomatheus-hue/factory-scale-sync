@@ -784,10 +784,12 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-8 text-sm" disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Salvar Ordem
-            </Button>
+            <div className="flex justify-end">
+              <Button type="submit" className="px-6 text-sm" disabled={saving}>
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar Ordem
+              </Button>
+            </div>
           </form>
         </Form>
         </div>
