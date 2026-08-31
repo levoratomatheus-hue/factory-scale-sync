@@ -480,7 +480,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
         {/* ── Coluna esquerda: formulário ── */}
         <div className="flex-1 min-w-0 w-full bg-card rounded-lg border p-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
 
             {/* Lote + Produto */}
             <div className="flex gap-2 items-end">
@@ -546,8 +546,8 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
               </div>
             </div>
 
-            {/* Marca + Requer Mistura */}
-            <div className="grid grid-cols-2 gap-2 items-end">
+            {/* Marca + Tipo de OP + Mistura */}
+            <div className="grid grid-cols-3 gap-2 items-end">
               <FormField control={form.control} name="marca" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs">Marca</FormLabel>
@@ -561,34 +561,29 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                   <FormMessage />
                 </FormItem>
               )} />
-              <div className="flex items-center justify-between rounded-md border px-2 py-1.5 h-8">
-                <span className="text-xs font-medium">Mistura</span>
-                <button type="button" role="switch" aria-checked={requerMistura}
-                  onClick={() => setRequerMistura((v) => !v)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}>
-                  <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${requerMistura ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
+              <div>
+                <label className="text-xs font-medium">Tipo de OP</label>
+                <div className="flex rounded-md border overflow-hidden text-xs mt-1 h-8">
+                  <button type="button" onClick={() => setTipoOp('venda')}
+                    className={`flex-1 transition-colors ${tipoOp === 'venda' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+                    Venda
+                  </button>
+                  <button type="button" onClick={() => setTipoOp('estoque')}
+                    className={`flex-1 border-l transition-colors ${tipoOp === 'estoque' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+                    Estoque
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* Tipo de OP */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium shrink-0">Tipo de OP:</span>
-              <div className="flex rounded-md border overflow-hidden text-xs">
-                <button
-                  type="button"
-                  onClick={() => setTipoOp('venda')}
-                  className={`px-3 py-1 transition-colors ${tipoOp === 'venda' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-                >
-                  Venda
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTipoOp('estoque')}
-                  className={`px-3 py-1 border-l transition-colors ${tipoOp === 'estoque' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-                >
-                  Estoque
-                </button>
+              <div>
+                <label className="text-xs font-medium">Mistura</label>
+                <div className="flex items-center justify-between rounded-md border px-2 mt-1 h-8">
+                  <span className="text-xs text-muted-foreground">Requer mistura</span>
+                  <button type="button" role="switch" aria-checked={requerMistura}
+                    onClick={() => setRequerMistura((v) => !v)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}>
+                    <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${requerMistura ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -774,18 +769,18 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
             {/* Adições para mistura */}
             <div>
               <label className="text-xs font-medium">Adições para Mistura</label>
-              <div className="mt-1 space-y-1">
+              <div className="mt-1 space-y-0.5">
                 {obsItems.map((row, i) => (
-                  <div key={i} className="flex gap-1.5 items-center">
+                  <div key={i} className="flex gap-1 items-center">
                     <input type="text" inputMode="numeric" value={row.qty}
                       onChange={(e) => { const val = e.target.value.replace(/[^0-9]/g, ''); setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r)); }}
                       placeholder="0"
-                      className="w-12 rounded-md border border-input bg-background px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-ring" />
-                    <span className="text-xs font-semibold text-muted-foreground">x</span>
+                      className="w-10 h-7 rounded border border-input bg-background px-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-ring" />
+                    <span className="text-xs text-muted-foreground select-none">×</span>
                     <input type="text" value={row.mp}
                       onChange={(e) => setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, mp: e.target.value.toUpperCase() } : r))}
                       placeholder="Matéria-Prima"
-                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring" />
+                      className="flex-1 h-7 rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
                   </div>
                 ))}
               </div>
