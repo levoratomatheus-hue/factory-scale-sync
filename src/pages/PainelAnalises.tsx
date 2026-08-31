@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, memo, createContext, useCont
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X } from "lucide-react";
+import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X, XCircle as XCircleIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -355,6 +355,18 @@ export default function PainelAnalises() {
   const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, hojeStr);
   const { paradas: paradasAnuaisRaw } = useParadasAnalises(inicioAnual, hojeStr);
 
+  // Subconjunto para cálculo de kg/h: apenas registros não-reprovados.
+  // Registros com reprovado=true, contou_volume=true (retrabalho) contam no volume
+  // mas NÃO no kg/h — o tempo deles vira parada de problema_processo.
+  const registrosDiariosKgH = useMemo(
+    () => registrosDiariosRaw.filter((r: any) => !r.reprovado),
+    [registrosDiariosRaw],
+  );
+  const registrosDiariosAnuaisKgH = useMemo(
+    () => registrosDiariosAnuaisRaw.filter((r: any) => !r.reprovado),
+    [registrosDiariosAnuaisRaw],
+  );
+
   const matchesMaterial = useCallback((o: any) => {
     if (!materialFiltro) return true;
     const q = materialFiltro.toLowerCase();
@@ -408,7 +420,8 @@ export default function PainelAnalises() {
     const hMap: Record<string, number> = {};
     const dMap: Record<number, Set<string>> = {};
     const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
-    registrosDiariosRaw.forEach((r: any) => {
+    // horasMap: apenas registros não-reprovados (retrabalho vira parada, não conta em horas de produção)
+    registrosDiariosKgH.forEach((r: any) => {
       const linhaNum = Number(r.ordens?.linha);
       const h = parseHoras(r.hora_inicio, r.hora_fim);
       if (h !== null) {
@@ -417,6 +430,10 @@ export default function PainelAnalises() {
         const horasParadas = paradasSobrepostas.reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
         hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
       }
+    });
+    // diasLinhaMap: todos os registros (inclusive retrabalho — foram dias ativos na linha)
+    registrosDiariosRaw.forEach((r: any) => {
+      const linhaNum = Number(r.ordens?.linha);
       if (linhaNum) {
         if (!dMap[linhaNum]) dMap[linhaNum] = new Set();
         dMap[linhaNum].add(r.data);
@@ -424,7 +441,7 @@ export default function PainelAnalises() {
     });
 
     return { horasMap: hMap, diasLinhaMap: dMap };
-  }, [registrosDiariosRaw, paradasIdx]);
+  }, [registrosDiariosRaw, registrosDiariosKgH, paradasIdx]);
 
   const paradas = useMemo(
     () => linhaFiltro === 0 ? paradasRaw : paradasRaw.filter((p) => Number(p.linha) === linhaFiltro),
@@ -460,7 +477,8 @@ export default function PainelAnalises() {
   const horasMapAnual = useMemo(() => {
     const hMap: Record<string, number> = {};
     const toH = (s: string | null) => { if (!s) return 0; const [h, m] = s.split(":").map(Number); return (h || 0) + (m || 0) / 60; };
-    registrosDiariosAnuaisRaw.forEach((r: any) => {
+    // Apenas registros não-reprovados — retrabalho não entra no kg/h anual
+    registrosDiariosAnuaisKgH.forEach((r: any) => {
       const h = parseHoras(r.hora_inicio, r.hora_fim);
       if (h !== null) {
         const linhaNum = Number(r.ordens?.linha);
@@ -471,7 +489,7 @@ export default function PainelAnalises() {
       }
     });
     return hMap;
-  }, [registrosDiariosAnuaisRaw, paradasAnuaisIdx]);
+  }, [registrosDiariosAnuaisKgH, paradasAnuaisIdx]);
 
   const { dadosMensais, dadosProdutividadeMensal } = useMemo(() => {
     const meses = Array.from({ length: 12 }, (_, i) => {
@@ -516,19 +534,25 @@ export default function PainelAnalises() {
         if (hDia === null || horasTotal === 0) return;
         const kgDia = qr * (hDia / horasTotal);
         mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
-        if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
-        mapaProd[chave].kg += kgDia;
-        mapaProd[chave].h += hDia;
+        // Retrabalho (reprovado+contou_volume) conta no volume mensal mas não na produtividade
+        if (!r.reprovado) {
+          if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
+          mapaProd[chave].kg += kgDia;
+          mapaProd[chave].h += hDia;
+        }
       } else {
         // Tipo A: soma de itens (comportamento atual intacto)
         const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
         const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
         mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
-        const h = parseHoras(r.hora_inicio, r.hora_fim);
-        if (h !== null) {
-          if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
-          mapaProd[chave].kg += kgDia;
-          mapaProd[chave].h += h;
+        // Retrabalho não entra na produtividade mensal
+        if (!r.reprovado) {
+          const h = parseHoras(r.hora_inicio, r.hora_fim);
+          if (h !== null) {
+            if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
+            mapaProd[chave].kg += kgDia;
+            mapaProd[chave].h += h;
+          }
         }
       }
     });
@@ -730,6 +754,42 @@ export default function PainelAnalises() {
       .map(([classe, v]) => ({ classe, kg: v.kg, media: v.h > 0 ? v.kgComH / v.h : 0, ops: v.ops.size }))
       .sort((a, b) => b.kg - a.kg);
   }, [registrosDiariosRaw, linhaFiltro, materialFiltro, ordensAnuaisIdsNoClasse, horasMap]);
+
+  // ── Retrabalho ───────────────────────────────────────────────────────────────
+  // Registros com reprovado=true e contou_volume=true: extrusado mas fora de spec,
+  // conta no volume total mas não no kg/h — OP concluída, operador cria nova OP manualmente.
+  const retrabalhoRows = useMemo(() => {
+    const mapaOrdem = new Map<string, {
+      ordem_id: string; produto: string; lote: string | null; linha: number;
+      kg: number; data_min: string; data_max: string;
+    }>();
+    registrosDiariosRaw.forEach((r: any) => {
+      if (!r.reprovado || !r.contou_volume) return;
+      if (linhaFiltro !== 0 && Number(r.ordens?.linha) !== linhaFiltro) return;
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const kgItems = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      const kg = kgItems > 0 ? kgItems : (Number(r.ordens?.quantidade_real) || 0);
+      const existing = mapaOrdem.get(r.ordem_id);
+      if (existing) {
+        existing.kg += kgItems > 0 ? kgItems : 0;
+        if (r.data < existing.data_min) existing.data_min = r.data;
+        if (r.data > existing.data_max) existing.data_max = r.data;
+      } else {
+        mapaOrdem.set(r.ordem_id, {
+          ordem_id: r.ordem_id,
+          produto: r.ordens?.produto ?? "—",
+          lote: r.ordens?.lote ?? null,
+          linha: Number(r.ordens?.linha) || 0,
+          kg,
+          data_min: r.data,
+          data_max: r.data,
+        });
+      }
+    });
+    return [...mapaOrdem.values()].sort((a, b) => b.data_max.localeCompare(a.data_max));
+  }, [registrosDiariosRaw, linhaFiltro]);
+
+  const totalKgRetrabalho = useMemo(() => retrabalhoRows.reduce((s, r) => s + r.kg, 0), [retrabalhoRows]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -1538,6 +1598,77 @@ export default function PainelAnalises() {
                 </div>
               </div>
 
+            </div>
+          </div>
+
+          {/* ── Relatório de Retrabalho ── */}
+          <div style={{ marginTop: "2rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 32, width: 32, borderRadius: "0.5rem", background: "#DC262618", flexShrink: 0 }}>
+                <XCircleIcon size={16} style={{ color: D.red }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, color: D.text, margin: 0 }}>Retrabalho</h3>
+                <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>
+                  OPs reprovadas que contaram volume — extrusadas mas fora de especificação · {descPeriodo}
+                </p>
+              </div>
+              {retrabalhoRows.length > 0 && (
+                <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                  <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Total de retrabalho</p>
+                  <p style={{ fontSize: "1.125rem", fontWeight: 700, color: D.red, margin: 0, fontFamily: "monospace" }}>
+                    {totalKgRetrabalho.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
+                  </p>
+                </div>
+              )}
+            </div>
+            <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden", background: D.card }}>
+              {retrabalhoRows.length === 0 ? (
+                <div style={{ padding: "2rem", textAlign: "center", color: D.muted, fontSize: 13 }}>
+                  Nenhum retrabalho no período{linhaFiltro !== 0 ? ` · Linha ${linhaFiltro}` : ""}
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", fontSize: "0.8125rem", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${D.border}`, background: D.cardAlt }}>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Produto</th>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Lote</th>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "center", fontWeight: 600, color: D.muted, fontSize: 11 }}>Linha</th>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Data</th>
+                        <th style={{ padding: "0.625rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>kg retrabalho</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {retrabalhoRows.map((row) => (
+                        <tr key={row.ordem_id} style={{ borderBottom: `1px solid ${D.border}` }}>
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontWeight: 500, fontSize: 12 }}>{row.produto}</td>
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{row.lote ?? "—"}</td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", color: D.muted, fontSize: 12 }}>{row.linha || "—"}</td>
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontSize: 11, fontFamily: "monospace" }}>
+                            {row.data_min === row.data_max
+                              ? format(new Date(row.data_min + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })
+                              : `${format(new Date(row.data_min + "T12:00:00"), "dd/MM", { locale: ptBR })} – ${format(new Date(row.data_max + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}`}
+                          </td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 700, color: D.red, fontSize: 12, fontFamily: "monospace" }}>
+                            {row.kg.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: `2px solid ${D.border}`, background: D.cardAlt }}>
+                        <td colSpan={4} style={{ padding: "0.5rem 0.75rem", fontWeight: 600, color: D.muted, fontSize: 11 }}>
+                          Total · {retrabalhoRows.length} OP{retrabalhoRows.length !== 1 ? "s" : ""}
+                        </td>
+                        <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 700, color: D.red, fontSize: 13, fontFamily: "monospace" }}>
+                          {totalKgRetrabalho.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </>

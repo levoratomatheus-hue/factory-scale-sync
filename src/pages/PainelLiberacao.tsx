@@ -70,6 +70,7 @@ export default function PainelLiberacao() {
   const [prodItemsEdit, setProdItemsEdit] = useState<Record<string, Array<{ qty: string; peso: string }>>>({});
   const [liberarOrdem, setLiberarOrdem] = useState<any | null>(null);
   const [reprovarOrdem, setReprovarOrdem] = useState<any | null>(null);
+  const [reprovarTipo, setReprovarTipo] = useState<"normal" | "contando_volume">("normal");
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
   const [editOrdem, setEditOrdem] = useState<any | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
@@ -545,6 +546,74 @@ export default function PainelLiberacao() {
     setMotivoReprovacao("");
   };
 
+  // Reprovar contando volume: OP conclui (não volta pra linha), kg conta no volume total
+  // mas NÃO no kg/h (o tempo vira parada de problema_processo, como na reprovação normal).
+  const reprovarContandoVolume = async (ordem: any) => {
+    const regs = registrosPorOrdem[ordem.id] ?? [];
+
+    if (regs.length > 0) {
+      // Gera paradas de problema_processo (igual à reprovação normal)
+      const paradasPayload = regs
+        .filter((r) => r.hora_inicio && r.hora_fim)
+        .map((r) => ({
+          linha: ordem.linha,
+          data: r.data,
+          motivo: "problema_processo",
+          hora_inicio: r.hora_inicio,
+          hora_fim: r.hora_fim,
+        }));
+      if (paradasPayload.length > 0) {
+        await (supabase as any).from("paradas").insert(paradasPayload);
+      }
+
+      // Marca os registros como reprovado=true E contou_volume=true
+      const idsRegs = regs.map((r: any) => r.id).filter(Boolean);
+      if (idsRegs.length > 0) {
+        await (supabase as any)
+          .from("registros_diarios")
+          .update({ reprovado: true, contou_volume: true })
+          .in("id", idsRegs);
+      }
+    }
+
+    const hoje = new Date().toISOString().split("T")[0];
+    const raw = qtdReal[ordem.id] ?? "";
+    const parsed = parseFloat(raw.replace(",", "."));
+
+    // OP conclui (status = concluido), preserva quantidade_real
+    const { error } = await supabase
+      .from("ordens")
+      .update({
+        status: "concluido",
+        data_conclusao: new Date().toISOString(),
+        motivo_reprovacao: motivoReprovacao.trim() || null,
+        data_reprovacao: hoje,
+        ...(isNaN(parsed) ? {} : { quantidade_real: parsed }),
+      } as any)
+      .eq("id", ordem.id);
+
+    if (error) {
+      toast({ title: "Erro ao reprovar ordem", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    supabase.from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: "aguardando_liberacao",
+      status_novo: "concluido",
+    });
+
+    setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
+    setQtdReal((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setRegistrosPorOrdem((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraInicioEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraFimEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setProdItemsEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setMotivoReprovacao("");
+
+    toast({ title: "OP reprovada — volume contabilizado", description: "A OP foi concluída. O kg entra no volume total mas não no kg/h. Crie uma nova OP para refazer o material.", duration: 6000 });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -914,7 +983,7 @@ export default function PainelLiberacao() {
                     size="sm"
                     variant="outline"
                     className="border-red-300 text-red-600 hover:bg-red-50"
-                    onClick={() => { setReprovarOrdem(ordem); setMotivoReprovacao(""); }}
+                    onClick={() => { setReprovarOrdem(ordem); setReprovarTipo("normal"); setMotivoReprovacao(""); }}
                   >
                     <XCircle className="mr-1 h-4 w-4" />
                     Reprovar
@@ -1442,12 +1511,37 @@ export default function PainelLiberacao() {
 
       {/* Dialog — Reprovar */}
       <AlertDialog open={!!reprovarOrdem} onOpenChange={(open) => !open && setReprovarOrdem(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Reprovar ordem</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{reprovarOrdem?.produto}</strong> (Lote {reprovarOrdem?.lote}) voltará para{" "}
-              <strong>Aguardando Linha</strong>. Os registros diários serão mantidos e as paradas registradas automaticamente.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  <strong>{reprovarOrdem?.produto}</strong> (Lote {reprovarOrdem?.lote}) — escolha como reprovar:
+                </p>
+                {/* Opção 1 */}
+                <button
+                  type="button"
+                  onClick={() => setReprovarTipo("normal")}
+                  className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${reprovarTipo === "normal" ? "border-red-500 bg-red-50 dark:bg-red-900/20" : "border-muted hover:border-red-300 dark:border-gray-600"}`}
+                >
+                  <p className="font-semibold text-red-700 dark:text-red-400">Reprovar — volta pra linha</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    kg <strong>não conta</strong> em nenhum lugar. OP retorna para Aguardando Linha para reprocesso. Parada de processo registrada automaticamente.
+                  </p>
+                </button>
+                {/* Opção 2 */}
+                <button
+                  type="button"
+                  onClick={() => setReprovarTipo("contando_volume")}
+                  className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${reprovarTipo === "contando_volume" ? "border-orange-500 bg-orange-50 dark:bg-orange-900/20" : "border-muted hover:border-orange-300 dark:border-gray-600"}`}
+                >
+                  <p className="font-semibold text-orange-700 dark:text-orange-400">Reprovar e concluir — contar volume</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    O material foi extrusado e <strong>existe fisicamente</strong>. kg conta no volume total (mas <strong>não</strong> no kg/h). OP é <strong>concluída</strong> (não volta pra linha). Crie uma nova OP manualmente para refazer.
+                  </p>
+                </button>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-6 pb-2 space-y-1">
@@ -1460,14 +1554,25 @@ export default function PainelLiberacao() {
               className="w-full rounded-md border border-input dark:border-gray-600 bg-background dark:bg-gray-800 dark:text-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="gap-2 flex-wrap">
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={async () => { await reprovar(reprovarOrdem); setReprovarOrdem(null); }}
-            >
-              Reprovar
-            </AlertDialogAction>
+            {reprovarTipo === "normal" ? (
+              <AlertDialogAction
+                className="bg-red-600 hover:bg-red-700"
+                onClick={async () => { await reprovar(reprovarOrdem); setReprovarOrdem(null); }}
+              >
+                <XCircle className="mr-1 h-4 w-4" />
+                Reprovar — volta pra linha
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogAction
+                className="bg-orange-600 hover:bg-orange-700"
+                onClick={async () => { await reprovarContandoVolume(reprovarOrdem); setReprovarOrdem(null); }}
+              >
+                <XCircle className="mr-1 h-4 w-4" />
+                Reprovar e concluir — contar volume
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

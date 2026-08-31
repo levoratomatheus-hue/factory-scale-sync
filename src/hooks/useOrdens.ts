@@ -279,10 +279,10 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
   const fetchRegistros = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("registros_diarios")
-      .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, ordens(linha, quantidade, quantidade_real, formula_id, produto)")
+      .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, reprovado, contou_volume, ordens(linha, quantidade, quantidade_real, formula_id, produto, lote)")
       .gte("data", dataInicio)
       .lte("data", dataFim)
-      .eq("reprovado", false)
+      .or("reprovado.eq.false,contou_volume.eq.true")
       .limit(50000);
     if (!error && data) setRegistros(data);
   }, [dataInicio, dataFim]);
