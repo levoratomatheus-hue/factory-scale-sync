@@ -284,14 +284,30 @@ function MpInput({
     if (debRef.current) clearTimeout(debRef.current);
     if (v.trim().length < 2) { setSugestoes([]); setShow(false); return; }
     debRef.current = setTimeout(async () => {
-      const { data } = await (supabase as any)
-        .from("estoque_mp")
-        .select("cod_tid, materia_prima")
-        .or(`materia_prima.ilike.%${v.trim()}%,cod_tid.ilike.%${v.trim()}%`)
-        .order("materia_prima")
-        .limit(15);
-      setSugestoes((data ?? []) as MpSug[]);
-      setShow((data ?? []).length > 0);
+      const q = v.trim();
+      const [{ data: zc }, { data: pg }] = await Promise.all([
+        (supabase as any)
+          .from("estoque_mp")
+          .select("cod_tid, materia_prima")
+          .or(`materia_prima.ilike.%${q}%,cod_tid.ilike.%${q}%`)
+          .order("materia_prima")
+          .limit(10),
+        (supabase as any)
+          .from("estoque_mp_pg")
+          .select("cod_pg, materia_prima")
+          .or(`materia_prima.ilike.%${q}%,cod_pg.ilike.%${q}%`)
+          .order("materia_prima")
+          .limit(10),
+      ]);
+      const combined: MpSug[] = [
+        ...((zc ?? []) as MpSug[]),
+        ...((pg ?? []) as { cod_pg: string; materia_prima: string }[]).map((r) => ({
+          cod_tid: r.cod_pg,
+          materia_prima: r.materia_prima,
+        })),
+      ].slice(0, 15);
+      setSugestoes(combined);
+      setShow(combined.length > 0);
     }, 250);
   }
 
@@ -795,6 +811,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       materia_prima: it.materia_prima.trim(),
       cod_tid: it.cod_tid ?? null,
       percentual: parseFloat(it.percentual),
+      eh_reaproveitado: false,
     }));
 
     setFormSaving(true);
