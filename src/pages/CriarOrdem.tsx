@@ -494,7 +494,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
             {/* Lote + Qtd + Batelada (cond.) + Dt. Emissão */}
             <div className="flex gap-1.5 items-end flex-wrap">
               <FormField control={form.control} name="lote" render={({ field }) => (
-                <FormItem className="w-28 shrink-0">
+                <FormItem className="w-36 shrink-0">
                   <FormLabel className="text-xs">Lote</FormLabel>
                   <div className="flex gap-1">
                     <FormControl>
@@ -509,21 +509,21 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                 </FormItem>
               )} />
               <FormField control={form.control} name="quantidade" render={({ field }) => (
-                <FormItem className="w-24 shrink-0">
+                <FormItem className="w-20 shrink-0">
                   <FormLabel className="text-xs">Qtd (kg)</FormLabel>
                   <FormControl><Input className="h-7 text-xs" type="number" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               {loteEncontrado === true && (
-                <div className="w-24 shrink-0">
+                <div className="w-22 shrink-0">
                   <label className="text-xs font-medium">Batelada (kg)</label>
                   <Input className="h-7 text-xs mt-0.5" type="number" inputMode="decimal" value={tamanhoBatelada ?? ''}
                     onWheel={(e) => e.currentTarget.blur()}
                     onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); setItensSdrId(null); }} />
                 </div>
               )}
-              <div className="w-32 shrink-0">
+              <div className="w-40 shrink-0">
                 <label className="text-xs font-medium">Dt. Emissão</label>
                 <Input className="h-7 text-xs mt-0.5" type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} />
               </div>
