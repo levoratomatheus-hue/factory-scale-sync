@@ -480,32 +480,53 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
         {/* ── Coluna esquerda: formulário ── */}
         <div className="flex-1 min-w-0 w-full bg-card rounded-lg border p-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1.5">
 
-            {/* Lote + Produto */}
-            <div className="flex gap-2 items-end">
+            {/* Produto */}
+            <FormField control={form.control} name="produto" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Produto</FormLabel>
+                <FormControl><Input className="h-7 text-xs" placeholder="Nome do produto" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Lote + Qtd + Batelada (cond.) + Dt. Emissão */}
+            <div className="flex gap-1.5 items-end flex-wrap">
               <FormField control={form.control} name="lote" render={({ field }) => (
-                <FormItem className="w-36 shrink-0">
+                <FormItem className="w-28 shrink-0">
                   <FormLabel className="text-xs">Lote</FormLabel>
                   <div className="flex gap-1">
                     <FormControl>
-                      <Input className="h-8 text-sm" placeholder="31706" {...field}
+                      <Input className="h-7 text-xs" placeholder="31706" {...field}
                         onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarLote())} />
                     </FormControl>
-                    <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => buscarLote()} disabled={buscando}>
-                      {buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                    <Button type="button" variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={() => buscarLote()} disabled={buscando}>
+                      {buscando ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
                     </Button>
                   </div>
                   <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="produto" render={({ field }) => (
-                <FormItem className="flex-1 min-w-0">
-                  <FormLabel className="text-xs">Produto</FormLabel>
-                  <FormControl><Input className="h-8 text-sm" placeholder="Nome do produto" {...field} /></FormControl>
+              <FormField control={form.control} name="quantidade" render={({ field }) => (
+                <FormItem className="w-24 shrink-0">
+                  <FormLabel className="text-xs">Qtd (kg)</FormLabel>
+                  <FormControl><Input className="h-7 text-xs" type="number" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
+              {loteEncontrado === true && (
+                <div className="w-24 shrink-0">
+                  <label className="text-xs font-medium">Batelada (kg)</label>
+                  <Input className="h-7 text-xs mt-0.5" type="number" inputMode="decimal" value={tamanhoBatelada ?? ''}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); setItensSdrId(null); }} />
+                </div>
+              )}
+              <div className="w-32 shrink-0">
+                <label className="text-xs font-medium">Dt. Emissão</label>
+                <Input className="h-7 text-xs mt-0.5" type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} />
+              </div>
             </div>
 
             {/* Feedback do lote */}
@@ -523,36 +544,13 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
               </div>
             )}
 
-            {/* Quantidade + Batelada + Dt. Emissão */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <FormField control={form.control} name="quantidade" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Qtd (kg)</FormLabel>
-                  <FormControl><Input className="h-8 text-sm" type="number" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()} {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              {loteEncontrado === true && (
-                <div>
-                  <label className="text-xs font-medium">Batelada (kg)</label>
-                  <Input className="h-8 text-sm mt-1" type="number" inputMode="decimal" value={tamanhoBatelada ?? ''}
-                    onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); setItensSdrId(null); }} />
-                </div>
-              )}
-              <div>
-                <label className="text-xs font-medium">Dt. Emissão</label>
-                <Input className="h-8 text-sm mt-1" type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} />
-              </div>
-            </div>
-
             {/* Marca + Tipo de OP + Mistura */}
-            <div className="grid grid-cols-3 gap-2 items-end">
+            <div className="grid grid-cols-3 gap-1.5 items-end">
               <FormField control={form.control} name="marca" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs">Marca</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger className="h-7 text-xs"><SelectValue placeholder="—" /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value="Pigma">Pigma</SelectItem>
                       <SelectItem value="Zan Collor">Zan Collor</SelectItem>
@@ -563,7 +561,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
               )} />
               <div>
                 <label className="text-xs font-medium">Tipo de OP</label>
-                <div className="flex rounded-md border overflow-hidden text-xs mt-1 h-8">
+                <div className="flex rounded-md border overflow-hidden text-xs mt-0.5 h-7">
                   <button type="button" onClick={() => setTipoOp('venda')}
                     className={`flex-1 transition-colors ${tipoOp === 'venda' ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
                     Venda
@@ -576,12 +574,12 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
               </div>
               <div>
                 <label className="text-xs font-medium">Mistura</label>
-                <div className="flex items-center justify-between rounded-md border px-2 mt-1 h-8">
-                  <span className="text-xs text-muted-foreground">Requer mistura</span>
+                <div className="flex items-center justify-between rounded-md border px-2 mt-0.5 h-7">
+                  <span className="text-xs text-muted-foreground">Requer</span>
                   <button type="button" role="switch" aria-checked={requerMistura}
                     onClick={() => setRequerMistura((v) => !v)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}>
-                    <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${requerMistura ? 'translate-x-4' : 'translate-x-0'}`} />
+                    className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${requerMistura ? 'bg-primary' : 'bg-input'}`}>
+                    <span className={`pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow transition-transform ${requerMistura ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
                 </div>
               </div>
@@ -769,24 +767,24 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
             {/* Adições para mistura */}
             <div>
               <label className="text-xs font-medium">Adições para Mistura</label>
-              <div className="mt-1 space-y-0.5">
+              <div className="mt-0.5 space-y-px">
                 {obsItems.map((row, i) => (
                   <div key={i} className="flex gap-1 items-center">
                     <input type="text" inputMode="numeric" value={row.qty}
                       onChange={(e) => { const val = e.target.value.replace(/[^0-9]/g, ''); setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, qty: val } : r)); }}
                       placeholder="0"
-                      className="w-10 h-7 rounded border border-input bg-background px-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-ring" />
+                      className="w-9 h-6 rounded border border-input bg-background px-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-ring" />
                     <span className="text-xs text-muted-foreground select-none">×</span>
                     <input type="text" value={row.mp}
                       onChange={(e) => setObsItems((prev) => prev.map((r, j) => j === i ? { ...r, mp: e.target.value.toUpperCase() } : r))}
                       placeholder="Matéria-Prima"
-                      className="flex-1 h-7 rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+                      className="flex-1 h-6 rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
                   </div>
                 ))}
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={saving}>
+            <Button type="submit" className="w-full h-8 text-sm" disabled={saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar Ordem
             </Button>
