@@ -233,19 +233,24 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     if (itens.length > 0 && !window.confirm('Isso vai substituir a fórmula atual da OP. Continuar?')) return;
 
     setCopiandoSdr(true);
+    console.log('[copiarFormulaSdr] buscando itens para reaproveitamento_id:', sdr.id, '| SDR:', sdr.codigo);
     const { data: itensData, error } = await (supabase as any)
       .from('reaproveitamentos_itens')
-      .select('id, sequencia, materia_prima, cod_mp_excel, percentual')
+      .select('id, sequencia, materia_prima, cod_tid, percentual, eh_reaproveitado')
       .eq('reaproveitamento_id', sdr.id)
       .order('sequencia', { ascending: true });
     setCopiandoSdr(false);
+    console.log('[copiarFormulaSdr] resultado — itens encontrados:', itensData?.length ?? 0, '| erro:', error?.message ?? null);
 
-    if (error || !itensData) return;
+    if (error) {
+      toast({ title: 'Erro ao buscar fórmula do SDR', description: error.message, variant: 'destructive' });
+      return;
+    }
 
     const batelada = tamanhoBatelada ?? 0;
     const novosItens: import('@/hooks/useFormula').FormulaItem[] = [];
 
-    // Linha do material reaproveitado
+    // Linha do material reaproveitado (campos legados do cabeçalho do SDR)
     if (sdr.percentual_reaproveitado && sdr.percentual_reaproveitado > 0) {
       novosItens.push({
         id: `sdr-reapr-${sdr.id}`,
@@ -258,8 +263,9 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
       });
     }
 
-    // Itens adicionais
-    for (const item of itensData) {
+    // Itens adicionais (eh_reaproveitado=true indica material de origem; já tratado acima via cabeçalho)
+    for (const item of (itensData ?? [])) {
+      if (item.eh_reaproveitado) continue; // evita duplicata com a linha de material reaproveitado
       novosItens.push({
         id: `sdr-item-${item.id}`,
         sequencia: item.sequencia,
@@ -271,9 +277,15 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
       });
     }
 
+    if (novosItens.length === 0) {
+      toast({ title: 'SDR sem itens de fórmula cadastrados', description: `${sdr.codigo} não possui itens em reaproveitamentos_itens.`, variant: 'destructive' });
+      return;
+    }
+
     setItens(novosItens);
     setNomes({});
     setItensSdrId(sdr.id);
+    toast({ title: `Fórmula copiada`, description: `${novosItens.length} item(s) do ${sdr.codigo} aplicados à OP.` });
   }, [itens.length, tamanhoBatelada, setItens]);
 
   useEffect(() => {
