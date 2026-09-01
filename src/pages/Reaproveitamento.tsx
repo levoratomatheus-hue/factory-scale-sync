@@ -141,19 +141,27 @@ function fmtDate(iso: string | null): string {
   return iso.split("T")[0].split("-").reverse().join("/");
 }
 
-/** Contribuição de um material: qtd_utilizada ÷ (perc / 100) */
-function calcContribuicaoMaterial(m: Pick<ReaprovMaterial, "quantidade_material" | "quantidade_utilizada" | "percentual_reaproveitado">): number | null {
-  const qtd = m.quantidade_utilizada ?? m.quantidade_material;
-  const pct = m.percentual_reaproveitado;
-  if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
-  return qtd / (pct / 100);
+/**
+ * Produção POSSÍVEL de um material se fosse o único limitante:
+ *   producao_possivel = quantidade_disponivel / (percentual / 100)
+ * Retorna null se algum valor for inválido (evita divisão por zero).
+ */
+function calcProducaoPossivel(qtdDisponivel: number, perc: number): number | null {
+  if (!perc || perc <= 0 || !qtdDisponivel || qtdDisponivel <= 0) return null;
+  return qtdDisponivel / (perc / 100);
 }
 
-/** Produção final = soma das contribuições de todos os materiais */
+/**
+ * Produção final = MÍNIMO das produções possíveis de cada material (gargalo).
+ * O material que "acaba primeiro" limita a produção de toda a fórmula.
+ * Com material único o resultado é idêntico ao comportamento anterior.
+ */
 function calcProducaoPrevista(sdr: ReaprovFull): number | null {
   if (sdr.materiais && sdr.materiais.length > 0) {
-    const total = sdr.materiais.reduce((sum, m) => sum + (calcContribuicaoMaterial(m) ?? 0), 0);
-    return total > 0 ? total : null;
+    const possiveis = sdr.materiais
+      .map((m) => calcProducaoPossivel(m.quantidade_utilizada ?? m.quantidade_material, m.percentual_reaproveitado))
+      .filter((p): p is number => p > 0);
+    return possiveis.length > 0 ? Math.min(...possiveis) : null;
   }
   // Fallback para SDRs antigos sem entrada em reaproveitamentos_materiais
   const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_material;
@@ -162,13 +170,20 @@ function calcProducaoPrevista(sdr: ReaprovFull): number | null {
   return qtd / (pct / 100);
 }
 
-/** Produção calculada a partir de um MaterialForm no formulário */
-function calcProducaoMaterialForm(m: MaterialForm): number | null {
+/** Produção possível de um MaterialForm (preview individual no formulário) */
+function calcProducaoPossivelForm(m: MaterialForm): number | null {
   const qtd = parseFloat(m.quantidade_material) || 0;
   const qtdUtil = m.uso_opcao === "tudo" ? qtd : (parseFloat(m.quantidade_utilizada) || 0);
   const perc = parseFloat(m.percentual_reaproveitado) || 0;
-  if (!perc || perc <= 0 || !qtdUtil || qtdUtil <= 0) return null;
-  return qtdUtil / (perc / 100);
+  return calcProducaoPossivel(qtdUtil, perc);
+}
+
+/** Produção final de um conjunto de MaterialForms = MÍNIMO das possíveis (gargalo) */
+function calcProducaoFinalForm(materiais: MaterialForm[]): number | null {
+  const possiveis = materiais
+    .map((m) => calcProducaoPossivelForm(m))
+    .filter((p): p is number => p > 0);
+  return possiveis.length > 0 ? Math.min(...possiveis) : null;
 }
 
 let _keyCounter = 0;
@@ -478,12 +493,15 @@ const DetalheModal = memo(function DetalheModal({
     return [];
   }, [sdr]);
 
-  // Produção total = soma de cada contribuição
-  const producaoTotal = materiais.reduce((sum, m) => {
-    if (!m.perc || m.perc <= 0 || !m.qtdUtilizada || m.qtdUtilizada <= 0) return sum;
-    return sum + (m.qtdUtilizada / (m.perc / 100));
-  }, 0);
-  const producao = producaoTotal > 0 ? producaoTotal : null;
+  // Produção final = MÍNIMO entre materiais (gargalo limita toda a fórmula)
+  const possiveis = materiais.map((m) =>
+    (!m.perc || m.perc <= 0 || !m.qtdUtilizada || m.qtdUtilizada <= 0) ? null : m.qtdUtilizada / (m.perc / 100)
+  );
+  const possiveisValidos = possiveis.filter((p): p is number => p !== null);
+  const producao = possiveisValidos.length > 0 ? Math.min(...possiveisValidos) : null;
+  const gargaloMiIdx = producao !== null
+    ? possiveis.reduce((minI, p, i) => p !== null && (possiveis[minI] === null || p < possiveis[minI]!) ? i : minI, 0)
+    : -1;
 
   const somaItens = sdr.itens.reduce((s, i) => s + i.percentual, 0);
   const somaReaprov = materiais.reduce((s, m) => s + m.perc, 0);
@@ -531,7 +549,9 @@ const DetalheModal = memo(function DetalheModal({
             {producao !== null && (
               <p style={{ fontSize: 11, color: D.muted, margin: "0.25rem 0 0" }}>
                 Produção final prevista: <strong style={{ color: D.text }}>{formatKg(producao)}</strong>
-                {materiais.length > 1 && <span style={{ color: D.muted }}> (soma de {materiais.length} materiais)</span>}
+                {materiais.length > 1 && gargaloMiIdx >= 0 && (
+                  <span style={{ color: D.amber }}> · gargalo: {materiais[gargaloMiIdx].nome.length > 25 ? materiais[gargaloMiIdx].nome.substring(0, 25) + "…" : materiais[gargaloMiIdx].nome}</span>
+                )}
               </p>
             )}
             <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>
@@ -559,13 +579,15 @@ const DetalheModal = memo(function DetalheModal({
             <tbody>
               {/* Uma linha por material de origem */}
               {materiais.map((m, mi) => {
-                const contrib = m.perc > 0 && m.qtdUtilizada > 0 ? m.qtdUtilizada / (m.perc / 100) : null;
+                const contrib = possiveis[mi];
+                const isGargalo = materiais.length > 1 && mi === gargaloMiIdx;
                 const usandoParte = m.qtdUtilizada < m.qtdMaterial;
                 return (
-                  <tr key={mi} style={{ background: D.amberBg }}>
+                  <tr key={mi} style={{ background: D.amberBg, outline: isGargalo ? `2px solid ${D.amber}` : undefined }}>
                     <td style={{ padding: "0.45rem 0.75rem", color: D.amber, fontWeight: 600 }}>
                       {m.nome}
                       <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: D.amber, padding: "1px 5px", borderRadius: 4, border: `1px solid ${D.amberBorder}` }}>REAPR.</span>
+                      {isGargalo && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: D.amber }}>⬅ gargalo</span>}
                       {usandoParte && (
                         <span style={{ display: "block", fontSize: 10, color: D.muted, fontWeight: 400, marginTop: 1 }}>
                           {formatKg(m.qtdUtilizada)} de {formatKg(m.qtdMaterial)}
@@ -685,10 +707,14 @@ const ResultPanel = memo(function ResultPanel({
 
   const contribuicoes = materiais.map((m) => ({
     nome: m.produto_origem || `Material ${materiais.indexOf(m) + 1}`,
-    producao: calcProducaoMaterialForm(m),
+    producao: calcProducaoPossivelForm(m),
   }));
-  const totalProducao = contribuicoes.reduce((s, c) => s + (c.producao ?? 0), 0);
-  const producaoFinal = totalProducao > 0 ? totalProducao : null;
+  const producaoFinal = calcProducaoFinalForm(materiais);
+  // Gargalo = índice do material com menor produção possível
+  const gargaloIdx = producaoFinal !== null
+    ? contribuicoes.reduce((minI, c, i, arr) =>
+        c.producao !== null && (arr[minI].producao === null || c.producao < arr[minI].producao!) ? i : minI, 0)
+    : -1;
 
   return (
     <div style={{ ...makeCard(D, { marginTop: "1rem" }) }}>
@@ -705,8 +731,9 @@ const ResultPanel = memo(function ResultPanel({
           {contribuicoes.length > 1 && producaoFinal !== null && (
             <div style={{ marginTop: "0.3rem" }}>
               {contribuicoes.map((c, i) => c.producao !== null && (
-                <p key={i} style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>
+                <p key={i} style={{ fontSize: 11, color: i === gargaloIdx ? D.amber : D.muted, margin: "0.1rem 0 0" }}>
                   {c.nome.length > 20 ? c.nome.substring(0, 20) + "…" : c.nome}: {formatKg(c.producao)}
+                  {i === gargaloIdx && " ⬅ gargalo"}
                 </p>
               ))}
             </div>
@@ -749,7 +776,7 @@ function MaterialFormCard({
   const D = useContext(PaletteCtx);
   const qtd = parseFloat(mat.quantidade_material) || 0;
   const qtdUtil = mat.uso_opcao === "tudo" ? qtd : (parseFloat(mat.quantidade_utilizada) || 0);
-  const producao = calcProducaoMaterialForm(mat);
+  const producao = calcProducaoPossivelForm(mat);
   const qtdUtilMaiorQTotal = mat.uso_opcao === "parte" && parseFloat(mat.quantidade_utilizada) > qtd && qtd > 0;
 
   return (
@@ -1371,8 +1398,8 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                     <tbody>
                       {fItens.map((item, i) => {
                         const pct = parseFloat(item.percentual) || 0;
-                        // Usa produção total de todos os materiais para calcular kg do item
-                        const totalProducaoForm = fMateriais.reduce((s, m) => s + (calcProducaoMaterialForm(m) ?? 0), 0);
+                        // Usa produção final (gargalo) de todos os materiais para calcular kg do item
+                        const totalProducaoForm = calcProducaoFinalForm(fMateriais) ?? 0;
                         const kgCalc = totalProducaoForm > 0 && pct > 0 ? (pct / 100) * totalProducaoForm : null;
                         return (
                           <tr key={item._key} style={{ background: i % 2 === 0 ? "transparent" : D.cardAlt, borderBottom: `1px solid ${D.border}` }}>

@@ -118,15 +118,17 @@ function calcAtalho(id: AtalhoId): { inicio: string; fim: string } {
   return { inicio: "", fim: "" };
 }
 
-/** Produção de um SDR = soma das contribuições de cada material */
+/** Produção de um SDR = MÍNIMO entre materiais (gargalo limita a fórmula inteira) */
 function calcProducao(r: Reaprov): number | null {
   if (r.materiais && r.materiais.length > 0) {
-    const total = r.materiais.reduce((sum, m) => {
-      const qtd = m.quantidade_utilizada ?? m.quantidade_material;
-      if (!m.percentual_reaproveitado || m.percentual_reaproveitado <= 0 || !qtd || qtd <= 0) return sum;
-      return sum + (qtd / (m.percentual_reaproveitado / 100));
-    }, 0);
-    return total > 0 ? total : null;
+    const possiveis = r.materiais
+      .map((m) => {
+        const qtd = m.quantidade_utilizada ?? m.quantidade_material;
+        if (!m.percentual_reaproveitado || m.percentual_reaproveitado <= 0 || !qtd || qtd <= 0) return null;
+        return qtd / (m.percentual_reaproveitado / 100);
+      })
+      .filter((p): p is number => p !== null);
+    return possiveis.length > 0 ? Math.min(...possiveis) : null;
   }
   // Fallback para SDRs antigos sem materiais cadastrados
   const qtd = r.quantidade_utilizada ?? r.quantidade_material;
