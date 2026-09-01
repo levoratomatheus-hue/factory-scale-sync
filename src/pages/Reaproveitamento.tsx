@@ -4,7 +4,7 @@ import {
 } from "react";
 import {
   Loader2, Download, AlertTriangle, X, Recycle, Plus, Trash2,
-  ChevronLeft, Check, RotateCcw, Search, Edit2, Info,
+  ChevronLeft, Check, RotateCcw, Search, Edit2,
 } from "lucide-react";
 import { formatKg } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,6 +71,7 @@ type Reaprov = {
   codigo: string;
   produto_destino: string;
   formula_id_destino: string | null;
+  // Campos legados — mantidos para compatibilidade; fonte da verdade = reaproveitamentos_materiais
   produto_origem: string | null;
   formula_id_origem: string | null;
   quantidade_material: number;
@@ -95,13 +96,39 @@ type ReaprovItem = {
   eh_reaproveitado: boolean;
 };
 
-type ReaprovFull = Reaprov & { itens: ReaprovItem[] };
+/** Material de origem — fonte da verdade para cálculos */
+type ReaprovMaterial = {
+  id: string;
+  reaproveitamento_id: string;
+  sequencia: number;
+  produto_origem: string;
+  formula_id_origem: string | null;
+  quantidade_material: number;
+  quantidade_utilizada: number | null;
+  percentual_reaproveitado: number;
+};
+
+type ReaprovFull = Reaprov & {
+  itens: ReaprovItem[];
+  materiais: ReaprovMaterial[];
+};
 
 type ItemForm = {
   _key: string;
   materia_prima: string;
   cod_tid: string | null;
   percentual: string;
+};
+
+/** Representa um material de origem no formulário */
+type MaterialForm = {
+  _key: string;
+  produto_origem: string;
+  formula_id_origem: string | null;
+  quantidade_material: string;
+  uso_opcao: "tudo" | "parte";
+  quantidade_utilizada: string;
+  percentual_reaproveitado: string;
 };
 
 type MpSug = { cod_tid: string; materia_prima: string };
@@ -114,17 +141,34 @@ function fmtDate(iso: string | null): string {
   return iso.split("T")[0].split("-").reverse().join("/");
 }
 
-/** Produção final = quantidade_utilizada ÷ (percentual_reaproveitado / 100) */
-function calcProducaoPrevista(sdr: Pick<Reaprov, "quantidade_material" | "quantidade_utilizada" | "percentual_reaproveitado">): number | null {
+/** Contribuição de um material: qtd_utilizada ÷ (perc / 100) */
+function calcContribuicaoMaterial(m: Pick<ReaprovMaterial, "quantidade_material" | "quantidade_utilizada" | "percentual_reaproveitado">): number | null {
+  const qtd = m.quantidade_utilizada ?? m.quantidade_material;
+  const pct = m.percentual_reaproveitado;
+  if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
+  return qtd / (pct / 100);
+}
+
+/** Produção final = soma das contribuições de todos os materiais */
+function calcProducaoPrevista(sdr: ReaprovFull): number | null {
+  if (sdr.materiais && sdr.materiais.length > 0) {
+    const total = sdr.materiais.reduce((sum, m) => sum + (calcContribuicaoMaterial(m) ?? 0), 0);
+    return total > 0 ? total : null;
+  }
+  // Fallback para SDRs antigos sem entrada em reaproveitamentos_materiais
   const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_material;
   const pct = sdr.percentual_reaproveitado;
   if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
   return qtd / (pct / 100);
 }
 
-function calcProducaoPrevistaForm(qtdUtilizada: number, percReaprov: number): number | null {
-  if (!percReaprov || percReaprov <= 0 || !qtdUtilizada || qtdUtilizada <= 0) return null;
-  return qtdUtilizada / (percReaprov / 100);
+/** Produção calculada a partir de um MaterialForm no formulário */
+function calcProducaoMaterialForm(m: MaterialForm): number | null {
+  const qtd = parseFloat(m.quantidade_material) || 0;
+  const qtdUtil = m.uso_opcao === "tudo" ? qtd : (parseFloat(m.quantidade_utilizada) || 0);
+  const perc = parseFloat(m.percentual_reaproveitado) || 0;
+  if (!perc || perc <= 0 || !qtdUtil || qtdUtil <= 0) return null;
+  return qtdUtil / (perc / 100);
 }
 
 let _keyCounter = 0;
@@ -132,6 +176,18 @@ function newKey() { return String(++_keyCounter); }
 
 function newItem(): ItemForm {
   return { _key: newKey(), materia_prima: "", cod_tid: null, percentual: "" };
+}
+
+function newMaterial(): MaterialForm {
+  return {
+    _key: newKey(),
+    produto_origem: "",
+    formula_id_origem: null,
+    quantidade_material: "",
+    uso_opcao: "tudo",
+    quantidade_utilizada: "",
+    percentual_reaproveitado: "",
+  };
 }
 
 // ── SummaryCard ───────────────────────────────────────────────────────────────
@@ -190,7 +246,6 @@ function ProdutoInput({
         .ilike("produto", `%${v.trim()}%`)
         .order("produto")
         .limit(20);
-      // deduplicate by formula_id
       const seen = new Set<string>();
       const unique: ProdutoSug[] = [];
       for (const r of (data ?? [])) {
@@ -358,6 +413,29 @@ function MpInput({
   );
 }
 
+// ── StatusBadgeInline ─────────────────────────────────────────────────────────
+
+function StatusBadgeInline({ status }: { status: "pendente" | "utilizado" }) {
+  const D = useContext(PaletteCtx);
+  const isUtilizado = status === "utilizado";
+  return (
+    <span style={{
+      display: "inline-block",
+      padding: "0.15rem 0.6rem",
+      borderRadius: "9999px",
+      fontSize: 11,
+      fontWeight: 700,
+      background: isUtilizado ? D.greenBg : D.amberBg,
+      color: isUtilizado ? D.green : D.amber,
+      border: `1px solid ${isUtilizado ? D.greenBorder : D.amberBorder}`,
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+    }}>
+      {isUtilizado ? "Utilizado" : "Pendente"}
+    </span>
+  );
+}
+
 // ── DetalheModal ──────────────────────────────────────────────────────────────
 
 const DetalheModal = memo(function DetalheModal({
@@ -378,11 +456,38 @@ const DetalheModal = memo(function DetalheModal({
   saving: boolean;
 }) {
   const D = useContext(PaletteCtx);
-  const producao = calcProducaoPrevista(sdr);
-  const usandoParte = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_material;
-  const qtdUtil = sdr.quantidade_utilizada ?? sdr.quantidade_material;
+
+  // Decide a lista de materiais: usa a nova tabela se disponível, senão usa os campos legados
+  const materiais: Array<{ nome: string; qtdMaterial: number; qtdUtilizada: number; perc: number }> = useMemo(() => {
+    if (sdr.materiais && sdr.materiais.length > 0) {
+      return sdr.materiais.sort((a, b) => a.sequencia - b.sequencia).map((m) => ({
+        nome: m.produto_origem,
+        qtdMaterial: m.quantidade_material,
+        qtdUtilizada: m.quantidade_utilizada ?? m.quantidade_material,
+        perc: m.percentual_reaproveitado,
+      }));
+    }
+    if (sdr.produto_origem && sdr.percentual_reaproveitado != null) {
+      return [{
+        nome: sdr.produto_origem,
+        qtdMaterial: sdr.quantidade_material,
+        qtdUtilizada: sdr.quantidade_utilizada ?? sdr.quantidade_material,
+        perc: sdr.percentual_reaproveitado,
+      }];
+    }
+    return [];
+  }, [sdr]);
+
+  // Produção total = soma de cada contribuição
+  const producaoTotal = materiais.reduce((sum, m) => {
+    if (!m.perc || m.perc <= 0 || !m.qtdUtilizada || m.qtdUtilizada <= 0) return sum;
+    return sum + (m.qtdUtilizada / (m.perc / 100));
+  }, 0);
+  const producao = producaoTotal > 0 ? producaoTotal : null;
+
   const somaItens = sdr.itens.reduce((s, i) => s + i.percentual, 0);
-  const somaTotal = (sdr.percentual_reaproveitado ?? 0) + somaItens;
+  const somaReaprov = materiais.reduce((s, m) => s + m.perc, 0);
+  const somaTotal = somaReaprov + somaItens;
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -406,25 +511,29 @@ const DetalheModal = memo(function DetalheModal({
               <p style={{ fontSize: 18, fontWeight: 700, color: D.text, margin: 0 }}>{sdr.codigo}</p>
               <StatusBadgeInline status={sdr.status} />
             </div>
-            {sdr.produto_origem && (
+            {materiais.length === 0 && (
+              <p style={{ fontSize: 12, color: D.muted, margin: "0.2rem 0 0", fontStyle: "italic" }}>Sem material de origem informado</p>
+            )}
+            {materiais.length === 1 && (
               <p style={{ fontSize: 12, color: D.muted, margin: "0.2rem 0 0" }}>
-                <span style={{ fontWeight: 600, color: D.text }}>Origem:</span> {sdr.produto_origem}
-                {sdr.formula_id_origem && <span style={{ fontSize: 10, color: D.muted, marginLeft: 4 }}>({sdr.formula_id_origem})</span>}
+                <span style={{ fontWeight: 600, color: D.text }}>Origem:</span> {materiais[0].nome}
+              </p>
+            )}
+            {materiais.length > 1 && (
+              <p style={{ fontSize: 12, color: D.muted, margin: "0.2rem 0 0" }}>
+                <span style={{ fontWeight: 600, color: D.text }}>{materiais.length} origens</span>
               </p>
             )}
             <p style={{ fontSize: 13, color: D.text, margin: "0.2rem 0 0", fontWeight: 500 }}>
               <span style={{ fontSize: 11, color: D.muted, fontWeight: 400 }}>Destino: </span>{sdr.produto_destino}
             </p>
             {sdr.formula_id_destino && <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>Fórmula destino: {sdr.formula_id_destino}</p>}
-            <p style={{ fontSize: 11, color: D.muted, margin: "0.25rem 0 0" }}>
-              Material: <strong style={{ color: D.text }}>
-                {usandoParte ? `${formatKg(qtdUtil)} de ${formatKg(sdr.quantidade_material)}` : formatKg(sdr.quantidade_material)}
-              </strong>
-              {sdr.percentual_reaproveitado && (
-                <> · entra a <strong style={{ color: D.text }}>{sdr.percentual_reaproveitado}%</strong></>
-              )}
-              {producao !== null && <> · Produção prevista: <strong style={{ color: D.text }}>{formatKg(producao)}</strong></>}
-            </p>
+            {producao !== null && (
+              <p style={{ fontSize: 11, color: D.muted, margin: "0.25rem 0 0" }}>
+                Produção final prevista: <strong style={{ color: D.text }}>{formatKg(producao)}</strong>
+                {materiais.length > 1 && <span style={{ color: D.muted }}> (soma de {materiais.length} materiais)</span>}
+              </p>
+            )}
             <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>
               Criado por {sdr.criado_por} em {fmtDate(sdr.criado_em)}
               {sdr.utilizado_em && <> · Utilizado por {sdr.utilizado_por} em {fmtDate(sdr.utilizado_em)}</>}
@@ -448,19 +557,31 @@ const DetalheModal = memo(function DetalheModal({
               </tr>
             </thead>
             <tbody>
-              {/* Linha do material reaproveitado */}
-              {sdr.percentual_reaproveitado != null && (
-                <tr style={{ background: D.amberBg }}>
-                  <td style={{ padding: "0.45rem 0.75rem", color: D.amber, fontWeight: 600 }}>
-                    {sdr.produto_origem ?? "Material reaproveitado"}
-                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: D.amber, padding: "1px 5px", borderRadius: 4, border: `1px solid ${D.amberBorder}` }}>REAPR.</span>
-                  </td>
-                  <td style={{ padding: "0.45rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>—</td>
-                  <td style={{ padding: "0.45rem 0.75rem", textAlign: "right", color: D.amber, fontFamily: "monospace", fontWeight: 700 }}>{sdr.percentual_reaproveitado.toFixed(2)}%</td>
-                  <td style={{ padding: "0.45rem 0.75rem", textAlign: "right", color: D.amber, fontFamily: "monospace", fontWeight: 600 }}>{formatKg(qtdUtil)}</td>
-                  <td style={{ padding: "0.45rem 0.75rem", width: 20 }} />
-                </tr>
-              )}
+              {/* Uma linha por material de origem */}
+              {materiais.map((m, mi) => {
+                const contrib = m.perc > 0 && m.qtdUtilizada > 0 ? m.qtdUtilizada / (m.perc / 100) : null;
+                const usandoParte = m.qtdUtilizada < m.qtdMaterial;
+                return (
+                  <tr key={mi} style={{ background: D.amberBg }}>
+                    <td style={{ padding: "0.45rem 0.75rem", color: D.amber, fontWeight: 600 }}>
+                      {m.nome}
+                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: D.amber, padding: "1px 5px", borderRadius: 4, border: `1px solid ${D.amberBorder}` }}>REAPR.</span>
+                      {usandoParte && (
+                        <span style={{ display: "block", fontSize: 10, color: D.muted, fontWeight: 400, marginTop: 1 }}>
+                          {formatKg(m.qtdUtilizada)} de {formatKg(m.qtdMaterial)}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: "0.45rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>—</td>
+                    <td style={{ padding: "0.45rem 0.75rem", textAlign: "right", color: D.amber, fontFamily: "monospace", fontWeight: 700 }}>{m.perc.toFixed(2)}%</td>
+                    <td style={{ padding: "0.45rem 0.75rem", textAlign: "right", color: D.amber, fontFamily: "monospace", fontWeight: 600 }}>
+                      {contrib !== null ? formatKg(contrib) : formatKg(m.qtdUtilizada)}
+                    </td>
+                    <td style={{ padding: "0.45rem 0.75rem", width: 20 }} />
+                  </tr>
+                );
+              })}
+
               {sdr.itens.sort((a, b) => a.sequencia - b.sequencia).map((item, i) => {
                 const kgItem = producao !== null ? (item.percentual / 100) * producao : null;
                 return (
@@ -545,38 +666,29 @@ const DetalheModal = memo(function DetalheModal({
   );
 });
 
-// ── StatusBadgeInline ─────────────────────────────────────────────────────────
-
-function StatusBadgeInline({ status }: { status: "pendente" | "utilizado" }) {
-  const D = useContext(PaletteCtx);
-  const isUtilizado = status === "utilizado";
-  return (
-    <span style={{
-      display: "inline-block",
-      padding: "0.15rem 0.6rem",
-      borderRadius: "9999px",
-      fontSize: 11,
-      fontWeight: 700,
-      background: isUtilizado ? D.greenBg : D.amberBg,
-      color: isUtilizado ? D.green : D.amber,
-      border: `1px solid ${isUtilizado ? D.greenBorder : D.amberBorder}`,
-      textTransform: "uppercase",
-      letterSpacing: "0.03em",
-    }}>
-      {isUtilizado ? "Utilizado" : "Pendente"}
-    </span>
-  );
-}
-
 // ── ResultPanel ───────────────────────────────────────────────────────────────
 
-const ResultPanel = memo(function ResultPanel({ qtdUtilizada, percReaproveitado, itens }: { qtdUtilizada: number; percReaproveitado: number; itens: ItemForm[] }) {
+const ResultPanel = memo(function ResultPanel({
+  materiais,
+  itens,
+}: {
+  materiais: MaterialForm[];
+  itens: ItemForm[];
+}) {
   const D = useContext(PaletteCtx);
+
   const somaItens = itens.reduce((s, i) => s + (parseFloat(i.percentual) || 0), 0);
-  const somaTotal = percReaproveitado + somaItens;
-  const producao = calcProducaoPrevistaForm(qtdUtilizada, percReaproveitado);
+  const somaReaprov = materiais.reduce((s, m) => s + (parseFloat(m.percentual_reaproveitado) || 0), 0);
+  const somaTotal = somaReaprov + somaItens;
   const diffPerc = Math.abs(somaTotal - 100);
   const naoFecha = somaTotal > 0 && diffPerc > 0.1;
+
+  const contribuicoes = materiais.map((m) => ({
+    nome: m.produto_origem || `Material ${materiais.indexOf(m) + 1}`,
+    producao: calcProducaoMaterialForm(m),
+  }));
+  const totalProducao = contribuicoes.reduce((s, c) => s + (c.producao ?? 0), 0);
+  const producaoFinal = totalProducao > 0 ? totalProducao : null;
 
   return (
     <div style={{ ...makeCard(D, { marginTop: "1rem" }) }}>
@@ -587,12 +699,17 @@ const ResultPanel = memo(function ResultPanel({ qtdUtilizada, percReaproveitado,
         <div>
           <p style={{ fontSize: 11, color: D.muted, margin: 0 }}>Produção final prevista</p>
           <p style={{ fontSize: 20, fontWeight: 700, color: D.cyan, margin: "0.1rem 0 0" }}>
-            {producao !== null ? formatKg(producao) : "—"}
+            {producaoFinal !== null ? formatKg(producaoFinal) : "—"}
           </p>
-          {producao !== null && (
-            <p style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>
-              {formatKg(qtdUtilizada)} ÷ {percReaproveitado}%
-            </p>
+          {/* Detalhamento por material se houver mais de um */}
+          {contribuicoes.length > 1 && producaoFinal !== null && (
+            <div style={{ marginTop: "0.3rem" }}>
+              {contribuicoes.map((c, i) => c.producao !== null && (
+                <p key={i} style={{ fontSize: 11, color: D.muted, margin: "0.1rem 0 0" }}>
+                  {c.nome.length > 20 ? c.nome.substring(0, 20) + "…" : c.nome}: {formatKg(c.producao)}
+                </p>
+              ))}
+            </div>
           )}
         </div>
         <div>
@@ -610,6 +727,159 @@ const ResultPanel = memo(function ResultPanel({ qtdUtilizada, percReaproveitado,
     </div>
   );
 });
+
+// ── MaterialFormCard ──────────────────────────────────────────────────────────
+
+/** Card de um material proveniente no formulário */
+function MaterialFormCard({
+  mat,
+  index,
+  total,
+  isReadOnly,
+  onChange,
+  onRemove,
+}: {
+  mat: MaterialForm;
+  index: number;
+  total: number;
+  isReadOnly: boolean;
+  onChange: (key: string, patch: Partial<MaterialForm>) => void;
+  onRemove: (key: string) => void;
+}) {
+  const D = useContext(PaletteCtx);
+  const qtd = parseFloat(mat.quantidade_material) || 0;
+  const qtdUtil = mat.uso_opcao === "tudo" ? qtd : (parseFloat(mat.quantidade_utilizada) || 0);
+  const producao = calcProducaoMaterialForm(mat);
+  const qtdUtilMaiorQTotal = mat.uso_opcao === "parte" && parseFloat(mat.quantidade_utilizada) > qtd && qtd > 0;
+
+  return (
+    <div style={{
+      border: `1px solid ${D.border}`,
+      borderRadius: "0.5rem",
+      padding: "0.875rem",
+      background: D.cardAlt,
+      position: "relative",
+    }}>
+      {/* Label + remove */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.625rem" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: D.amber, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Material {index + 1}
+        </span>
+        {!isReadOnly && total > 1 && (
+          <button
+            type="button"
+            onClick={() => onRemove(mat._key)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: D.muted, padding: "0.2rem", display: "flex", borderRadius: "0.25rem" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = D.red)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = D.muted)}
+            title="Remover este material"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Produto de origem */}
+      <div style={{ marginBottom: "0.625rem" }}>
+        <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, margin: "0 0 0.3rem" }}>Produto / origem</p>
+        {isReadOnly ? (
+          <p style={{ fontSize: 13, color: D.text, margin: 0 }}>{mat.produto_origem || <span style={{ color: D.muted, fontStyle: "italic" }}>Não informado</span>}</p>
+        ) : (
+          <ProdutoInput
+            value={mat.produto_origem}
+            formulaId={mat.formula_id_origem}
+            onChange={(p, f) => onChange(mat._key, { produto_origem: p, formula_id_origem: f })}
+          />
+        )}
+      </div>
+
+      {/* Qtd + % */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.625rem" }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, margin: "0 0 0.3rem" }}>Quantidade total (kg)</p>
+          {isReadOnly ? (
+            <p style={{ fontSize: 13, color: D.text, margin: 0 }}>{formatKg(qtd)}</p>
+          ) : (
+            <input
+              type="number" min="0.001" step="0.001"
+              value={mat.quantidade_material}
+              onChange={(e) => onChange(mat._key, { quantidade_material: e.target.value })}
+              placeholder="Ex.: 500.000"
+              style={inputStyle(D)}
+            />
+          )}
+        </div>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, margin: "0 0 0.3rem" }}>Entra na fórmula a (%)</p>
+          {isReadOnly ? (
+            <p style={{ fontSize: 13, color: D.text, margin: 0 }}>{mat.percentual_reaproveitado}%</p>
+          ) : (
+            <input
+              type="number" min="0.001" max="100" step="0.001"
+              value={mat.percentual_reaproveitado}
+              onChange={(e) => onChange(mat._key, { percentual_reaproveitado: e.target.value })}
+              placeholder="Ex.: 20"
+              style={inputStyle(D)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Opção de uso */}
+      {!isReadOnly && (
+        <div style={{ marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, margin: "0 0 0.3rem" }}>Opção de uso</p>
+          <div style={{ display: "flex", gap: "1rem" }}>
+            {(["tudo", "parte"] as const).map((op) => (
+              <label key={op} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: 13, color: D.text }}>
+                <input
+                  type="radio"
+                  checked={mat.uso_opcao === op}
+                  onChange={() => onChange(mat._key, { uso_opcao: op })}
+                  style={{ accentColor: D.cyan, width: 15, height: 15 }}
+                />
+                {op === "tudo" ? "Usar tudo" : "Usar parte"}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Qtd a utilizar (quando parte) */}
+      {mat.uso_opcao === "parte" && (
+        <div style={{ marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, margin: "0 0 0.3rem" }}>Quantidade a utilizar (kg)</p>
+          {isReadOnly ? (
+            <p style={{ fontSize: 13, color: D.text, margin: 0 }}>{formatKg(qtdUtil)} de {formatKg(qtd)}</p>
+          ) : (
+            <>
+              <input
+                type="number" min="0.001" step="0.001"
+                value={mat.quantidade_utilizada}
+                onChange={(e) => onChange(mat._key, { quantidade_utilizada: e.target.value })}
+                placeholder="Menor ou igual ao total"
+                style={inputStyle(D, { borderColor: qtdUtilMaiorQTotal ? D.red : D.inputBorder })}
+              />
+              {qtdUtilMaiorQTotal && (
+                <p style={{ fontSize: 11, color: D.red, marginTop: 4, display: "flex", alignItems: "center", gap: 3 }}>
+                  <AlertTriangle size={11} /> Não pode ser maior que o total ({formatKg(qtd)})
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Contribuição prévia deste material */}
+      {producao !== null && (
+        <p style={{ fontSize: 11, color: D.muted, margin: "0.25rem 0 0" }}>
+          Contribuição prevista: <strong style={{ color: D.cyan }}>{formatKg(producao)}</strong>
+          <span style={{ marginLeft: 4 }}>({formatKg(qtdUtil)} ÷ {mat.percentual_reaproveitado}%)</span>
+        </p>
+      )}
+    </div>
+  );
+}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -633,15 +903,12 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
 
   // ── Form state ──────────────────────────────────────────────────────────────
   const [view, setView] = useState<"list" | "form">("list");
-  const [editando, setEditando] = useState<ReaprovFull | null>(null); // null = novo
-  const [fProdutoOrigem, setFProdutoOrigem] = useState("");
-  const [fFormulaIdOrigem, setFFormulaIdOrigem] = useState<string | null>(null);
+  const [editando, setEditando] = useState<ReaprovFull | null>(null);
+  // Destino (único)
   const [fProdutoDestino, setFProdutoDestino] = useState("");
   const [fFormulaIdDestino, setFFormulaIdDestino] = useState<string | null>(null);
-  const [fQtdKg, setFQtdKg] = useState("");
-  const [fUsoOpcao, setFUsoOpcao] = useState<"tudo" | "parte">("tudo");
-  const [fQtdUtilizada, setFQtdUtilizada] = useState("");
-  const [fPercReaprov, setFPercReaprov] = useState("");
+  // Lista dinâmica de materiais provenientes
+  const [fMateriais, setFMateriais] = useState<MaterialForm[]>([newMaterial()]);
   const [fTipoErro, setFTipoErro] = useState<TipoErro>(null);
   const [fObs, setFObs] = useState("");
   const [fItens, setFItens] = useState<ItemForm[]>([newItem()]);
@@ -652,11 +919,15 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
-      .select("*, reaproveitamentos_itens(*)")
+      .select("*, reaproveitamentos_itens(*), reaproveitamentos_materiais(*)")
       .order("criado_em", { ascending: false });
     if (error) { toast({ title: "Erro ao carregar", description: error.message, variant: "destructive" }); }
     else {
-      setLista((data ?? []).map((r: any) => ({ ...r, itens: r.reaproveitamentos_itens ?? [] })));
+      setLista((data ?? []).map((r: any) => ({
+        ...r,
+        itens: r.reaproveitamentos_itens ?? [],
+        materiais: r.reaproveitamentos_materiais ?? [],
+      })));
     }
     setLoading(false);
   }, []);
@@ -671,11 +942,15 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     if (filtroTipo === null) l = l.filter((r) => !r.tipo_erro);
     else if (filtroTipo !== "todos") l = l.filter((r) => r.tipo_erro === filtroTipo);
     const q = busca.trim().toLowerCase();
-    if (q) l = l.filter((r) =>
-      r.codigo.toLowerCase().includes(q) ||
-      r.produto_destino.toLowerCase().includes(q) ||
-      (r.produto_origem ?? "").toLowerCase().includes(q),
-    );
+    if (q) l = l.filter((r) => {
+      const origens = r.materiais.map((m) => m.produto_origem).join(" ");
+      return (
+        r.codigo.toLowerCase().includes(q) ||
+        r.produto_destino.toLowerCase().includes(q) ||
+        origens.toLowerCase().includes(q) ||
+        (r.produto_origem ?? "").toLowerCase().includes(q)
+      );
+    });
     return l;
   }, [lista, filtro, filtroTipo, busca]);
 
@@ -683,7 +958,13 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     const pendentes = lista.filter((r) => r.status === "pendente");
     return {
       qtdPendentes: pendentes.length,
-      kgPendentes: pendentes.reduce((s, r) => s + r.quantidade_material, 0),
+      kgPendentes: pendentes.reduce((s, r) => {
+        // Usa suma dos materiais se disponível, senão campo legado
+        if (r.materiais && r.materiais.length > 0) {
+          return s + r.materiais.reduce((ms, m) => ms + m.quantidade_material, 0);
+        }
+        return s + r.quantidade_material;
+      }, 0),
     };
   }, [lista]);
 
@@ -728,9 +1009,9 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   // ── Open form ────────────────────────────────────────────────────────────────
   function abrirNovo() {
     setEditando(null);
-    setFProdutoOrigem(""); setFFormulaIdOrigem(null);
     setFProdutoDestino(""); setFFormulaIdDestino(null);
-    setFQtdKg(""); setFUsoOpcao("tudo"); setFQtdUtilizada(""); setFPercReaprov(""); setFTipoErro(null); setFObs("");
+    setFMateriais([newMaterial()]);
+    setFTipoErro(null); setFObs("");
     setFItens([newItem()]);
     setView("form");
   }
@@ -738,17 +1019,40 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   function abrirEditar(sdr: ReaprovFull) {
     setDetalhe(null);
     setEditando(sdr);
-    setFProdutoOrigem(sdr.produto_origem ?? "");
-    setFFormulaIdOrigem(sdr.formula_id_origem ?? null);
     setFProdutoDestino(sdr.produto_destino);
     setFFormulaIdDestino(sdr.formula_id_destino ?? null);
-    setFQtdKg(String(sdr.quantidade_material));
-    const parcial = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_material;
-    setFUsoOpcao(parcial ? "parte" : "tudo");
-    setFQtdUtilizada(sdr.quantidade_utilizada !== null ? String(sdr.quantidade_utilizada) : "");
-    setFPercReaprov(sdr.percentual_reaproveitado !== null ? String(sdr.percentual_reaproveitado) : "");
     setFTipoErro(sdr.tipo_erro ?? null);
     setFObs(sdr.observacao ?? "");
+
+    // Carrega materiais da nova tabela (preferência) ou do campo legado
+    if (sdr.materiais && sdr.materiais.length > 0) {
+      setFMateriais(
+        sdr.materiais.sort((a, b) => a.sequencia - b.sequencia).map((m) => ({
+          _key: newKey(),
+          produto_origem: m.produto_origem,
+          formula_id_origem: m.formula_id_origem,
+          quantidade_material: String(m.quantidade_material),
+          uso_opcao: (m.quantidade_utilizada !== null && m.quantidade_utilizada < m.quantidade_material) ? "parte" : "tudo",
+          quantidade_utilizada: m.quantidade_utilizada !== null ? String(m.quantidade_utilizada) : "",
+          percentual_reaproveitado: String(m.percentual_reaproveitado),
+        }))
+      );
+    } else if (sdr.produto_origem && sdr.percentual_reaproveitado !== null) {
+      // Retrocompatibilidade: SDR antigo sem entrada em reaproveitamentos_materiais
+      const parcial = sdr.quantidade_utilizada !== null && sdr.quantidade_utilizada < sdr.quantidade_material;
+      setFMateriais([{
+        _key: newKey(),
+        produto_origem: sdr.produto_origem,
+        formula_id_origem: sdr.formula_id_origem ?? null,
+        quantidade_material: String(sdr.quantidade_material),
+        uso_opcao: parcial ? "parte" : "tudo",
+        quantidade_utilizada: sdr.quantidade_utilizada !== null ? String(sdr.quantidade_utilizada) : "",
+        percentual_reaproveitado: String(sdr.percentual_reaproveitado),
+      }]);
+    } else {
+      setFMateriais([newMaterial()]);
+    }
+
     setFItens(
       sdr.itens.sort((a, b) => a.sequencia - b.sequencia).map((i) => ({
         _key: newKey(),
@@ -762,23 +1066,38 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
 
   // ── Save form ────────────────────────────────────────────────────────────────
   async function handleSalvar() {
-    const qtd = parseFloat(fQtdKg);
-    const percReaprov = parseFloat(fPercReaprov);
-    const qtdUtil = fUsoOpcao === "parte" ? parseFloat(fQtdUtilizada) : qtd;
-
     if (!fProdutoDestino.trim()) { toast({ title: "Informe o produto de destino", variant: "destructive" }); return; }
     if (!fTipoErro) { toast({ title: "Selecione o tipo de erro (Produção ou Comercial)", variant: "destructive" }); return; }
-    if (!qtd || qtd <= 0) { toast({ title: "Quantidade de material inválida", variant: "destructive" }); return; }
-    if (!percReaprov || percReaprov <= 0 || percReaprov > 100) { toast({ title: "Percentual na fórmula deve ser maior que 0 e até 100", variant: "destructive" }); return; }
-    if (fUsoOpcao === "parte") {
-      if (!qtdUtil || qtdUtil <= 0) { toast({ title: "Informe a quantidade a utilizar", variant: "destructive" }); return; }
-      if (qtdUtil > qtd) { toast({ title: "Quantidade a utilizar não pode ser maior que o total", variant: "destructive" }); return; }
+
+    // Valida cada material que tiver algum campo preenchido
+    // Filtra materiais que tenham pelo menos produto_origem OU quantidade preenchida
+    const materiaisPreenchidos = fMateriais.filter(m =>
+      m.produto_origem.trim() || m.quantidade_material || m.percentual_reaproveitado
+    );
+
+    for (const m of materiaisPreenchidos) {
+      const qtd = parseFloat(m.quantidade_material);
+      const perc = parseFloat(m.percentual_reaproveitado);
+      if (!qtd || qtd <= 0) {
+        toast({ title: "Informe a quantidade de material para todos os materiais provenientes", variant: "destructive" });
+        return;
+      }
+      if (!perc || perc <= 0 || perc > 100) {
+        toast({ title: "Percentual na fórmula deve ser maior que 0 e até 100", variant: "destructive" });
+        return;
+      }
+      if (m.uso_opcao === "parte") {
+        const qtdUtil = parseFloat(m.quantidade_utilizada);
+        if (!qtdUtil || qtdUtil <= 0) { toast({ title: "Informe a quantidade a utilizar", variant: "destructive" }); return; }
+        if (qtdUtil > qtd) { toast({ title: "Quantidade a utilizar não pode ser maior que o total", variant: "destructive" }); return; }
+      }
     }
+
     if (fItens.length === 0) { toast({ title: "Adicione pelo menos um item à fórmula", variant: "destructive" }); return; }
     const itensComErro = fItens.filter((i) => !i.materia_prima.trim() || !parseFloat(i.percentual) || parseFloat(i.percentual) <= 0);
     if (itensComErro.length > 0) { toast({ title: "Todos os itens precisam de nome e percentual maior que zero", variant: "destructive" }); return; }
 
-    // Utilizado: salva observação e tipo_erro
+    // Atualização apenas de obs/tipo_erro quando já utilizado
     if (editando?.status === "utilizado") {
       setFormSaving(true);
       const { error } = await (supabase as any)
@@ -793,14 +1112,24 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       return;
     }
 
+    // Calcula campos agregados para a tabela principal (compat com CriarOrdem)
+    const totalQtdMaterial = materiaisPreenchidos.reduce((s, m) => s + (parseFloat(m.quantidade_material) || 0), 0);
+    const totalQtdUtilizada = materiaisPreenchidos.reduce((s, m) => {
+      const qtd = parseFloat(m.quantidade_material) || 0;
+      return s + (m.uso_opcao === "tudo" ? qtd : (parseFloat(m.quantidade_utilizada) || 0));
+    }, 0);
+    const firstMat = materiaisPreenchidos[0];
+    // percentual_reaproveitado no cabeçalho: mantém para SDR com 1 material (compat CriarOrdem), null para múltiplos
+    const percPrincipal = materiaisPreenchidos.length === 1 ? (parseFloat(materiaisPreenchidos[0].percentual_reaproveitado) || null) : null;
+
     const headerPayload = {
       produto_destino: fProdutoDestino.trim(),
       formula_id_destino: fFormulaIdDestino ?? null,
-      produto_origem: fProdutoOrigem.trim() || null,
-      formula_id_origem: fFormulaIdOrigem ?? null,
-      quantidade_material: qtd,
-      quantidade_utilizada: qtdUtil,
-      percentual_reaproveitado: percReaprov,
+      produto_origem: firstMat?.produto_origem.trim() || null,
+      formula_id_origem: firstMat?.formula_id_origem ?? null,
+      quantidade_material: totalQtdMaterial > 0 ? totalQtdMaterial : (parseFloat(fMateriais[0].quantidade_material) || 0),
+      quantidade_utilizada: totalQtdUtilizada > 0 ? totalQtdUtilizada : null,
+      percentual_reaproveitado: percPrincipal,
       tipo_erro: fTipoErro,
       observacao: fObs.trim() || null,
     };
@@ -814,17 +1143,38 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
       eh_reaproveitado: false,
     }));
 
+    const buildMateriais = (reaprovId: string) =>
+      materiaisPreenchidos.map((m, idx) => ({
+        reaproveitamento_id: reaprovId,
+        sequencia: idx + 1,
+        produto_origem: m.produto_origem.trim(),
+        formula_id_origem: m.formula_id_origem ?? null,
+        quantidade_material: parseFloat(m.quantidade_material),
+        quantidade_utilizada: m.uso_opcao === "parte" ? parseFloat(m.quantidade_utilizada) : null,
+        percentual_reaproveitado: parseFloat(m.percentual_reaproveitado),
+      }));
+
     setFormSaving(true);
+
     if (editando) {
       const { error: errH } = await (supabase as any)
         .from("reaproveitamentos")
         .update(headerPayload)
         .eq("id", editando.id);
       if (errH) { setFormSaving(false); toast({ title: "Erro ao salvar", description: errH.message, variant: "destructive" }); return; }
+
+      // Recria materiais
+      await (supabase as any).from("reaproveitamentos_materiais").delete().eq("reaproveitamento_id", editando.id);
+      if (materiaisPreenchidos.length > 0) {
+        const { error: errM } = await (supabase as any).from("reaproveitamentos_materiais").insert(buildMateriais(editando.id));
+        if (errM) { setFormSaving(false); toast({ title: "Cabeçalho salvo mas erro nos materiais", description: errM.message, variant: "destructive" }); return; }
+      }
+
+      // Recria itens da fórmula
       await (supabase as any).from("reaproveitamentos_itens").delete().eq("reaproveitamento_id", editando.id);
       const { error: errI } = await (supabase as any).from("reaproveitamentos_itens").insert(buildItens(editando.id));
       setFormSaving(false);
-      if (errI) { toast({ title: "Cabeçalho salvo mas erro nos itens", description: errI.message, variant: "destructive" }); return; }
+      if (errI) { toast({ title: "Salvo mas erro nos itens", description: errI.message, variant: "destructive" }); return; }
       toast({ title: `${editando.codigo} atualizado` });
     } else {
       const { data: newRec, error: errH } = await (supabase as any)
@@ -833,6 +1183,12 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
         .select("id, codigo")
         .single();
       if (errH) { setFormSaving(false); toast({ title: "Erro ao criar SDR", description: errH.message, variant: "destructive" }); return; }
+
+      if (materiaisPreenchidos.length > 0) {
+        const { error: errM } = await (supabase as any).from("reaproveitamentos_materiais").insert(buildMateriais(newRec.id));
+        if (errM) { setFormSaving(false); toast({ title: `${newRec.codigo} criado mas erro nos materiais`, description: errM.message, variant: "destructive" }); return; }
+      }
+
       const { error: errI } = await (supabase as any).from("reaproveitamentos_itens").insert(buildItens(newRec.id));
       setFormSaving(false);
       if (errI) { toast({ title: `${newRec.codigo} criado mas erro nos itens`, description: errI.message, variant: "destructive" }); return; }
@@ -845,20 +1201,22 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
   // ── CSV export ───────────────────────────────────────────────────────────────
   function exportarCSV() {
     if (listaFiltrada.length === 0) return;
-    const header = "Código;Tipo de erro;Produto origem;Fórmula origem;Produto destino;Fórmula destino;Material total (kg);Qtd. utilizada (kg);% na fórmula;Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
+    const header = "Código;Tipo de erro;Origens (materiais);Produto destino;Fórmula destino;Material total (kg);Produção prevista (kg);Status;Criado por;Criado em;Utilizado por;Utilizado em";
     const rows = listaFiltrada.map((r) => {
       const prod = calcProducaoPrevista(r);
-      const qtdUtil = r.quantidade_utilizada ?? r.quantidade_material;
+      const totalKg = r.materiais.length > 0
+        ? r.materiais.reduce((s, m) => s + m.quantidade_material, 0)
+        : r.quantidade_material;
+      const origens = r.materiais.length > 0
+        ? r.materiais.map((m) => m.produto_origem).join(" | ")
+        : (r.produto_origem ?? "");
       return [
         r.codigo,
         r.tipo_erro === "producao" ? "Produção" : r.tipo_erro === "comercial" ? "Comercial" : "Não classificado",
-        `"${(r.produto_origem ?? "").replace(/"/g, '""')}"`,
-        r.formula_id_origem ?? "",
+        `"${origens.replace(/"/g, '""')}"`,
         `"${r.produto_destino.replace(/"/g, '""')}"`,
         r.formula_id_destino ?? "",
-        r.quantidade_material.toFixed(3).replace(".", ","),
-        qtdUtil.toFixed(3).replace(".", ","),
-        r.percentual_reaproveitado !== null ? String(r.percentual_reaproveitado).replace(".", ",") : "",
+        totalKg.toFixed(3).replace(".", ","),
         prod !== null ? prod.toFixed(3).replace(".", ",") : "",
         r.status,
         r.criado_por,
@@ -877,17 +1235,29 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
 
   // ── Item helpers ─────────────────────────────────────────────────────────────
   function addItem() { setFItens((prev) => [...prev, newItem()]); }
-
   function removeItem(key: string) { setFItens((prev) => prev.filter((i) => i._key !== key)); }
-
   function updateItem(key: string, patch: Partial<ItemForm>) {
     setFItens((prev) => prev.map((i) => i._key === key ? { ...i, ...patch } : i));
   }
 
-  const qtdNum = parseFloat(fQtdKg) || 0;
-  const qtdUtilNum = fUsoOpcao === "parte" ? (parseFloat(fQtdUtilizada) || 0) : qtdNum;
-  const percReaprovNum = parseFloat(fPercReaprov) || 0;
+  // ── Material helpers ─────────────────────────────────────────────────────────
+  function addMaterial() { setFMateriais((prev) => [...prev, newMaterial()]); }
+  function removeMaterial(key: string) {
+    setFMateriais((prev) => {
+      if (prev.length <= 1) return prev; // mantém ao menos 1
+      return prev.filter((m) => m._key !== key);
+    });
+  }
+  function updateMaterial(key: string, patch: Partial<MaterialForm>) {
+    setFMateriais((prev) => prev.map((m) => m._key === key ? { ...m, ...patch } : m));
+  }
+
   const isUtilizadoEdit = editando?.status === "utilizado";
+
+  // Produção total para o ResultPanel
+  const algumMaterialPreenchido = fMateriais.some(m =>
+    m.quantidade_material && m.percentual_reaproveitado
+  );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
@@ -920,19 +1290,6 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem", maxWidth: 760 }}>
 
-              {/* Produto de origem (opcional) */}
-              <div style={makeCard(D)}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.25rem" }}>
-                  Produto de origem <span style={{ fontSize: 10, fontWeight: 400, textTransform: "none" }}>(opcional)</span>
-                </p>
-                <p style={{ fontSize: 11, color: D.muted, margin: "0 0 0.5rem" }}>Produto do qual o material é proveniente</p>
-                {isUtilizadoEdit ? (
-                  <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{fProdutoOrigem || <span style={{ color: D.muted, fontStyle: "italic" }}>Não informado</span>}</p>
-                ) : (
-                  <ProdutoInput value={fProdutoOrigem} formulaId={fFormulaIdOrigem} onChange={(p, f) => { setFProdutoOrigem(p); setFFormulaIdOrigem(f); }} />
-                )}
-              </div>
-
               {/* Produto de destino */}
               <div style={makeCard(D)}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.25rem" }}>Produto de destino</p>
@@ -944,86 +1301,50 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                 )}
               </div>
 
-              {/* Quantidade + uso parcial + percentual */}
-              <div style={makeCard(D)}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignItems: "start" }}>
-                  {/* Quantidade total */}
+              {/* Materiais provenientes — lista dinâmica */}
+              <div style={makeCard(D, { padding: 0, overflow: "visible" })}>
+                <div style={{
+                  padding: "0.75rem 1rem",
+                  borderBottom: `1px solid ${D.border}`,
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  borderRadius: "0.75rem 0.75rem 0 0",
+                }}>
                   <div>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.5rem" }}>Quantidade total de material (kg)</p>
-                    {isUtilizadoEdit ? (
-                      <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{formatKg(parseFloat(fQtdKg) || 0)}</p>
-                    ) : (
-                      <input
-                        type="number" min="0.001" step="0.001"
-                        value={fQtdKg}
-                        onChange={(e) => setFQtdKg(e.target.value)}
-                        placeholder="Ex.: 500.000"
-                        style={inputStyle(D, { maxWidth: 200 })}
-                      />
-                    )}
+                    <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+                      Materiais provenientes{" "}
+                      <span style={{ fontSize: 10, fontWeight: 400, textTransform: "none" }}>(opcional)</span>
+                    </p>
+                    <p style={{ fontSize: 11, color: D.muted, margin: "0.15rem 0 0" }}>
+                      Um SDR pode ter múltiplas origens — a produção final é a soma das contribuições
+                    </p>
                   </div>
-                  {/* Percentual na fórmula */}
-                  <div>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.5rem" }}>Entra na fórmula a (%)</p>
-                    {isUtilizadoEdit ? (
-                      <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{fPercReaprov}%</p>
-                    ) : (
-                      <input
-                        type="number" min="0.001" max="100" step="0.001"
-                        value={fPercReaprov}
-                        onChange={(e) => setFPercReaprov(e.target.value)}
-                        placeholder="Ex.: 20"
-                        style={inputStyle(D, { maxWidth: 120 })}
-                      />
-                    )}
-                  </div>
+                  {!isUtilizadoEdit && (
+                    <button
+                      type="button"
+                      onClick={addMaterial}
+                      style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.35rem 0.75rem", background: D.amber, color: "#fff", border: "none", borderRadius: "0.4rem", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
+                    >
+                      <Plus size={12} /> Adicionar material
+                    </button>
+                  )}
                 </div>
 
-                {/* Opção de uso */}
-                {!isUtilizadoEdit && (
-                  <div style={{ marginTop: "0.75rem" }}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.4rem" }}>Opção de uso</p>
-                    <div style={{ display: "flex", gap: "1rem" }}>
-                      {(["tudo", "parte"] as const).map((op) => (
-                        <label key={op} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: 13, color: D.text }}>
-                          <input
-                            type="radio" name="uso_opcao"
-                            checked={fUsoOpcao === op}
-                            onChange={() => setFUsoOpcao(op)}
-                            style={{ accentColor: D.cyan, width: 15, height: 15 }}
-                          />
-                          {op === "tudo" ? "Usar tudo" : "Usar parte"}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Quantidade a utilizar (quando parte) */}
-                {fUsoOpcao === "parte" && (
-                  <div style={{ marginTop: "0.75rem" }}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 0.4rem" }}>Quantidade a utilizar (kg)</p>
-                    {isUtilizadoEdit ? (
-                      <p style={{ fontSize: 14, color: D.text, margin: 0 }}>{formatKg(parseFloat(fQtdUtilizada) || 0)} de {formatKg(parseFloat(fQtdKg) || 0)}</p>
-                    ) : (
-                      <input
-                        type="number" min="0.001" step="0.001"
-                        value={fQtdUtilizada}
-                        onChange={(e) => setFQtdUtilizada(e.target.value)}
-                        placeholder="Menor ou igual ao total"
-                        style={inputStyle(D, { maxWidth: 200, borderColor: (parseFloat(fQtdUtilizada) > parseFloat(fQtdKg)) ? D.red : D.inputBorder })}
-                      />
-                    )}
-                    {parseFloat(fQtdUtilizada) > parseFloat(fQtdKg) && (
-                      <p style={{ fontSize: 11, color: D.red, marginTop: 4, display: "flex", alignItems: "center", gap: 3 }}>
-                        <AlertTriangle size={11} /> Não pode ser maior que o total ({formatKg(parseFloat(fQtdKg) || 0)})
-                      </p>
-                    )}
-                  </div>
-                )}
+                <div style={{ padding: "0.875rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  {fMateriais.map((m, i) => (
+                    <MaterialFormCard
+                      key={m._key}
+                      mat={m}
+                      index={i}
+                      total={fMateriais.length}
+                      isReadOnly={isUtilizadoEdit}
+                      onChange={updateMaterial}
+                      onRemove={removeMaterial}
+                    />
+                  ))}
+                </div>
               </div>
 
-              {/* Fórmula */}
+              {/* Fórmula do reaproveitamento */}
               <div style={makeCard(D, { padding: 0, overflow: "visible" })}>
                 <div style={{ padding: "0.75rem 1rem", borderBottom: `1px solid ${D.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", borderRadius: "0.75rem 0.75rem 0 0" }}>
                   <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Fórmula do reaproveitamento</p>
@@ -1050,8 +1371,9 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                     <tbody>
                       {fItens.map((item, i) => {
                         const pct = parseFloat(item.percentual) || 0;
-                        const producao = calcProducaoPrevistaForm(qtdUtilNum, percReaprovNum);
-                        const kgCalc = producao !== null && pct > 0 ? (pct / 100) * producao : null;
+                        // Usa produção total de todos os materiais para calcular kg do item
+                        const totalProducaoForm = fMateriais.reduce((s, m) => s + (calcProducaoMaterialForm(m) ?? 0), 0);
+                        const kgCalc = totalProducaoForm > 0 && pct > 0 ? (pct / 100) * totalProducaoForm : null;
                         return (
                           <tr key={item._key} style={{ background: i % 2 === 0 ? "transparent" : D.cardAlt, borderBottom: `1px solid ${D.border}` }}>
                             <td style={{ padding: "0.4rem 0.6rem", minWidth: 220 }}>
@@ -1107,9 +1429,9 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                 )}
               </div>
 
-              {/* Result panel — only show when there are items */}
-              {!isUtilizadoEdit && percReaprovNum > 0 && qtdUtilNum > 0 && (
-                <ResultPanel qtdUtilizada={qtdUtilNum} percReaproveitado={percReaprovNum} itens={fItens} />
+              {/* Result panel */}
+              {!isUtilizadoEdit && algumMaterialPreenchido && (
+                <ResultPanel materiais={fMateriais} itens={fItens} />
               )}
 
               {/* Tipo de erro */}
@@ -1258,7 +1580,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                 { v: null, label: "Não classificado" },
               ] as const).map((f) => {
                 const sel = filtroTipo === f.v;
-                const cor = f.v === "producao" ? "#0891b2" : f.v === "comercial" ? "#7c3aed" : f.v === null ? D.muted : D.muted;
+                const cor = f.v === "producao" ? "#0891b2" : f.v === "comercial" ? "#7c3aed" : D.muted;
                 return (
                   <button
                     key={String(f.v)}
@@ -1308,7 +1630,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: D.cardAlt }}>
-                        {["Código", "Tipo de erro", "Produto origem", "Produto destino", "Material (kg)", "Produção prevista (kg)", "Status", "Criado em", "Utilizado em", ""].map((h, i) => (
+                        {["Código", "Tipo de erro", "Origens (materiais)", "Produto destino", "Material (kg)", "Produção prevista (kg)", "Status", "Criado em", "Utilizado em", ""].map((h, i) => (
                           <th key={i} style={{ padding: "0.6rem 1rem", textAlign: i >= 4 && i <= 6 ? "right" : i === 7 || i === 8 ? "center" : "left", fontWeight: 600, color: D.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: `1px solid ${D.border}`, whiteSpace: "nowrap" }}>
                             {h}
                           </th>
@@ -1318,8 +1640,17 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                     <tbody>
                       {listaFiltrada.map((r, i) => {
                         const producao = calcProducaoPrevista(r);
-                        const qtdUtil = r.quantidade_utilizada ?? r.quantidade_material;
-                        const usandoParte = r.quantidade_utilizada !== null && r.quantidade_utilizada < r.quantidade_material;
+                        // Total kg dos materiais
+                        const totalKg = r.materiais.length > 0
+                          ? r.materiais.reduce((s, m) => s + m.quantidade_material, 0)
+                          : r.quantidade_material;
+                        // Origens: mostra lista ou campo legado
+                        const origensLabel = r.materiais.length > 0
+                          ? r.materiais.length === 1
+                            ? r.materiais[0].produto_origem
+                            : `${r.materiais[0].produto_origem} (+${r.materiais.length - 1})`
+                          : (r.produto_origem ?? null);
+
                         return (
                           <tr
                             key={r.id}
@@ -1346,19 +1677,20 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                                 </span>
                               )}
                             </td>
-                            <td style={{ padding: "0.55rem 1rem", color: D.muted, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>
-                              {r.produto_origem ?? <span style={{ fontStyle: "italic" }}>—</span>}
+                            <td style={{ padding: "0.55rem 1rem", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>
+                              {origensLabel ? (
+                                <span style={{ color: D.amber, fontWeight: r.materiais.length > 1 ? 600 : 400 }}>
+                                  {origensLabel}
+                                </span>
+                              ) : (
+                                <span style={{ color: D.muted, fontStyle: "italic" }}>—</span>
+                              )}
                             </td>
                             <td style={{ padding: "0.55rem 1rem", color: D.text, fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {r.produto_destino}
                             </td>
                             <td style={{ padding: "0.55rem 1rem", textAlign: "right", fontFamily: "monospace" }}>
-                              <span style={{ color: D.text }}>
-                                {usandoParte ? `${formatKg(qtdUtil)}` : formatKg(r.quantidade_material)}
-                              </span>
-                              {usandoParte && (
-                                <span style={{ display: "block", fontSize: 10, color: D.muted }}>de {formatKg(r.quantidade_material)}</span>
-                              )}
+                              <span style={{ color: D.text }}>{formatKg(totalKg)}</span>
                             </td>
                             <td style={{ padding: "0.55rem 1rem", color: D.text, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>
                               {producao !== null ? formatKg(producao) : "—"}
@@ -1433,7 +1765,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
             )}
 
             <p style={{ marginTop: "1.5rem", fontSize: 11, color: D.muted, fontStyle: "italic" }}>
-              * Produção prevista = quantidade utilizada ÷ (% na fórmula). Percentuais gravados; kg sempre calculados na exibição.
+              * Produção prevista = soma das contribuições de cada material (qtd utilizada ÷ % na fórmula). Percentuais gravados; kg calculados na exibição.
             </p>
           </>
         )}

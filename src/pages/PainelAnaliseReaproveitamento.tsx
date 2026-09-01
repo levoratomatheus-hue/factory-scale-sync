@@ -61,10 +61,23 @@ let tooltipStyle = makeTooltipStyle(D);
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TipoErro = "producao" | "comercial" | null;
 
+/** Material de origem — fonte da verdade para cálculos de produção e ranking */
+type ReaprovMaterial = {
+  id: string;
+  reaproveitamento_id: string;
+  sequencia: number;
+  produto_origem: string;
+  formula_id_origem: string | null;
+  quantidade_material: number;
+  quantidade_utilizada: number | null;
+  percentual_reaproveitado: number;
+};
+
 type Reaprov = {
   id: string;
   codigo: string;
   produto_destino: string;
+  // Campos legados (mantidos para compat) — usar materiais[] como fonte de verdade
   produto_origem: string | null;
   quantidade_material: number;
   quantidade_utilizada: number | null;
@@ -72,6 +85,7 @@ type Reaprov = {
   status: "pendente" | "utilizado";
   tipo_erro: TipoErro;
   criado_em: string;
+  materiais: ReaprovMaterial[];
 };
 
 type AtalhoId = "hoje" | "semana" | "mes" | "ano" | null;
@@ -104,11 +118,37 @@ function calcAtalho(id: AtalhoId): { inicio: string; fim: string } {
   return { inicio: "", fim: "" };
 }
 
-function calcProducao(sdr: Pick<Reaprov, "quantidade_material" | "quantidade_utilizada" | "percentual_reaproveitado">): number | null {
-  const qtd = sdr.quantidade_utilizada ?? sdr.quantidade_material;
-  const pct = sdr.percentual_reaproveitado;
+/** Produção de um SDR = soma das contribuições de cada material */
+function calcProducao(r: Reaprov): number | null {
+  if (r.materiais && r.materiais.length > 0) {
+    const total = r.materiais.reduce((sum, m) => {
+      const qtd = m.quantidade_utilizada ?? m.quantidade_material;
+      if (!m.percentual_reaproveitado || m.percentual_reaproveitado <= 0 || !qtd || qtd <= 0) return sum;
+      return sum + (qtd / (m.percentual_reaproveitado / 100));
+    }, 0);
+    return total > 0 ? total : null;
+  }
+  // Fallback para SDRs antigos sem materiais cadastrados
+  const qtd = r.quantidade_utilizada ?? r.quantidade_material;
+  const pct = r.percentual_reaproveitado;
   if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
   return qtd / (pct / 100);
+}
+
+/** Kg total de material de um SDR (soma dos materiais) */
+function totalKgSDR(r: Reaprov): number {
+  if (r.materiais && r.materiais.length > 0) {
+    return r.materiais.reduce((s, m) => s + m.quantidade_material, 0);
+  }
+  return r.quantidade_material;
+}
+
+/** Origens de um SDR como texto (para exibição) */
+function origensLabel(r: Reaprov): string {
+  if (r.materiais && r.materiais.length > 0) {
+    return r.materiais.map((m) => m.produto_origem).join(", ");
+  }
+  return r.produto_origem ?? "Origem não informada";
 }
 
 function diasPassados(isoDate: string): number {
@@ -206,11 +246,14 @@ export default function PainelAnaliseReaproveitamento() {
   const fetchLista = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
-      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em")
+      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em, reaproveitamentos_materiais(*)")
       .order("criado_em", { ascending: false })
       .limit(5000);
     if (!error) {
-      setLista(data ?? []);
+      setLista((data ?? []).map((r: any) => ({
+        ...r,
+        materiais: r.reaproveitamentos_materiais ?? [],
+      })));
     }
     setLoading(false);
   }, []);
@@ -220,6 +263,7 @@ export default function PainelAnaliseReaproveitamento() {
     const channel = (supabase as any)
       .channel("analise-reaprov-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "reaproveitamentos" }, fetchLista)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reaproveitamentos_materiais" }, fetchLista)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchLista]);
@@ -246,29 +290,39 @@ export default function PainelAnaliseReaproveitamento() {
   // ── Cards de resumo ────────────────────────────────────────────────────────
   const cards = useMemo(() => {
     const totalSDRs = periodo.length;
-    const totalKgMaterial = periodo.reduce((s, r) => s + r.quantidade_material, 0);
-    const totalProducao = periodo.reduce((s, r) => {
-      const p = calcProducao(r);
-      return s + (p ?? 0);
-    }, 0);
+    const totalKgMaterial = periodo.reduce((s, r) => s + totalKgSDR(r), 0);
+    const totalProducao = periodo.reduce((s, r) => s + (calcProducao(r) ?? 0), 0);
     const utilizados = periodo.filter((r) => r.status === "utilizado").length;
     const taxaUtil = totalSDRs > 0 ? Math.round((utilizados / totalSDRs) * 100) : 0;
-    // Pendentes: todos os SDRs da base (estoque atual), independente do período
     const pendentes = lista.filter((r) => r.status === "pendente");
-    const kgPendentes = pendentes.reduce((s, r) => s + r.quantidade_material, 0);
+    const kgPendentes = pendentes.reduce((s, r) => s + totalKgSDR(r), 0);
     return { totalSDRs, totalKgMaterial, totalProducao, taxaUtil, qtdPendentes: pendentes.length, kgPendentes };
   }, [periodo, lista]);
 
-  // ── Seção 1: Ranking por produto_origem ───────────────────────────────────
+  // ── Seção 1: Ranking por origem ───────────────────────────────────────────
+  // Itera pelos materiais de cada SDR — um SDR pode contribuir para múltiplas origens
   const rankingOrigem = useMemo(() => {
-    const map = new Map<string, { qtd: number; kgMaterial: number }>();
+    const map = new Map<string, { qtd: number; kgMaterial: number; sdrIds: Set<string> }>();
+
     periodo.forEach((r) => {
-      const key = r.produto_origem?.trim() || "Origem não informada";
-      if (!map.has(key)) map.set(key, { qtd: 0, kgMaterial: 0 });
-      const e = map.get(key)!;
-      e.qtd++;
-      e.kgMaterial += r.quantidade_material;
+      if (r.materiais && r.materiais.length > 0) {
+        r.materiais.forEach((m) => {
+          const key = m.produto_origem?.trim() || "Origem não informada";
+          if (!map.has(key)) map.set(key, { qtd: 0, kgMaterial: 0, sdrIds: new Set() });
+          const e = map.get(key)!;
+          if (!e.sdrIds.has(r.id)) { e.qtd++; e.sdrIds.add(r.id); }
+          e.kgMaterial += m.quantidade_material;
+        });
+      } else {
+        // Fallback para SDRs sem materiais cadastrados
+        const key = r.produto_origem?.trim() || "Origem não informada";
+        if (!map.has(key)) map.set(key, { qtd: 0, kgMaterial: 0, sdrIds: new Set() });
+        const e = map.get(key)!;
+        if (!e.sdrIds.has(r.id)) { e.qtd++; e.sdrIds.add(r.id); }
+        e.kgMaterial += r.quantidade_material;
+      }
     });
+
     return Array.from(map.entries())
       .map(([nome, { qtd, kgMaterial }]) => ({ nome, qtd, kgMaterial, label: nome }))
       .sort((a, b) => b.kgMaterial - a.kgMaterial);
@@ -278,11 +332,17 @@ export default function PainelAnaliseReaproveitamento() {
   const sdrsModal = useMemo(() => {
     if (!modalOrigem) return [];
     const chave = modalOrigem === "Origem não informada" ? null : modalOrigem;
-    return lista.filter((r) =>
-      chave === null
-        ? !r.produto_origem?.trim()
-        : r.produto_origem?.trim() === chave,
-    );
+    return lista.filter((r) => {
+      if (r.materiais && r.materiais.length > 0) {
+        if (chave === null) {
+          return r.materiais.length === 0;
+        }
+        return r.materiais.some((m) => m.produto_origem?.trim() === chave);
+      }
+      // Fallback
+      if (chave === null) return !r.produto_origem?.trim();
+      return r.produto_origem?.trim() === chave;
+    });
   }, [lista, modalOrigem]);
 
   // ── Seção 2: Volume por mês ────────────────────────────────────────────────
@@ -292,7 +352,7 @@ export default function PainelAnaliseReaproveitamento() {
       const key = r.criado_em.substring(0, 7);
       if (!map.has(key)) map.set(key, { kgMaterial: 0, qtd: 0 });
       const e = map.get(key)!;
-      e.kgMaterial += r.quantidade_material;
+      e.kgMaterial += totalKgSDR(r);
       e.qtd++;
     });
     return Array.from(map.entries())
@@ -308,8 +368,13 @@ export default function PainelAnaliseReaproveitamento() {
   const materialParado = useMemo(() => {
     return lista
       .filter((r) => r.status === "pendente")
-      .map((r) => ({ ...r, dias: diasPassados(r.criado_em) }))
-      .sort((a, b) => b.dias - a.dias); // mais antigos primeiro
+      .map((r) => ({
+        ...r,
+        dias: diasPassados(r.criado_em),
+        totalKg: totalKgSDR(r),
+        origens: origensLabel(r),
+      }))
+      .sort((a, b) => b.dias - a.dias);
   }, [lista]);
 
   // ── Divisão por tipo de erro ──────────────────────────────────────────────
@@ -318,9 +383,9 @@ export default function PainelAnaliseReaproveitamento() {
     const comercial = periodo.filter((r) => r.tipo_erro === "comercial");
     const semTipo   = periodo.filter((r) => !r.tipo_erro);
     return {
-      producao:  { qtd: producao.length,  kg: producao.reduce((s, r) => s + r.quantidade_material, 0) },
-      comercial: { qtd: comercial.length, kg: comercial.reduce((s, r) => s + r.quantidade_material, 0) },
-      semTipo:   { qtd: semTipo.length,   kg: semTipo.reduce((s, r) => s + r.quantidade_material, 0) },
+      producao:  { qtd: producao.length,  kg: producao.reduce((s, r) => s + totalKgSDR(r), 0) },
+      comercial: { qtd: comercial.length, kg: comercial.reduce((s, r) => s + totalKgSDR(r), 0) },
+      semTipo:   { qtd: semTipo.length,   kg: semTipo.reduce((s, r) => s + totalKgSDR(r), 0) },
     };
   }, [periodo]);
 
@@ -339,7 +404,6 @@ export default function PainelAnaliseReaproveitamento() {
       .sort((a, b) => b.kgProducao - a.kgProducao);
   }, [periodo]);
 
-
   // ── CSV exports ───────────────────────────────────────────────────────────
   function exportarOrigemCSV() {
     const header = "Produto origem;Nº SDRs;Material total (kg)";
@@ -354,13 +418,13 @@ export default function PainelAnaliseReaproveitamento() {
   }
 
   function exportarParadoCSV() {
-    const header = "Código;Produto origem;Produto destino;Material (kg);Criado em;Dias parado";
+    const header = "Código;Origens;Produto destino;Material (kg);Criado em;Dias parado";
     const rows = materialParado.map((r) =>
       [
         r.codigo,
-        `"${(r.produto_origem ?? "").replace(/"/g, '""')}"`,
+        `"${r.origens.replace(/"/g, '""')}"`,
         `"${r.produto_destino.replace(/"/g, '""')}"`,
-        r.quantidade_material.toFixed(3).replace(".", ","),
+        r.totalKg.toFixed(3).replace(".", ","),
         fmtDate(r.criado_em),
         r.dias,
       ].join(";")
@@ -490,12 +554,12 @@ export default function PainelAnaliseReaproveitamento() {
         <SummaryCard
           label="Material reaproveitado"
           value={formatKg(cards.totalKgMaterial)}
-          sub="soma de quantidade_material"
+          sub="soma de todos os materiais"
         />
         <SummaryCard
           label="Produção gerada"
           value={cards.totalProducao > 0 ? formatKg(cards.totalProducao) : "—"}
-          sub="qtd utilizada ÷ %"
+          sub="soma das contribuições"
         />
         <SummaryCard
           label="Pendentes (estoque atual)"
@@ -736,7 +800,7 @@ export default function PainelAnaliseReaproveitamento() {
               <div>
                 <p style={{ margin: 0, fontSize: "0.7rem", color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>kg parados</p>
                 <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.amber, lineHeight: 1 }}>
-                  {formatKg(materialParado.reduce((s, r) => s + r.quantidade_material, 0))}
+                  {formatKg(materialParado.reduce((s, r) => s + r.totalKg, 0))}
                 </p>
               </div>
               <div>
@@ -753,7 +817,7 @@ export default function PainelAnaliseReaproveitamento() {
                   <thead>
                     <tr style={{ background: D.cardAlt, borderBottom: `1px solid ${D.border}` }}>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Código</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Produto origem</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Origens (materiais)</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Produto destino</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>Material (kg)</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: D.muted, fontSize: 11 }}>Criado em</th>
@@ -766,12 +830,12 @@ export default function PainelAnaliseReaproveitamento() {
                       return (
                         <tr key={r.id} style={{ borderBottom: `1px solid ${D.border}`, background: i % 2 === 0 ? "transparent" : D.cardAlt }}>
                           <td style={{ padding: "0.5rem 0.75rem", color: D.cyan, fontWeight: 700, fontFamily: "monospace" }}>{r.codigo}</td>
-                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontSize: 12 }}>
-                            {r.produto_origem ?? <span style={{ fontStyle: "italic" }}>—</span>}
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {r.origens || <span style={{ fontStyle: "italic" }}>—</span>}
                           </td>
                           <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontWeight: 500, fontSize: 12 }}>{r.produto_destino}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>
-                            {formatKg(r.quantidade_material)}
+                            {formatKg(r.totalKg)}
                           </td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", color: D.muted }}>{fmtDate(r.criado_em)}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>
@@ -873,7 +937,7 @@ export default function PainelAnaliseReaproveitamento() {
                         <tr key={r.id} style={{ borderBottom: `1px solid ${D.border}`, background: i % 2 === 0 ? "transparent" : D.cardAlt }}>
                           <td style={{ padding: "0.5rem 0.75rem", color: D.cyan, fontWeight: 700, fontFamily: "monospace" }}>{r.codigo}</td>
                           <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontSize: 12 }}>{r.produto_destino}</td>
-                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{formatKg(r.quantidade_material)}</td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{formatKg(totalKgSDR(r))}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", color: D.muted }}>{fmtDate(r.criado_em)}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>
                             <span style={{
