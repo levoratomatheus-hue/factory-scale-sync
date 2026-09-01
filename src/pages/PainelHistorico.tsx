@@ -340,7 +340,14 @@ export default function PainelHistorico() {
                     {format(new Date(ordem.data_programacao), "dd/MM/yyyy", { locale: ptBR })}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={ordem.status} />
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <StatusBadge status={ordem.status} />
+                      {ordem.conclusao_direta && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 border border-slate-200 dark:border-slate-600 whitespace-nowrap">
+                          direta
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">

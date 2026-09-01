@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown } from 'lucide-react';
+import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown, CheckCheck } from 'lucide-react';
 import { formatKg, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -45,6 +45,7 @@ interface OrdemPre {
   linha: number | null;
   balanca: number | null;
   posicao: number | null;
+  conclusao_direta: boolean;
 }
 
 export default function PreProgramacao() {
@@ -71,11 +72,15 @@ export default function PreProgramacao() {
   const [ordemExcluir, setOrdemExcluir] = useState<OrdemPre | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  // Concluir direto
+  const [ordemConcluirDireto, setOrdemConcluirDireto] = useState<OrdemPre | null>(null);
+  const [concluindoDireto, setConcluindoDireto] = useState(false);
+
   const fetchOrdens = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('ordens')
-      .select('id, produto, lote, quantidade, marca, requer_mistura, criado_em, tipo_op, obs, formula_id, tamanho_batelada, orientacoes, status, linha, balanca, posicao')
+      .select('id, produto, lote, quantidade, marca, requer_mistura, criado_em, tipo_op, obs, formula_id, tamanho_batelada, orientacoes, status, linha, balanca, posicao, conclusao_direta')
       .eq('status', 'pre_programacao')
       .order('criado_em', { ascending: true });
     if (!error && data) setOrdens(data as OrdemPre[]);
@@ -150,6 +155,33 @@ export default function PreProgramacao() {
     }
     toast({ title: 'OP excluída' });
     setOrdemExcluir(null);
+    fetchOrdens();
+  };
+
+  const concluirDireto = async () => {
+    if (!ordemConcluirDireto) return;
+    setConcluindoDireto(true);
+    const { error } = await supabase
+      .from('ordens')
+      .update({
+        status: 'concluido',
+        data_conclusao: new Date().toISOString(),
+        conclusao_direta: true,
+      } as any)
+      .eq('id', ordemConcluirDireto.id);
+    if (error) {
+      setConcluindoDireto(false);
+      toast({ title: 'Erro ao concluir OP', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await supabase.from('historico').insert({
+      ordem_id: ordemConcluirDireto.id,
+      status_anterior: 'pre_programacao',
+      status_novo: 'concluido',
+    });
+    toast({ title: 'OP concluída', description: `${ordemConcluirDireto.produto} marcada como concluída (conclusão direta).` });
+    setConcluindoDireto(false);
+    setOrdemConcluirDireto(null);
     fetchOrdens();
   };
 
@@ -319,6 +351,14 @@ export default function PreProgramacao() {
                           <Trash2 className="h-3 w-3" />
                           Excluir
                         </button>
+                        <button
+                          onClick={() => setOrdemConcluirDireto(ordem)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-emerald-600 hover:bg-muted transition-colors"
+                          title="Concluir direto (sem produção medida)"
+                        >
+                          <CheckCheck className="h-3 w-3" />
+                          Concluir direto
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -410,6 +450,39 @@ export default function PreProgramacao() {
             <Button variant="destructive" onClick={excluir} disabled={excluindo}>
               {excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Concluir direto */}
+      <Dialog open={!!ordemConcluirDireto} onOpenChange={(open) => !open && setOrdemConcluirDireto(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Concluir OP direto?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemConcluirDireto?.produto}</span>
+              {' '}— Lote {ordemConcluirDireto?.lote}
+              <br /><br />
+              A OP será marcada como <strong>concluída</strong> sem passar por linha, pesagem ou registro de produção.
+              O estoque <strong>não será alterado</strong> (a baixa já ocorreu na criação).
+              <br /><br />
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                Esta OP não entrará nas análises de kg/hora ou produtividade.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemConcluirDireto(null)} disabled={concluindoDireto}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={concluirDireto}
+              disabled={concluindoDireto}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {concluindoDireto && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Concluir direto
             </Button>
           </DialogFooter>
         </DialogContent>
