@@ -36,7 +36,9 @@ export function useAuth() {
 
     fetchPerfil();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION é disparado imediatamente e já foi tratado acima por fetchPerfil()
+      if (event === 'INITIAL_SESSION') return;
       if (session) {
         fetchPerfil();
       } else {

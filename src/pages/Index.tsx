@@ -260,13 +260,18 @@ export default function Index() {
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
 
   useEffect(() => {
+    // Pré-aquece chunks dos painéis mais acessados para eliminar spinner no primeiro clique
     const t = setTimeout(() => {
+      import('./PainelGestor');
       import('./PainelLinha');
       import('./PainelBalanca');
       import('./PainelProgramacao');
       import('./PainelLiberacao');
       import('./PainelHistorico');
-    }, 200);
+      import('./ConsumoMP');
+      import('./EstoqueMP');
+      import('./PreProgramacao');
+    }, 300);
     return () => clearTimeout(t);
   }, []);
 
@@ -283,6 +288,10 @@ export default function Index() {
 
   const goToTab = useCallback((tab: TabGestorId | null) => {
     setActiveTab(tab);
+    // Atualiza mountedTabs junto com activeTab para evitar render duplo
+    if (tab && KEEP_ALIVE_TABS.has(tab)) {
+      setMountedTabs((prev) => prev.has(tab) ? prev : new Set([...prev, tab]));
+    }
   }, []);
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set<string>()
@@ -306,15 +315,10 @@ export default function Index() {
     [activeTab],
   );
 
-  // Acumula as abas visitadas — deve ficar antes dos early returns
+  // Acumula as abas visitadas — atualizado dentro de goToTab para evitar render duplo
   const [mountedTabs, setMountedTabs] = useState<Set<TabGestorId>>(
     () => activeTab && KEEP_ALIVE_TABS.has(activeTab) ? new Set([activeTab]) : new Set(),
   );
-  useEffect(() => {
-    if (activeTab && KEEP_ALIVE_TABS.has(activeTab)) {
-      setMountedTabs((prev) => prev.has(activeTab) ? prev : new Set([...prev, activeTab]));
-    }
-  }, [activeTab]);
 
   if (loading) {
     return (
