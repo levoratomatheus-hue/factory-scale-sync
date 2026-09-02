@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -9,6 +9,7 @@ interface Equipamento {
   nome: string;
   tag: string | null;
   linha: number | null;
+  setor: string | null;
 }
 
 interface AbrirOSProps {
@@ -23,9 +24,12 @@ const PRIORIDADES = [
   { value: "critica",  label: "Crítica",  color: "bg-red-100 text-red-700 border-red-200" },
 ];
 
+const SEM_SETOR = "__sem_setor__";
+
 export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
   const [loadingEquip, setLoadingEquip] = useState(true);
+  const [setorSelecionado, setSetorSelecionado] = useState("");
   const [equipamentoId, setEquipamentoId] = useState("");
   const [descricao, setDescricao] = useState("");
   const [prioridade, setPrioridade] = useState("media");
@@ -39,7 +43,7 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
   const fetchEquipamentos = useCallback(async () => {
     const { data } = await (supabase as any)
       .from("equipamentos")
-      .select("id, nome, tag, linha")
+      .select("id, nome, tag, linha, setor")
       .eq("status", "ativo")
       .order("nome", { ascending: true });
     setEquipamentos(data ?? []);
@@ -48,8 +52,41 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
 
   useEffect(() => { fetchEquipamentos(); }, [fetchEquipamentos]);
 
+  // Setores distintos presentes nos equipamentos ativos
+  const setoresDisponiveis = useMemo(() =>
+    [...new Set(
+      equipamentos.map((e) => e.setor).filter((s): s is string => !!s)
+    )].sort()
+  , [equipamentos]);
+
+  // Se há equipamentos sem setor, exibir opção "Sem setor"
+  const temSemSetor = useMemo(() => equipamentos.some((e) => !e.setor), [equipamentos]);
+
+  // Equipamentos filtrados pelo setor selecionado
+  const equipamentosDoSetor = useMemo(() => {
+    if (!setorSelecionado) return [];
+    if (setorSelecionado === SEM_SETOR) return equipamentos.filter((e) => !e.setor);
+    return equipamentos.filter((e) => e.setor === setorSelecionado);
+  }, [equipamentos, setorSelecionado]);
+
+  function handleSetorChange(novoSetor: string) {
+    setSetorSelecionado(novoSetor);
+    // Limpa equipamento se não pertence ao novo setor
+    if (equipamentoId) {
+      const eq = equipamentos.find((e) => e.id === equipamentoId);
+      if (eq) {
+        const pertence = novoSetor === SEM_SETOR ? !eq.setor : eq.setor === novoSetor;
+        if (!pertence) setEquipamentoId("");
+      }
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!setorSelecionado) {
+      toast({ title: "Selecione o setor", variant: "destructive" });
+      return;
+    }
     if (!equipamentoId) {
       toast({ title: "Selecione o equipamento", variant: "destructive" });
       return;
@@ -82,6 +119,7 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
       return;
     }
     toast({ title: "Ordem de serviço aberta com sucesso!" });
+    setSetorSelecionado("");
     setEquipamentoId("");
     setDescricao("");
     setPrioridade("media");
@@ -104,6 +142,32 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-card rounded-lg border p-6 space-y-5">
+
+        {/* Setor */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Setor *</label>
+          {loadingEquip ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando...
+            </div>
+          ) : (
+            <select
+              value={setorSelecionado}
+              onChange={(e) => handleSetorChange(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Selecione o setor...</option>
+              {setoresDisponiveis.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+              {temSemSetor && (
+                <option value={SEM_SETOR}>Sem setor</option>
+              )}
+            </select>
+          )}
+        </div>
+
         {/* Equipamento */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Equipamento *</label>
@@ -112,10 +176,14 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando equipamentos...
             </div>
-          ) : equipamentos.length === 0 ? (
+          ) : !setorSelecionado ? (
+            <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              Selecione o setor primeiro
+            </div>
+          ) : equipamentosDoSetor.length === 0 ? (
             <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Nenhum equipamento ativo cadastrado. Cadastre em Equipamentos.
+              Nenhum equipamento ativo neste setor. Cadastre em Equipamentos.
             </div>
           ) : (
             <select
@@ -124,7 +192,7 @@ export default function AbrirOS({ perfilNome, onSuccess }: AbrirOSProps) {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Selecione o equipamento...</option>
-              {equipamentos.map((eq) => (
+              {equipamentosDoSetor.map((eq) => (
                 <option key={eq.id} value={eq.id}>
                   {eq.nome}{eq.tag ? ` — ${eq.tag}` : ""}{eq.linha != null ? ` (L${eq.linha})` : ""}
                 </option>

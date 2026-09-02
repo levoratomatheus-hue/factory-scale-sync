@@ -35,7 +35,6 @@ interface Equipamento {
 
 const emptyForm = { nome: "", tag: "", linha: "", setor: "", status: "ativo" };
 
-const SETORES = ["Produção", "Laboratório"] as const;
 const SETOR_PREFIXO: Record<string, string> = {
   "Produção": "EQP",
   "Laboratório": "EQL",
@@ -350,16 +349,19 @@ export default function CadastroEquipamentos() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Setor</label>
-              <Select value={form.setor} onValueChange={handleSetorChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o setor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {SETORES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <input
+                type="text"
+                list="setores-cadastro-list"
+                value={form.setor}
+                onChange={(e) => handleSetorChange(e.target.value)}
+                placeholder="Ex: Produção, Laboratório..."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <datalist id="setores-cadastro-list">
+                {setoresDistintos.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
