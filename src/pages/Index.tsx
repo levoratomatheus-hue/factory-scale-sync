@@ -38,6 +38,7 @@ const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoe
 const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
+import { AlertaRelatorioMP } from '@/components/AlertaRelatorioMP';
 import { cn } from '@/lib/utils';
 import {
   Sidebar,
@@ -1232,6 +1233,11 @@ export default function Index() {
         <div className="flex items-center gap-2 px-3 h-12 border-b bg-background sticky top-0 z-10 md:hidden shrink-0">
           <SidebarTrigger />
         </div>
+        <AlertaRelatorioMP
+          isGestor={perfil.papel === 'gestor'}
+          userId={perfil.id}
+          onIrParaRelatorio={() => goToTab('consumo_mp')}
+        />
         {activeTab === null ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             Selecione uma opção no menu
