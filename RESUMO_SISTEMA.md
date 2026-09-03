@@ -1,1233 +1,578 @@
-# ZanCollor Produção — Resumo Completo do Sistema
+# RESUMO DO SISTEMA — Factory Scale Sync
 
-> Atualizado em 25/08/2026. Descreve todas as funcionalidades, fluxos, regras de negócio, estrutura técnica e otimizações realizadas.
-
----
-
-## 1. Visão Geral
-
-O sistema **ZanCollor Produção** é uma aplicação web de gestão da linha de produção fabril. Ele substitui controles manuais e planilhas, conectando em tempo real todos os pontos da fábrica: pesagem, mistura, linhas de produção, liberação de qualidade, manutenção, comercial, laboratório e compras/estoque de matérias-primas.
-
-**Stack:** React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Supabase (PostgreSQL + Auth + Realtime)
+> Documento gerado em 2026-08-31. Reflete o estado atual do código-fonte.
 
 ---
 
-## 2. Perfis de Usuário
+## 1. Visão Geral e Stack
 
-O campo `papel` na tabela `perfis` determina o que cada usuário vê e pode fazer.
+**Objetivo**: ERP de produção industrial para gestão de Ordens de Produção (OP), pesagem, mistura, linhas de produção, liberação de qualidade, estoque de matéria-prima e laboratório.
 
-| Papel | Descrição | Acesso |
-|---|---|---|
-| `gestor` | Administrador de produção | Acesso completo a todos os grupos: Produção, Manutenção, Comercial, Laboratório, Compras |
-| `operador` | Operador de chão de fábrica | Apenas a estação atribuída (via campo `balanca`) — sem sidebar de navegação |
-| `tecnico` | Técnico de manutenção | Painel de Manutenção e Abrir OS |
-| `comercial` | Equipe de vendas | Apenas o Painel Comercial (consulta de disponibilidade) |
-| `desenvolvimento` | Laboratório / desenvolvimento | Grupo Laboratório completo: Consumo de MP, Reaproveitamento, Análise de Reaproveitamento, MP Testada, Controle de Cor |
-| `compras` | Setor de compras | Grupos: Compras (Consumo MP, Média Mensal), Comercial (Painel Comercial), Estoque (Estoque MP ZC, Estoque MP PG, Histórico de Movimentações), Laboratório (MP Testada) |
+| Camada | Tecnologia |
+|--------|-----------|
+| Frontend | React 18 + TypeScript + Vite |
+| UI | shadcn/ui + Tailwind CSS |
+| Backend / DB | Supabase (PostgreSQL + Auth + Realtime) |
+| Drag-and-drop | @dnd-kit/core + @dnd-kit/sortable |
+| Gráficos | recharts |
+| PDF | jsPDF (carregado sob demanda) |
+| Excel | xlsx (carregado sob demanda) |
+| Etiquetas | ZPL (Zebra Programming Language) |
+| Roteamento | React Router v6 (rota única `/app`) |
 
-### Atribuição de estação para `operador`
+**Ponto de entrada**: `src/pages/Index.tsx` — renderização condicional por papel de usuário, sem sub-rotas.
 
-O campo `balanca` do perfil determina qual tela o operador vê ao fazer login:
+**Performance**:
+- Lazy loading de páginas pesadas via `React.lazy` + `Suspense`
+- Keep-alive de abas visitadas (estado preservado em memória)
+- Cache de 5 min para tabelas `formulas` e `mp_depara`
+- jsPDF e xlsx carregados via `dynamic import()` apenas quando usados
+- Realtime com debounce de 600–800ms por canal
+
+---
+
+## 2. Perfis de Acesso
+
+O campo `perfis.papel` (text) define o nível de acesso. O campo `perfis.balanca` (text|null) refina o acesso dos operadores.
+
+### GESTOR
+Acesso completo ao sistema. Vê todos os grupos de menu.
+
+**Produção**: Painel Gestor, Balança 1 e 2, Mistura, Linha 1–5, Liberação, Análises, Histórico de Paradas, Programação, Programação Balanças, Pré-Programação, Nova Ordem, Histórico de OPs, Consulta Fórmula, Importar Programação, Importar Excel Lab
+
+**Manutenção**: Painel Manutenção, Análise Manutenção, Equipamentos, Abrir OS, Estoque Manutenção, Ferramentas
+
+**Comercial**: Painel Comercial
+
+**Laboratório**: Consumo de MP, Reaproveitamento, Análise de Reaproveitamento, MP Testada, Controle de Cor
+
+**Compras**: Estoque MP ZC, Estoque MP PG, Histórico de Movimentações, Conferência de Estoque, Consumo de MP (compras), Consumo Médio Mensal
+
+### OPERADOR
+Interface full-screen dedicada (sem sidebar), determinada por `perfis.balanca`:
 
 | Valor de `balanca` | Tela exibida |
-|---|---|
-| `'1'` | Painel Balança 1 |
-| `'2'` | Painel Balança 2 |
-| `'mistura'` | Painel Mistura |
-| `'linha1'` a `'linha5'` | Painel Linha 1 a 5 |
+|--------------------|-------------|
+| `"1"` | Painel Balança 1 exclusivo |
+| `"2"` | Painel Balança 2 exclusivo |
+| `"mistura"` | Painel Mistura exclusivo |
+| `"linha1"` a `"linha5"` | Painel Linha N exclusivo |
+
+### TÉCNICO
+Sidebar com: Painel Manutenção, Abrir OS, Ferramentas Manutenção.
+Pode abrir OS. Não aprova nem conclui OS (exclusivo do gestor).
+
+### COMERCIAL
+Acesso exclusivo ao Painel Comercial.
+
+### COMPRAS
+- **Compras**: Consumo de MP, Consumo Médio Mensal
+- **Comercial**: Painel Comercial
+- **Estoque**: Estoque MP ZC, Estoque MP PG, Histórico de Movimentações, Conferência de Estoque
+- **Laboratório**: somente MP Testada
+
+### DESENVOLVIMENTO (Laboratório)
+- **Laboratório**: Consumo de MP, Reaproveitamento, Análise de Reaproveitamento, MP Testada, Controle de Cor
 
 ---
 
-## 3. Fluxo de Status de uma Ordem de Produção (OP)
+## 3. Todas as Páginas por Grupo
 
-O campo `status` da tabela `ordens` controla em qual etapa da produção a OP se encontra.
+### Produção
+
+| Tab ID | Arquivo | Funcionalidades |
+|--------|---------|----------------|
+| `gestor` | PainelGestor.tsx | Dashboard com KPIs: OPs do dia por status, kg/hora, linhas ativas. Filtra status ≠ `pre_programacao`. |
+| `balanca1` / `balanca2` | PainelBalanca.tsx | Pesagem de OP: exibe fórmula, bateladas feitas, pausa/retomada, imprime etiqueta ZPL/PDF. |
+| `mistura` | PainelMistura.tsx | Exibe OP em mistura com fórmula e bateladas, fila de aguardando_mistura, iniciar/concluir mistura, imprimir etiqueta. |
+| `linha1`–`linha5` | PainelLinha.tsx | Produção na linha: iniciar, registrar produção por dia, registrar paradas, registrar hora início/fim, concluir OP. |
+| `liberacao` | PainelLiberacao.tsx | Aprovar ou reprovar OPs em `aguardando_liberacao`. Reprovação normal (volta à fila) ou contando volume (conclui a OP mas não conta em kg/h). |
+| `analises` | PainelAnalises.tsx | Análise de produção: kg/h por linha, produção total, volume por mês, relatório de retrabalho (reprovados contando volume). |
+| `historico_paradas` | HistoricoParadas.tsx | Histórico de paradas de linha por período. |
+| `programacao` | PainelProgramacao.tsx | Programação diária por linha. Drag-and-drop entre linhas, editar, excluir, reprogramar, registrar dia, forçar conclusão. |
+| `programacao_balanca` | PainelProgramacaoBalanca.tsx | Programação vista por balança. |
+| `pre_programacao` | PreProgramacao.tsx | OPs em status `pre_programacao` aguardando ser programadas (definir data/linha/balança). |
+| `criar` | CriarOrdem.tsx | Criar nova OP: seleciona lote do cadastro, define quantidade, marca, linha, balança, fórmula, data. Alerta de acertos de material registrados para a fórmula. Baixa automática de estoque ao confirmar. |
+| `historico` | PainelHistorico.tsx | Histórico de OPs concluídas com filtros. |
+| `consulta_formula` | PainelConsultaFormula.tsx | Consulta e comparação de fórmulas (TID vs. Excel via mp_depara). |
+| `importar` | ImportarProgramacao.tsx | Importa programação de arquivo texto (formato específico). |
+| `importar_excel` | ImportarExcelLab.tsx | Importa formulas_excel e mp_depara de planilha Excel do laboratório. Limpa e repopula as tabelas a cada execução. |
+
+### Manutenção
+
+| Tab ID | Arquivo | Funcionalidades |
+|--------|---------|----------------|
+| `painel_manutencao` | PainelManutencao.tsx | Dashboard de OS abertas, em andamento e concluídas. |
+| `analise_manutencao` | PainelAnaliseManutencao.tsx | Análise de indicadores de manutenção. |
+| `cadastro_equipamentos` | CadastroEquipamentos.tsx | CRUD de equipamentos. |
+| `abrir_os` | AbrirOS.tsx | Abertura de Ordem de Serviço. Disponível para técnico e gestor. |
+| `estoque_manutencao` | EstoqueManutencao.tsx | Estoque de peças e ferramentas de manutenção. |
+| `ferramentas_manutencao` | FerramentasManutencao.tsx | Gestão de ferramentas e localizações. |
+
+### Comercial
+
+| Tab ID | Arquivo | Funcionalidades |
+|--------|---------|----------------|
+| `comercial` | PainelComercial.tsx | Dados comerciais das OPs (tipo estoque/venda, destino). |
+
+### Laboratório
+
+| Tab ID | Arquivo | Funcionalidades |
+|--------|---------|----------------|
+| `consumo_mp` | ConsumoMP.tsx | Registra consumo de MP no laboratório. Suporta flag "é acerto de material" (vincula a uma OP). Baixa de estoque_mp. Gera relatórios de consumo salvos em `relatorios_consumo_mp`. |
+| `reaproveitamento` | Reaproveitamento.tsx | Cadastra material para reaproveitamento com origem, destino, quantidade, percentual e tipo de erro. |
+| `analise_reaproveitamento` | PainelAnaliseReaproveitamento.tsx | Dashboard de reaproveitamentos pendentes e utilizados. Permite marcar como "utilizado". |
+| `mp_testadas` | ControleMPTestada.tsx | Rastreia testes de qualidade de matéria-prima. Situações: aprovado, reprovado, observação, aguardando. |
+| `controle_cor` | ControleCor.tsx | Registra cores de fórmulas em CIE L*a*b*. Calcula Delta E 2000 entre amostras. |
+
+### Compras
+
+| Tab ID | Arquivo | Funcionalidades |
+|--------|---------|----------------|
+| `compras_consumo` | ComprasConsumo.tsx | Consumo de MP por período baseado em OPs concluídas × percentuais das fórmulas. |
+| `compras_media_mensal` | ComprasMediaMensal.tsx | Média mensal de consumo de MP. |
+| `estoque_mp` | EstoqueMP.tsx | Saldo de estoque ZC (cod_tid). Entrada manual, saída manual, importação Excel. |
+| `estoque_mp_pg` | EstoqueMPPG.tsx | Saldo de estoque PG (cod_pg). Mesmas funções. |
+| `historico_mov_mp` | HistoricoMovimentacoesMP.tsx | Histórico de movimentações de estoque (saída, estorno, entrada). |
+| `conferencia_estoque` | ConferenciaEstoque.tsx | Confronta saldo atual com lançamentos para conferência. |
+
+---
+
+## 4. Fluxo de Status da OP
 
 ```
-┌──────────────────┐
-│  pre_programacao │  ← OP criada via Pré-Programação, ainda sem data/linha definida
-└────────┬─────────┘
-         │ gestor confirma e programa
-┌────────▼─────────┐
-│     pendente     │  ← OP programada aguardando início de pesagem
-└────────┬─────────┘
-         │ operador de balança inicia pesagem
-┌────────▼─────────┐
-│   em_pesagem     │
-└────────┬─────────┘
-         │ pesagem concluída
-         ├─── requer_mistura = true ────────────────────────────────────┐
-         │                                                               │
-┌────────▼──────────────┐                                    ┌──────────▼──────────┐
-│  aguardando_mistura   │                                    │  aguardando_linha   │
-└────────┬──────────────┘                                    └──────────┬──────────┘
-         │ operador de mistura inicia                                    │
-┌────────▼─────────┐                                                    │
-│   em_mistura     │                                                    │
-└────────┬─────────┘                                                    │
-         │ mistura concluída                                              │
-         └────────────────────────────────────────────────────────────►──┤
-                                                                         │
-                                                              ┌──────────▼──────────┐
-                                                              │      em_linha        │
-                                                              └──────────┬──────────┘
-                                                                         │ produção registrada
-                                                              ┌──────────▼──────────┐
-                                                              │ aguardando_liberacao │
-                                                              └──────────┬──────────┘
-                                                                         │ aprovado pelo gestor
-                                                              ┌──────────▼──────────┐
-                                                              │      concluido       │
-                                                              └─────────────────────┘
+[Criação]
+    ↓
+pre_programacao  ←  OP criada aguardando ser programada (sem data/linha definida)
+    ↓  (gestor define data + linha em Pré-Programação)
+pendente         ←  OP programada, aguardando pesagem
+    ↓  (balança inicia)
+em_pesagem       ←  Pesagem em andamento
+    ↓
+    ├─ requer_mistura = true  →  aguardando_mistura  →  em_mistura  →  aguardando_linha
+    └─ requer_mistura = false →  aguardando_linha
+                                       ↓
+                                   em_linha        ←  Produção na linha em andamento
+                                       ↓
+                               aguardando_liberacao ←  Produção concluída, aguardando QC
+                                       ↓
+                    ┌──────────────────┴──────────────────────────┐
+                    ↓                                             ↓
+               concluido                                     reprovado
+          (aprovado pelo gestor)               (motivo_reprovacao + data_reprovacao)
+
+Variante "contando volume" (reprovar mas contabilizar produção):
+    aguardando_liberacao → reprovado=true + contou_volume=true + status=concluido
+    (OP encerra, kg conta no volume total mas NÃO entra no cálculo de kg/h)
 ```
 
-**Rejeição na liberação:** a OP pode ser reprovada com preenchimento de `motivo_reprovacao`, voltando para `aguardando_liberacao` (ou para análise).
-
-**Status `pre_programacao`:** OPs criadas na tela Pré-Programação antes de receberem data, linha e balança definitivas. Ficam em fila separada e não aparecem no kanban de programação até serem convertidas para `pendente`.
-
----
-
-## 4. Navegação por Perfil — Estrutura de Menus (`Index.tsx`)
-
-### 4.1 Gestor (acesso completo)
-
-Sidebar com 6 grupos colapsáveis:
-
-**Produção** (grupos internos):
-- Pesagem → Balança 1, Balança 2
-- Mistura → Mistura
-- Linhas → Linha 1, Linha 2, Linha 3, Linha 4, Linha 5
-- Qualidade → Liberação
-- Análises → Análises da Produção, Histórico de Paradas
-- Gestão → Painel do Gestor, Pré-Programação, Programação, Programação Balanças, Nova Ordem, Histórico, Consulta por Fórmula, Importar, Importar Excel Lab
-
-**Manutenção:** Painel de Manutenção, Análise de Manutenção, Equipamentos, Abrir OS, Estoque, Ferramentas
-
-**Comercial:** Painel Comercial
-
-**Laboratório:** Consumo de MP, Reaproveitamento, Análise de Reaproveitamento, MP Testada, Controle de Cor
-
-**Compras:** Estoque MP ZC, Estoque MP PG, Consumo de MP, Consumo Médio Mensal
-
-### 4.2 Operador
-
-Layout fixo sem sidebar de navegação. Vê apenas a tela da estação atribuída no campo `balanca` do perfil.
-
-### 4.3 Técnico
-
-Sidebar com: Painel de Manutenção, Abrir OS.
-
-### 4.4 Comercial
-
-Sidebar com: Painel Comercial (único item).
-
-### 4.5 Desenvolvimento (Lab)
-
-Sidebar com grupo Laboratório: Consumo de MP, Reaproveitamento, Análise de Reaproveitamento, MP Testada, Controle de Cor.
-
-### 4.6 Compras
-
-Sidebar com 4 grupos:
-- Compras → Consumo de MP, Consumo Médio Mensal
-- Comercial → Painel Comercial
-- Estoque → Estoque MP ZC, Estoque MP PG, Histórico de Movimentações
-- Laboratório → MP Testada
+**Todos os valores de status usados no código**:
+`pre_programacao`, `pendente`, `em_pesagem`, `aguardando_mistura`, `em_mistura`, `aguardando_linha`, `em_linha`, `aguardando_liberacao`, `concluido`, `reprovado`
 
 ---
 
-## 5. Páginas e Painéis
+## 5. Módulos de Laboratório — Detalhamento
 
-### 5.1 Login (`Login.tsx`)
-- Autenticação via e-mail + senha (Supabase Auth).
-- Após login, redireciona para a interface correta conforme o `papel` do usuário.
+### 5.1 Consumo de MP (`ConsumoMP.tsx`)
+- Registra cada retirada de MP: `cod_mp_excel`, `materia_prima`, `quantidade_kg`, `data_retirada`, `observacao`, `retirado_por`.
+- Flag **"É acerto de material?"**: se ativada, o usuário busca a OP que está sendo acertada (por lote/produto). O consumo é vinculado a ela e o sistema sugere o item de fórmula correspondente.
+- Baixa automática: deduz de `estoque_mp` (ZC, por cod_tid) ou `estoque_mp_pg` (PG, por cod_pg).
+- Relatórios salvos em `relatorios_consumo_mp` (cabeçalho) e `relatorios_consumo_mp_itens` (detalhe por MP).
 
----
+### 5.2 Reaproveitamento (`Reaproveitamento.tsx`)
+- Cadastra material a reaproveitar: produto de origem, produto de destino, `formula_id_origem`, `formula_id_destino`, `quantidade_material`, `quantidade_utilizada`, `percentual_reaproveitado`.
+- `status`: `"pendente"` (disponível) | `"utilizado"` (já consumido).
+- `tipo_erro`: `"producao"` | `"comercial"` — identifica origem do erro.
+- Itens detalhados em `reaproveitamentos_itens`.
 
-### 5.2 Painel do Gestor (`PainelGestor.tsx`)
-**Quem usa:** gestor
+### 5.3 Análise de Reaproveitamento (`PainelAnaliseReaproveitamento.tsx`)
+- Dashboard de reaproveitamentos. Permite filtrar por status, marcar como "utilizado" e ver métricas.
 
-Visão geral de tudo que está pendente ou em atraso na produção.
+### 5.4 MP Testada (`ControleMPTestada.tsx`)
+- Rastreia testes de qualidade de MPs recebidas.
+- `situacao`: `"aprovado"` | `"reprovado"` | `"observacao"` | `"aguardando"`.
+- Campos: `pigmento_zc`, `codigo_cliente`, `fornecedor`, `data_teste`, `lote`, `motivo`, `criado_por`.
+- Visível para: gestor, desenvolvimento, compras.
 
-**Seções:**
-- **Alerta de OPs de dias anteriores:** lista OPs com `data_programacao < hoje` e status `pendente` ou `aguardando_linha`. Permite reprogramar individualmente para hoje ou outra data.
-- **OPs em atraso:** OPs onde `diasUteis(data_emissao, data_programacao) > 7` e status ≠ `aguardando_liberacao`. Exibe quantos dias de atraso.
-- **Lotes pendentes de programação:** lotes em `cadastro_lotes` com status `Em Aberto` que ainda não têm nenhuma OP criada. Botão direto para criar a OP.
-- **Ordens Programadas:** tabela de todas as OPs não concluídas com filtro de busca por material em tempo real.
-
-**Filtros:** seletor de data + campo de busca por material.
-**Tempo real:** Supabase Realtime com debounce de 300ms.
-
----
-
-### 5.3 Pré-Programação (`PreProgramacao.tsx`)
-**Quem usa:** gestor
-
-Fila de OPs criadas com status `pre_programacao` — entradas que ainda não receberam data, linha e balança definitivas.
-
-**Funcionalidades:**
-- Lista de OPs em pré-programação, ordenadas por data de emissão.
-- Editar: definir linha, balança, data de programação, marca, requer_mistura.
-- Converter para `pendente` (promove a OP para a fila de produção normal).
-- Excluir OP em pré-programação.
-- Exibe fórmula ao clicar no card.
-
-**Keep-alive:** sim — mantida no DOM após a primeira visita.
+### 5.5 Controle de Cor (`ControleCor.tsx`)
+- Armazena cor de referência de cada fórmula em CIE L\*a\*b\*.
+- Campos: `formula_id`, `produto`, `lab_l`, `lab_a`, `lab_b`, `observacao`, `aplicacao`.
+- Calcula Delta E 2000 entre amostras via `deltaE2000()` em `colorUtils.ts`.
 
 ---
 
-### 5.4 Programação de Produção (`PainelProgramacao.tsx`)
-**Quem usa:** gestor
+## 6. Estoque de Matéria-Prima
 
-Kanban diário com 5 colunas (Linha 1 a 5).
+### 6.1 Estoque ZC — `estoque_mp`
+- Chave: `cod_tid` (text, PK)
+- Campos: `materia_prima`, `saldo_kg`, `atualizado_em`
+- Tela `EstoqueMP.tsx`: entrada manual, saída manual, importação via Excel.
 
-**Funcionalidades:**
-- **Drag-and-drop:** reordena OPs dentro da mesma linha ou move entre linhas. A `posicao` é recalculada automaticamente.
-- **Clique no card:** abre o dialog de fórmula (ingredientes e quantidades por batelada).
-- **Confirmar programação (cadeado):** alterna `programacao_confirmada`. Verde = confirmado; afeta o cálculo de disponibilidade no painel comercial.
-- **Reprogramar:** muda a `data_programacao` para outra data.
-- **Editar:** abre `EditarOrdemDialog` para alterar produto, linha, balança, marca etc.
-- **Registrar Dia:** registra produção parcial do dia com hora início/fim e itens produzidos, avançando a `data_programacao` para o próximo dia útil.
-- **Forçar Conclusão:** gestor registra produção diretamente (equivalente ao operador de linha).
-- **Obs. Laboratório:** campo de anotações internas.
-- **Excluir:** remove o registro do dia ou a OP inteira.
-- **Voltar para Fila:** devolve uma OP de `em_linha` para `aguardando_linha`.
-- **Notas de programação:** post-its por dia com cores (amarelo, azul, verde, rosa). Persistem em `notas_programacao`.
-- **Copiar programação:** move OPs de um dia para outro (por linha ou todas).
-- **Paradas:** registro de paradas de linha com motivo e horário.
+### 6.2 Estoque PG — `estoque_mp_pg`
+- Chave: `cod_pg` (text, PK)
+- Campos: `materia_prima`, `saldo_kg`, `atualizado_em`
+- Tela `EstoqueMPPG.tsx`: mesmas funções.
 
-**Indicadores no card:**
-- Badge de status colorido.
-- Quantidade produzida no dia (kg) e horário início–fim.
-- Destaque vermelho + badge de atraso quando `diasUteis(data_emissao, data_programacao) > 7`.
-- Ícone de "aguardando registro" para OPs em linha sem registro do dia.
+### 6.3 Histórico — `estoque_movimentacoes`
+Toda movimentação (automática ou manual) é registrada aqui com: `cod_tid`, `materia_prima`, `tipo` (`saida` | `estorno` | `entrada`), `quantidade_kg`, `saldo_apos`, `ordem_id`, `ordem_lote`, `criado_por`, `criado_em`.
 
-**Realtime:** subscription filtra por relevância — só dispara refetch quando o evento toca o dia atual.
+### 6.4 Baixa Automática ao Criar OP (`estoqueUtils.ts`)
+1. Carrega itens da fórmula (`cod_mp, materia_prima, percentual`).
+2. Para cada item: `consumo_kg = (percentual / 100) × quantidade_op`.
+3. Busca `cod_mp` em `estoque_mp` (campo `cod_tid`). Se não achar, busca em `estoque_mp_pg` (campo `cod_pg`). MP sem cadastro em nenhum estoque é ignorada.
+4. Deduz do saldo via upsert.
+5. Insere movimentação tipo `"saida"` em `estoque_movimentacoes`.
 
----
+**Verificação prévia**: `verificarEstoqueOP()` checa se alguma MP ficaria negativa. Retorna lista de `MpFaltante[]` e pode bloquear a criação.
 
-### 5.5 Programação por Balança (`PainelProgramacaoBalanca.tsx`)
-**Quem usa:** gestor
+**Ajuste de quantidade**: ao editar a OP — `ajustarEstoqueOP()` calcula delta e lança `"saida"` ou `"estorno"`.
 
-Variante do kanban de programação organizado por balança em vez de linha. Permite visualizar a fila de cada balança (1 e 2).
+**Estorno ao excluir**: `estornarEstoqueOP()` reverte todas as movimentações anteriores da OP.
 
 ---
 
-### 5.6 Nova Ordem (`CriarOrdem.tsx`)
-**Quem usa:** gestor
+## 7. Acerto de Material
 
-Formulário para criar uma nova OP a partir de um lote do cadastro.
-
-**Fluxo:**
-1. Buscar lote por número → dados preenchidos automaticamente de `cadastro_lotes`.
-2. Customizar quantidades da fórmula (salvas em `ordens_formula`).
-3. Definir: data de programação, linha, balança, marca (Pigma ou Zan Collor), se requer mistura.
-4. Adicionar "adições para mistura" (campo `obs`, formato JSON `[{qty, mp}]`).
-5. Comparador TID × Excel integrado: mostra divergências de fórmula antes de criar.
-6. Salvar → OP criada com status `pendente`, posição calculada automaticamente.
-
-**Regra:** não é possível criar duas OPs para o mesmo lote.
+Funcionalidade no módulo **Consumo de MP** (laboratório):
+- Toggle "É acerto de material?" ao registrar consumo.
+- Com a flag ativa, busca a OP sendo acertada (por lote/nome) e vincula o consumo a ela.
+- Na tela **CriarOrdem**, o sistema detecta reaproveitamentos/acertos registrados para a mesma fórmula e exibe alerta com contagem.
 
 ---
 
-### 5.7 Painel Balança (`PainelBalanca.tsx`)
-**Quem usa:** operador de balança (1 ou 2), gestor
+## 8. Todas as Tabelas do Banco
 
-Estação de pesagem.
+> Campos marcados com † existem no código mas **não estão** no `src/integrations/supabase/types.ts` (schema desatualizado em relação ao banco real).
 
-**Funcionalidades:**
-- Lista de OPs na fila (status `pendente` ou `aguardando_linha` para a balança).
-- Iniciar pesagem → status muda para `em_pesagem`.
-- Fórmula completa com itens, quantidades por batelada, adições para mistura (`obs`).
-- Itens da fórmula com checkbox (visual, não persiste no banco).
-- Calcular número de bateladas com base em `tamanho_batelada`.
-- **Concluir pesagem:**
-  - Se `requer_mistura = true` → status vai para `aguardando_mistura`.
-  - Se `requer_mistura = false` → status vai para `aguardando_linha`.
-- **Imprimir etiqueta** (label da OP com fonte Anton).
+### `ordens`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | uuid (PK) | |
+| lote | text | |
+| produto | text | |
+| quantidade | number | Quantidade programada (kg) |
+| quantidade_real† | number\|null | Quantidade real produzida |
+| status | text | Ver §4 |
+| data_programacao | text | |
+| data_conclusao | text\|null | Preenchida ao concluir |
+| balanca | number | 1 ou 2 |
+| linha | number | 1–5 |
+| posicao | number\|null | Posição na fila |
+| formula_id† | text\|null | Referência lógica → formulas.formula_id |
+| tamanho_batelada† | number\|null | Kg por batelada |
+| obs† | text\|null | Adições para mistura |
+| obs_linha† | text\|null | Obs. para operador de linha |
+| obs_laboratorio† | text\|null | Obs. para laboratório |
+| marca† | text\|null | "ZC" ou "PG" |
+| requer_mistura† | boolean | Passa pela mistura? |
+| tipo_op† | text\|null | "estoque" ou "venda" |
+| motivo_reprovacao† | text\|null | |
+| data_reprovacao† | text\|null | |
+| orientacoes† | text\|null | Orientações de produção |
+| programacao_confirmada† | boolean | Confirmado pelo gestor |
+| data_emissao† | text\|null | Data de emissão da OP |
+| hora_inicio†, hora_fim† | text\|null | Pesagem |
+| bateladas_feitas† | number\|null | Bateladas concluídas |
+| obs_pausa† | text\|null | Obs. ao pausar pesagem |
+| temperaturas† | jsonb\|null | Temperaturas registradas |
+| criado_em | text\|null | |
+
+### `registros_diarios`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | uuid (PK) | |
+| ordem_id | uuid (FK → ordens) | |
+| data | text | YYYY-MM-DD |
+| hora_inicio | text | |
+| hora_fim | text | |
+| registro_producao | jsonb | Array `[{qty, peso}]` |
+| reprovado | boolean | Reprovado na liberação |
+| contou_volume | boolean | Reprovado MAS conta no volume |
+
+### `historico`
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| ordem_id | text (FK → ordens.id) |
+| status_anterior | text\|null |
+| status_novo | text\|null |
+| alterado_em | text\|null |
+
+### `paradas`
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| linha | number |
+| data | text |
+| motivo | text |
+| hora_inicio | text |
+| hora_fim | text |
+
+### `formulas`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | uuid (PK) | |
+| formula_id | text | Agrupa linhas de uma fórmula |
+| produto | text\|null | |
+| sequencia | number\|null | Ordem de adição |
+| materia_prima | text | Nome da MP |
+| fornecedor | text\|null | |
+| unidade | text\|null | |
+| percentual | number | % da batelada |
+| cod_mp† | text | **Chave de MP: código TID (ZC) ou PG** — usado na baixa de estoque |
+
+> `cod_mp` não aparece no `types.ts` mas existe no banco e é consultado em `formulasCache.ts`, `estoqueUtils.ts`, `compararFormulas.ts`, `ConsumoMP.tsx` e `CriarOrdem.tsx`.
+
+### `formulas_excel`
+Tabela auxiliar populada pelo ImportarExcelLab (planilha do laboratório).
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| formula_id | text | |
+| cod_mp_excel | text | **Chave de MP: código Excel do lab** |
+| materia_prima | text | |
+| percentual | number | |
+| produto_chave | text\|null | |
+
+### `ordens_formula`
+Fórmula customizada por OP. Quando presente, sobrepõe a `formulas` padrão naquela OP.
+
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| ordem_id | uuid (FK → ordens) |
+| sequencia | number\|null |
+| materia_prima | text |
+| quantidade_kg | number |
+
+### `cadastro_lotes`
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| lote | number |
+| produto | text |
+| quantidade | number |
+| tamanho_batelada | number\|null |
+| formula_id | text\|null |
+| classe | text\|null |
+| criado_em | text\|null |
+
+### `perfis`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | text (PK) | = auth.users.id |
+| nome | text | |
+| papel | text | gestor \| operador \| tecnico \| comercial \| desenvolvimento \| compras |
+| balanca | text\|null | Para operadores: "1", "2", "mistura", "linha1"–"linha5" |
+| criado_em | text\|null | |
+
+### `consumo_mp`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | uuid (PK) | |
+| cod_mp_excel | text | **Chave de MP: código Excel** |
+| materia_prima | text | |
+| quantidade_kg | number | |
+| data_retirada | text | |
+| observacao | text\|null | |
+| retirado_por | text | |
+| criado_em | text | |
+
+### `mp_testadas`
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| pigmento_zc | text |
+| codigo_cliente | text |
+| fornecedor | text |
+| data_teste | text |
+| lote | text |
+| situacao | text (`"aprovado"` \| `"reprovado"` \| `"observacao"` \| `"aguardando"`) |
+| motivo | text\|null |
+| criado_por | text |
+| criado_em | text |
+
+### `cores_formulas`
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| formula_id | text |
+| produto | text |
+| lab_l | number |
+| lab_a | number |
+| lab_b | number |
+| observacao | text\|null |
+| aplicacao | text\|null |
+| criado_por | text |
+| criado_em | text |
+
+### `reaproveitamentos`
+| Campo | Tipo |
+|-------|------|
+| id | uuid (PK) |
+| codigo | text |
+| produto_destino | text |
+| formula_id_destino | text |
+| produto_origem | text |
+| formula_id_origem | text |
+| quantidade_material | number |
+| quantidade_utilizada | number |
+| percentual_reaproveitado | number |
+| status | text (`"pendente"` \| `"utilizado"`) |
+| tipo_erro | text\|null (`"producao"` \| `"comercial"`) |
+
+### `reaproveitamentos_itens`
+Itens detalhados de cada reaproveitamento (FK → reaproveitamentos).
+
+### `estoque_mp`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| cod_tid | text (PK) | **Chave de MP ZC** |
+| materia_prima | text | |
+| saldo_kg | number | |
+| atualizado_em | text | |
+
+### `estoque_mp_pg`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| cod_pg | text (PK) | **Chave de MP PG** |
+| materia_prima | text | |
+| saldo_kg | number | |
+| atualizado_em | text | |
+
+### `estoque_movimentacoes`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | uuid (PK) | |
+| cod_tid | text | TID (ZC) ou PG (PG) — campo reutilizado |
+| materia_prima | text | |
+| tipo | text | `"saida"` \| `"estorno"` \| `"entrada"` |
+| quantidade_kg | number | |
+| saldo_apos | number | |
+| ordem_id | text\|null | FK lógica → ordens |
+| ordem_lote | text\|null | |
+| observacao | text\|null | |
+| criado_por | text | |
+| criado_em | text | |
+
+### `mp_depara`
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| cod_excel | text | Código do laboratório (planilha) |
+| cod_tid | text\|null | Código TID correspondente |
+
+**Status**: ativa e em uso (ver §9).
+
+### Tabelas de Manutenção
+- `equipamentos` — cadastro de equipamentos
+- `ordens_servico` — ordens de serviço (OS)
+- `estoque_manutencao` — peças/consumíveis
+- `ferramentas_manutencao` — ferramentas
+- `localizacoes_ferramentas` — onde cada ferramenta está armazenada
+
+### Notas e Relatórios
+- `notas_programacao` — lembretes exibidos no painel de programação (cor, texto, data opcional)
+- `relatorios_consumo_mp` — cabeçalho de relatório de consumo do lab
+- `relatorios_consumo_mp_itens` — itens do relatório (por MP), FK → relatorios_consumo_mp
 
 ---
 
-### 5.8 Painel Mistura (`PainelMistura.tsx`)
-**Quem usa:** operador de mistura, gestor
+## 9. Status da Tabela `mp_depara`
 
-Estação de mistura. Só recebe OPs com `requer_mistura = true`.
+A tabela `mp_depara` **não foi aposentada**. Ela é usada em dois contextos:
 
-**Funcionalidades:**
-- Fila de OPs com status `aguardando_mistura`.
-- Iniciar mistura → status muda para `em_mistura`.
-- Exibe fórmula, adições e orientações.
-- **Concluir mistura** → status vai para `aguardando_linha`. `data_programacao` não é tocada.
+**1. Comparador de fórmulas** (`compararFormulas.ts` + `PainelConsultaFormula.tsx`):
+- Converte `formulas.cod_mp` (TID) → `cod_excel` para comparar com `formulas_excel.cod_mp_excel`.
+- Necessária porque as duas bases de fórmulas usam chaves diferentes.
 
----
+**2. ImportarExcelLab** (`ImportarExcelLab.tsx`):
+- A cada importação, **limpa completamente e repopula** `mp_depara` com a aba "MATÉRIA PRIMA-OK!" da planilha.
+- Também atualiza `formulas_excel`.
 
-### 5.9 Painel Linha (`PainelLinha.tsx`)
-**Quem usa:** operador de linha (1 a 5), gestor
-
-Estação de produção na linha.
-
-**Funcionalidades:**
-- Fila de OPs com status `aguardando_linha` para a linha do operador.
-- Iniciar produção → status muda para `em_linha`, registra `hora_inicio`.
-- Registrar fim do dia:
-  - Registra `hora_fim`, itens produzidos (bateladas × peso), obs_linha.
-  - Cria registro em `registros_diarios`.
-  - Avança `data_programacao` para o próximo dia útil.
-  - Se marcada como concluída → status vai para `aguardando_liberacao`.
-- **Paradas de linha:** registra paralisações com motivo, hora início/fim.
+**O que NÃO usa mais `mp_depara`**: operações de estoque rotineiras. Toda baixa/estorno usa `formulas.cod_mp` diretamente (que já é TID/PG), sem passar por `mp_depara`.
 
 ---
 
-### 5.10 Painel Liberação (`PainelLiberacao.tsx`)
-**Quem usa:** gestor
+## 10. Chaves de Matéria-Prima por Tabela
 
-Controle de qualidade.
-
-**Funcionalidades:**
-- Lista de OPs com status `aguardando_liberacao`.
-- Exibe todos os registros diários da OP e paradas ocorridas na linha.
-- Editar registros (horários, itens produzidos, quantidade real).
-- **Aprovar** → status muda para `concluido`.
-- **Reprovar** → preenche `motivo_reprovacao`, status retorna.
-- Deletar registros individuais de dias.
-
----
-
-### 5.11 Histórico (`PainelHistorico.tsx`)
-**Quem usa:** gestor
-
-Consulta e edição de OPs concluídas.
-
-**Funcionalidades:**
-- Visualização por dia ou por intervalo de datas.
-- Edição de `hora_inicio`, `hora_fim`, `quantidade_real`.
-- Reabrir OP (volta para `aguardando_liberacao`).
-- Totais calculados com `useMemo`.
+| Tabela | Campo-chave de MP | Sistema |
+|--------|------------------|---------|
+| `formulas` | `cod_mp` | TID (ZC) ou PG — chave principal de produção |
+| `formulas_excel` | `cod_mp_excel` | Código Excel do laboratório |
+| `estoque_mp` | `cod_tid` (PK) | TID (ZC) |
+| `estoque_mp_pg` | `cod_pg` (PK) | PG |
+| `estoque_movimentacoes` | `cod_tid` | TID ou PG (campo reutilizado) |
+| `consumo_mp` | `cod_mp_excel` | Código Excel (campo histórico, legado) |
+| `mp_depara` | `cod_excel` → `cod_tid` | Bridge Excel ↔ TID |
 
 ---
 
-### 5.12 Análises de Produção (`PainelAnalises.tsx`)
-**Quem usa:** gestor
+## 11. Hooks Customizados (`src/hooks/`)
 
-Dashboard analítico com gráficos de produtividade.
-
-**Indicadores:**
-- Produção total do período e média kg/hora geral.
-- Cards por linha: kg produzidos, média kg/h, número de OPs.
-- Horas por linha: trabalhadas, manutenção, sem material, problema de processo, falta de energia, limpeza — com barra de eficiência.
-- Gráficos: média kg/h por faixa de OP, volume por faixa, produção mensal (12 meses), produtividade kg/h por mês com linha de meta.
-- Tabelas: Top 25 produtos por kg, Top 20 OPs mais repetidas.
-- Filtros: período com atalhos rápidos, filtro por linha, autocomplete de produto.
-- Dark mode via `buildPalette(dark)` + MutationObserver.
-
----
-
-### 5.13 Histórico de Paradas (`HistoricoParadas.tsx`)
-**Quem usa:** gestor
-
-Consulta consolidada de todas as paradas de linha.
-
-**Funcionalidades:**
-- Filtros: período (default = mês atual), linha (1–5 ou todas), motivo.
-- Tabela com paradas ordenadas por data/hora decrescente, com duração calculada.
-- Resumo por linha: total de horas paradas por linha no período.
-- Excluir paradas individuais (com confirmação).
-- Exporta CSV.
-
-**Motivos:** `manutencao`, `sem_material`, `problema_processo`, `falta_energia`, `reuniao`, `outros`.
+| Hook | Retorna | Tabelas |
+|------|---------|---------|
+| `useAuth()` | `{ perfil, email, loading, logout }` | `perfis` |
+| `useOrdens(date?)` | OPs do dia, `concluirOrdem`, `initBalanca`, `fetchOrdens` | `ordens` |
+| `useHistorico(de, ate)` | OPs concluídas | `ordens` |
+| `useFormula(formulaId, batelada)` | Itens calculados (percentual × batelada) | `formulas` |
+| `useParadasLinha(linha, data)` | Paradas da linha no dia, realtime | `paradas` |
+| `useParadasAnalises(de, ate)` | Paradas no período | `paradas` |
+| `useRegistrosDiariosOrdem(ordemId)` | Registros de uma OP, realtime | `registros_diarios` |
+| `useRegistrosDiariosAnalises(de, ate)` | Registros do período com join ordens; filtro `.or("reprovado.eq.false,contou_volume.eq.true")` | `registros_diarios`, `ordens` |
+| `useComprasConsumo(de, ate)` | Consumo de MP por período (OPs × fórmulas) | `ordens`, `formulas` (cache) |
+| `useIsMobile()` | boolean (breakpoint 768px) | — |
+| `useTheme()` | `{ theme, toggle }` | localStorage `zc_theme` |
+| `use-toast()` | `{ toast }` | — |
 
 ---
 
-### 5.14 Consulta por Fórmula (`PainelConsultaFormula.tsx`)
-**Quem usa:** gestor
+## 12. Utilitários (`src/lib/`)
 
-Busca e exibe o conteúdo completo de uma fórmula pelo `formula_id`. Inclui o comparador TID × Excel integrado.
-
----
-
-### 5.15 Importar Programação (`ImportarProgramacao.tsx`)
-**Quem usa:** gestor
-
-Duas seções independentes de importação:
-
-**Importar Programação (lotes):** arquivo TXT Windows-1252 gerado pelo TID/ERP, separador `;`. Popula `cadastro_lotes` com lote, produto, quantidade, `formula_id`, data de emissão, classe. O `formula_id` tem pontos de milhar removidos automaticamente (`.replace(/\./g, '')`).
-
-**Importar Fórmulas (TID):** arquivo TXT latin-1, separador `;`, 20 colunas, sem cabeçalho.
-- Linhas com **col 6 = `Formula`** → tabela `formulas`.
-- Linhas com **col 6 = `Produto Acabado`** → tabela `produtos_tid`.
-- Antes de inserir, limpa os registros existentes dos `formula_id` do arquivo (reimportação segura).
-
----
-
-### 5.16 Importar Excel do Lab (`ImportarExcelLab.tsx` + `excelImport.worker.ts`)
-**Quem usa:** gestor / lab
-
-Importa a planilha Excel mensal do laboratório (`.xlsx`). O parsing pesado roda em um **Web Worker** para não travar a UI.
-
-**Abas lidas:**
-- `MATÉRIA PRIMA-OK!` → tabela `mp_depara`
-- `Formulações Produção-OK!` → tabela `formulas_excel`
-
-**Fluxo:**
-1. Selecionar arquivo `.xlsx`.
-2. Worker faz o parse e retorna: MPs, itens de fórmula e alertas.
-3. Gestor revisa alertas (fórmulas duplicadas, cod_tid ambíguos, somas ≠ 1).
-4. Confirmar → apaga `mp_depara` e `formulas_excel` inteiros e reinsere tudo.
-
-**Alertas gerados:**
-- `formulaIdsDuplicados`: mesmo `formula_id` em mais de um bloco.
-- `codTidDuplicados`: mesmo `cod_tid` mapeado a mais de um código Excel.
-- `formulasSomaNaoFecha`: soma de percentuais difere de 1 em mais de 6%.
-
-> **⚠️ Detalhe crítico do parser:**
-> A aba `Formulações Produção-OK!` usa dois formatos de cabeçalho de bloco:
-> - Padrão: `col B = "MATÉRIA PRIMA"`
-> - Alternativo: `col B = ""` **e** `col H = "VALOR MP"`
->
-> Ambos marcam início de novo bloco. O parser (`isBlockHeader`) reconhece os dois.
-> **Se a segunda condição for removida, blocos com cabeçalho `VALOR MP` serão silenciosamente ignorados.**
-> (Bug descoberto em Jul/2026: fórmula 4507 recebia itens da 4496.)
+| Arquivo | Função principal |
+|---------|----------------|
+| `estoqueUtils.ts` | `baixarEstoqueOP`, `ajustarEstoqueOP`, `estornarEstoqueOP`, `verificarEstoqueOP` |
+| `formulasCache.ts` | Cache 5 min; paginação de 1000 linhas/página em paralelo; seleciona `formula_id, materia_prima, percentual, cod_mp` |
+| `deparaCache.ts` | Cache 5 min para `mp_depara` completa |
+| `compararFormulas.ts` | Compara `formulas` (TID) vs. `formulas_excel` (Excel) usando `mp_depara` como bridge |
+| `colorUtils.ts` | `deltaE2000()`, `labToRgbString()`, `classificarDeltaE()` |
+| `obsUtils.ts` | `parseObsItems()`, `formatObsLine()` — parse de obs estruturadas (formato `MP: qtd un`) |
+| `printZpl.ts` | `gerarZplLiberacao()`, `gerarZplBalancaMistura()`, `sanitizeZpl()` — ZPL puro, sem jsPDF |
+| `printEtiqueta.ts` | `imprimirEtiqueta()` — PDF com jsPDF + Anton font (carregado sob demanda); re-exporta de printZpl.ts |
+| `antonFont.ts` | Base64 da fonte Anton para jsPDF |
+| `diasUteis.ts` | `diasUteis(dataEmissao, dataProgramacao)` — calcula dias úteis entre datas |
+| `recalcularPosicoes.ts` | Reordena posições de OPs em uma coluna |
+| `parseEstoqueTid.ts` | Parseia arquivo de estoque no formato TID |
+| `utils.ts` | `formatKg()`, `sortOrdens()`, `cn()` e outros utilitários genéricos |
 
 ---
 
-### 5.17 Comparador TID × Excel (`lib/compararFormulas.ts` + `ComparatorPanel.tsx`)
-**Quem usa:** gestor / lab (via CriarOrdem e PainelConsultaFormula)
+## 13. Regras de Negócio Principais
 
-Compara a fórmula cadastrada no TID com a importada do Excel, usando `mp_depara` como camada de tradução.
+1. **Uma OP por vez na pesagem por balança**: `initBalanca()` só inicia se não houver outra OP `em_pesagem` na mesma balança.
 
-**Estados possíveis:** `ok`, `divergente`, `sem_depara`, `sem_excel`.
+2. **Uma OP por vez na mistura**: apenas a OP `em_mistura` é exibida. As demais ficam na fila `aguardando_mistura`. O botão "Iniciar" só aparece quando não há nenhuma em mistura.
 
-**Regra de negócio — variante "-1":** fórmulas cujo `produto_chave` termina em `-1` usam PEBD recuperado (500319) no lugar do virgem (500028). O comparador normaliza 500028 → 500319 simetricamente. Substituições em `SUBSTITUICOES_VARIANTE` em `compararFormulas.ts`.
+3. **Linha obrigatória para concluir mistura**: se `ordem.linha` for nulo, `concluirMistura()` bloqueia com toast de erro.
 
----
+4. **Reprovação normal vs. contando volume**:
+   - Normal: OP reprovada, volta à fila (status retorna ao estado anterior).
+   - Contando volume: `reprovado = true`, `contou_volume = true`, `status = concluido`. A OP encerra, o kg conta no volume total mas **não** entra no cálculo de kg/h.
 
-### 5.18 Painel Comercial (`PainelComercial.tsx`)
-**Quem usa:** comercial, gestor, compras
+5. **PainelAnalises — exclusão de retrabalho do kg/h**:
+   - `registrosDiariosKgH` filtra `reprovado = false` (exclui retrabalho do kg/h).
+   - `horasMap` é construído apenas de registros não-reprovados.
+   - Volume total ainda conta todos os registros com `contou_volume = true`.
 
-Consulta de disponibilidade de produtos para vendas.
+6. **Verificação de estoque antes de criar OP**: `verificarEstoqueOP()` retorna `MpFaltante[]` se algum item ficaria negativo. A tela alerta e pode bloquear a criação.
 
-**Modos:** por data específica ou busca de texto (≥ 3 caracteres) em todas as datas.
+7. **Fórmula customizada por OP**: se `ordens_formula` tiver registros para a OP, sobrepõem a fórmula padrão (`formulas`). Isso permite ajustar a fórmula de uma OP específica sem alterar a base.
 
-**Regra de disponibilidade:**
+8. **ImportarExcelLab é destrutivo**: a cada importação, `mp_depara` e `formulas_excel` são completamente limpas e repovoadas.
 
-| Condição | Data de disponibilidade |
-|---|---|
-| `programacao_confirmada = true` | Próximo dia útil após `data_programacao` |
-| `programacao_confirmada ≠ true` | `data_emissao` + 7 dias úteis |
+9. **Realtime com debounce**: todos os painéis operacionais escutam mudanças via Supabase Realtime com debounce de 600–800ms para evitar re-fetches em cascata.
 
----
+10. **Dias úteis e atraso**: OPs com `data_emissao` a mais de 7 dias úteis de `data_programacao` recebem borda vermelha na programação (`diasUteis() > 7`).
 
-### 5.19 Painel de Manutenção (`PainelManutencao.tsx`)
-**Quem usa:** gestor, tecnico
+11. **Pre-aquecimento de cache**: ao logar, gestor e compras disparam `fetchAllFormulas()` em background; gestor também dispara `fetchAllDepara()`. Isso garante que a primeira abertura das telas de fórmula e comparação seja instantânea.
 
-Central de gestão de Ordens de Serviço (OS).
-
-**Funcionalidades:**
-- Lista de OS com filtros por status, prioridade e técnico.
-- Criar, editar, iniciar e concluir OS.
-- Registro de movimentações de peças por OS.
-- Histórico de movimentações.
-- Reabertura de OS concluídas.
-
----
-
-### 5.20 Análise de Manutenção (`PainelAnaliseManutencao.tsx`)
-**Quem usa:** gestor
-
-Dashboard analítico das OS.
-
-**Seções:**
-- **Por Equipamento:** ranking por número de OS e tempo médio de reparo. Clique abre histórico completo do equipamento.
-- **Por Tempo:** tempo médio de reparo, OS por mês, OS por dia da semana.
-
-**Filtros:** período com atalhos + datas manuais + filtro por equipamento.
-Dark mode via `buildPalette(dark)` + MutationObserver.
-
----
-
-### 5.21 Abrir OS (`AbrirOS.tsx`)
-**Quem usa:** gestor, tecnico
-
-Formulário para abertura de nova Ordem de Serviço.
-
----
-
-### 5.22 Cadastro de Equipamentos (`CadastroEquipamentos.tsx`)
-**Quem usa:** gestor
-
-CRUD de equipamentos da fábrica com campos de TAG e linha associada.
-
----
-
-### 5.23 Estoque de Manutenção (`EstoqueManutencao.tsx`)
-**Quem usa:** gestor, tecnico
-
-Controle de peças e materiais de manutenção em estoque.
-
----
-
-### 5.24 Ferramentas de Manutenção (`FerramentasManutencao.tsx`)
-**Quem usa:** gestor, tecnico
-
-Controle de ferramentas do setor de manutenção.
-
----
-
-### 5.25 Consumo Real de MP — Lab (`ConsumoMP.tsx`)
-**Quem usa:** gestor, desenvolvimento
-
-Registro manual de retiradas reais de matéria-prima do estoque físico (consumo real, não teórico).
-
-**Seção 1 — Lançar retirada:**
-- Busca de MP por nome com autocomplete via tabela `mp_depara`.
-- Campos: quantidade (kg), data da retirada, observação, responsável.
-- Salva em `consumo_mp`.
-- Histórico recente com opção de exclusão.
-
-**Seção 2 — Relatório:**
-- Período com atalhos (hoje, semana, mês, mês anterior, ano).
-- Totais agrupados por MP com `cod_tid` e número de retiradas.
-- Exporta CSV.
-
-> Distinto do consumo teórico calculado pelo módulo Compras. O consumo real reflete o que efetivamente saiu do estoque físico.
-
----
-
-### 5.26 Reaproveitamento / SDR (`Reaproveitamento.tsx`)
-**Quem usa:** gestor, desenvolvimento
-
-Sistema de Solicitação de Desenvolvimento/Reaproveitamento (SDR). Controla o ciclo de vida de materiais reaproveitados.
-
-**Funcionalidades:**
-- Criar SDR com código sequencial automático (`SDR-NNN`), produto, formula_id, quantidade (kg), tipo de erro (`producao` ou `comercial`), observação.
-- Itens da fórmula carregados automaticamente de `formulas_excel`, com marcação de quais itens são do reaproveitamento (`eh_reaproveitado`).
-- Status: `pendente` → `utilizado`.
-- Ao marcar como utilizado: registra `utilizado_em` e `utilizado_por`.
-- Histórico completo de SDRs com filtros por status, tipo de erro e período.
-- Filtro de busca por código SDR ou produto.
-- Exporta lista.
-
-**Tabelas:** `reaproveitamentos`, `reaproveitamentos_itens`.
-
----
-
-### 5.27 Análise de Reaproveitamento (`PainelAnaliseReaproveitamento.tsx`)
-**Quem usa:** gestor, desenvolvimento
-
-Dashboard analítico dos SDRs de reaproveitamento.
-
-**Indicadores:**
-- Total de SDRs por status (pendente / utilizado).
-- Volume total em kg por período.
-- Distribuição por tipo de erro (produção vs. comercial).
-- Ranking de produtos mais reaproveitados.
-- Tempo médio entre criação e utilização.
-
----
-
-### 5.28 Controle de MP Testada (`ControleMPTestada.tsx`)
-**Quem usa:** gestor, desenvolvimento, compras
-
-Controle de aprovação de matérias-primas recebidas de fornecedores (testes de laboratório).
-
-**Funcionalidades:**
-- Registrar novo teste: pigmento ZC, código do cliente, fornecedor, data do teste, lote, situação, motivo.
-- **Situações:** `aprovado`, `reprovado`, `observacao`, `aguardando`.
-- Filtros: por situação, fornecedor, período.
-- Editar registros existentes.
-- Excluir registros (com confirmação).
-- Histórico completo com badges coloridos por situação.
-
-**Tabela:** `mp_testadas`.
-
----
-
-### 5.29 Controle de Cor — CIELAB (`ControleCor.tsx`)
-**Quem usa:** gestor, desenvolvimento
-
-Banco de dados de cores medidas em espaço CIELAB (L\*a\*b\*).
-
-**Funcionalidades:**
-- Cadastrar cor com: `formula_id` (opcional), produto, valores L\*, a\*, b\*, observação.
-- Calcular distância de cor (ΔE 2000) entre duas entradas do banco.
-- Buscar cores próximas a um alvo L\*a\*b\* por limiar de ΔE.
-- Editar e excluir entradas.
-- Exporta CSV.
-
-**Tabela:** `cores_formulas`.
-**Utilitário:** `lib/colorUtils.ts` — funções CIELAB e cálculo de DeltaE 2000.
-
----
-
-### 5.30 Estoque MP ZC (`EstoqueMP.tsx`)
-**Quem usa:** gestor, compras
-
-Controle de saldo de matérias-primas da marca Zan Collor.
-
-**Funcionalidades:**
-- Tabela de MPs com saldo atual (kg) e estoque mínimo.
-- **Alerta visual** quando `saldo_kg < minimo_kg` (linha destacada em vermelho/âmbar).
-- **Baixa por OP:** descontar consumo teórico de uma OP da fórmula (usando `estoqueUtils.ts`). Gera movimento do tipo `saida` em `estoque_movimentacoes`.
-- **Estorno de OP:** reverter baixa anterior. Gera movimento do tipo `estorno`.
-- **Ajuste manual:** entrada, saída ou ajuste de saldo com justificativa. Gera movimento do tipo `entrada`, `saida` ou `ajuste`.
-- **Saldo inicial:** definir saldo inicial de uma MP. Gera movimento do tipo `saldo_inicial`.
-- Editar estoque mínimo de cada MP.
-- Busca por nome ou código.
-- Exporta CSV do saldo atual.
-
-**Tabelas:** `estoque_mp`, `estoque_movimentacoes`.
-
----
-
-### 5.31 Estoque MP PG (`EstoqueMPPG.tsx`)
-**Quem usa:** gestor, compras
-
-Controle de saldo de matérias-primas da marca Pigma — mesmas funcionalidades do Estoque MP ZC, operando sobre registros da marca PG.
-
-**Tabelas:** `estoque_mp` (mesmo schema, separação por campo de marca ou cod_mp_excel específico), `estoque_movimentacoes`.
-
----
-
-### 5.32 Histórico de Movimentações MP (`HistoricoMovimentacoesMP.tsx`)
-**Quem usa:** gestor, compras (via Estoque do perfil compras)
-
-Auditoria completa de todas as movimentações de estoque de MP.
-
-**Funcionalidades:**
-- Tabela completa de movimentações: tipo, MP, quantidade, saldo após, ordem vinculada (se houver), responsável, data/hora.
-- Filtros: período, tipo de movimento, busca por MP ou lote.
-- Exporta CSV.
-
-**Tabela:** `estoque_movimentacoes`.
-
----
-
-## 6. Módulo Compras — Consumo de Matérias-Primas
-
-Centraliza o controle de consumo **teórico** de MP calculado a partir das fórmulas das OPs. Hook central: `useCompras.ts`.
-
-**Hook `useCompras.ts`:**
-- `useComprasConsumo(dataInicio, dataFim, filtros?)` — busca OPs por `criado_em`. Retorna `ResultadoCompras` com `linhas`, `aviso` de cobertura e `mesesComDados`.
-- `useComprasPrevisao(dataInicio, dataFim)` — busca OPs em aberto por `data_programacao`. Retorna colunas adicionais por status.
-- **Cálculo central (`calcularCompras`):** `kg_mp = (percentual/100) × qtd_op`. Agrupa por `cod_mp` (prioridade) ou nome. Rastreia OPs sem fórmula (`sem_formula`) e fórmulas sem itens (`sem_itens`).
-- `MesesComDados`: conjunto de meses distintos (YYYY-MM) com pelo menos 1 OP no período, e contagem de OPs por mês.
-
----
-
-### 6.1 Consumo de MP por Período (`ComprasConsumo.tsx`)
-**Quem usa:** gestor, compras
-
-Total de consumo teórico de cada MP em um período.
-
-- Atalhos de período: hoje, semana, mês, mês anterior, ano.
-- Tabela: MP, Cód. TID, Total (kg), Nº de OPs — ordenada por volume.
-- Busca por nome ou código TID.
-- Modal com detalhamento por OP (lote, produto, data, kg da MP).
-- Aviso de cobertura parcial.
-- Exporta CSV.
-
----
-
-### 6.2 Consumo Médio Mensal (`ComprasMediaMensal.tsx`)
-**Quem usa:** gestor, compras
-
-Média mensal de consumo teórico por MP.
-
-**Regra de cálculo:**
-```
-meses_com_dados = COUNT(DISTINCT YYYY-MM de criado_em das OPs no período)
-media_mensal = total_kg / meses_com_dados
-```
-
-> **Importante:** divide pelo número de meses que **efetivamente têm OPs**, não pelos meses do calendário. Evita que meses sem dados artificialmente reduzam a média.
-
-- Atalhos: últimos 3, 6, 12 meses ou este ano.
-- Banner informativo com os meses considerados no cálculo.
-- **Alerta de mês parcial** (âmbar): mês corrente no período ou mês com volume < 30% da média dos demais.
-- Summary cards: Meses com dados, MPs distintas, OPs consideradas.
-- Modal com detalhamento por OP.
-- Exporta CSV com mesma base de divisão.
-
-> Nota: `ComprasPrevisao.tsx` existe no código (lazy import) mas não está no menu atual.
-
----
-
-## 7. Regras de Negócio
-
-### 7.1 Regra dos 7 Dias Úteis
-- Toda OP não confirmada tem disponibilidade estimada como: `data_emissao + 7 dias úteis`.
-- Dias úteis excluem sábados, domingos e feriados nacionais brasileiros (fixos + Páscoa e derivados: Carnaval, Sexta-feira Santa, Corpus Christi).
-- Se `diasUteis(data_emissao, data_programacao) > 7` → OP é considerada **em atraso** (alerta vermelho na programação e no painel do gestor).
-
-### 7.2 Fórmulas e Bateladas
-- A fórmula define ingredientes como `percentual` do total.
-- `quantidade_kg = (percentual / 100) × tamanho_batelada`.
-- Customizações por OP são salvas em `ordens_formula` e têm prioridade sobre a fórmula base.
-- Número de bateladas: `round(quantidade / tamanho_batelada)`.
-
-### 7.3 Posição na Fila
-- Cada OP tem `posicao` (inteiro) que define a ordem na fila da linha.
-- Após qualquer alteração (criação, drag-and-drop, mudança de linha), `recalcularPosicoes(linha)` renumera sequencialmente as OPs não concluídas daquela linha.
-
-### 7.4 Registros Diários
-- OPs em linha podem ter produção registrada dia a dia (OPs que duram múltiplos dias).
-- Cada registro em `registros_diarios`: data, hora início/fim, itens produzidos (JSONB `[{qty, peso}]`).
-- Ao registrar o dia, `data_programacao` avança para o próximo dia útil.
-
-### 7.5 Lotes e Ordens
-- O lote é o identificador primário vindo do ERP (SAP).
-- Um lote só pode ter **uma OP ativa** no sistema.
-- Ao criar a OP, `data_emissao` é sincronizada de volta para `cadastro_lotes`.
-
-### 7.6 Marca
-- Cada OP pertence a uma marca: **Pigma** ou **Zan Collor**.
-- Exibida como badge colorido nos cards e tabelas.
-
-### 7.7 Garantias de Atualização de Status
-- **Concluir pesagem** (`PainelBalanca`): apenas `status` é atualizado.
-- **Concluir mistura** (`PainelMistura`): apenas `status` e `linha`. `data_programacao` não é tocada.
-- **Confirmar/desconfirmar** (`PainelProgramacao`): apenas `programacao_confirmada`.
-
-### 7.8 Consumo Teórico vs. Real
-- **Teórico (módulo Compras):** calculado via `fracao × qtd_op` da fórmula base. Reflete o planejado.
-- **Real (ConsumoMP):** lançado manualmente pelo lab ao retirar MP do estoque físico. Salvo em `consumo_mp`. As duas visões coexistem e não são sincronizadas automaticamente.
-
-### 7.9 Estoque de MP — Baixa Automática por OP
-- `estoqueUtils.ts` calcula o consumo teórico de cada MP para uma OP (formula_id + quantidade) e aplica as baixas no `estoque_mp`.
-- Cada baixa gera um registro em `estoque_movimentacoes` com o `ordem_id` vinculado.
-- O estorno também é gerenciado pelo mesmo utilitário.
-
-### 7.10 SDR — Reaproveitamento
-- Código SDR gerado automaticamente em formato `SDR-NNN` (sequencial).
-- Tipo de erro define a origem: `producao` (erro de fabricação) ou `comercial` (produto devolvido / cancelamento de venda).
-- SDR em status `pendente` aparece na lista de aprovação; ao utilizar, registra quem e quando.
-
-### 7.11 `formula_id` — Sem Formatação de Milhar
-- O `formula_id` deve sempre ser gravado **sem ponto de milhar** (ex: `5500`, nunca `5.500`).
-- O parser de `ImportarProgramacao.tsx` aplica `.replace(/\./g, '')` automaticamente.
-- **Nunca inserir manualmente com ponto** — causaria duplicatas invisíveis.
-
----
-
-## 8. Estrutura do Banco de Dados
-
-### Tabela `ordens`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `lote` | TEXT | Número do lote (vem do ERP) |
-| `produto` | TEXT | Nome do produto |
-| `quantidade` | NUMERIC | Quantidade total em kg |
-| `linha` | INTEGER | Linha de produção (1–5) |
-| `balanca` | INTEGER | Balança de pesagem (1–2) |
-| `status` | TEXT | `pre_programacao`, `pendente`, `em_pesagem`, `aguardando_mistura`, `em_mistura`, `aguardando_linha`, `em_linha`, `aguardando_liberacao`, `concluido` |
-| `data_programacao` | DATE | Data programada para produção |
-| `data_emissao` | DATE | Data de emissão do lote |
-| `data_conclusao` | TIMESTAMP | Quando foi concluída |
-| `posicao` | INTEGER | Posição na fila da linha |
-| `formula_id` | TEXT | Referência à fórmula (sem ponto de milhar) |
-| `tamanho_batelada` | NUMERIC | Tamanho de cada batelada em kg |
-| `marca` | TEXT | `Pigma` ou `Zan Collor` |
-| `obs` | TEXT | JSON: adições para mistura `[{qty, mp}]` |
-| `obs_linha` | TEXT | Obs do operador de linha |
-| `obs_laboratorio` | TEXT | Anotações do laboratório |
-| `requer_mistura` | BOOLEAN | Se deve passar pela etapa de mistura |
-| `programacao_confirmada` | BOOLEAN | Confirmação comercial da programação |
-| `hora_inicio` | TIME | Hora de início na linha |
-| `hora_fim` | TIME | Hora de fim |
-| `quantidade_real` | NUMERIC | Quantidade efetivamente produzida (kg) |
-| `motivo_reprovacao` | TEXT | Motivo em caso de reprovação |
-| `data_reprovacao` | DATE | Data da reprovação |
-| `tipo_op` | TEXT | Tipo da ordem de produção |
-| `criado_em` | TIMESTAMP | Criação do registro |
-
-### Tabela `cadastro_lotes`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `lote` | NUMBER | Identificador único do lote |
-| `produto` | TEXT | Nome do produto |
-| `quantidade` | NUMERIC | Quantidade em kg |
-| `classe` | TEXT | Classe do produto |
-| `formula_id` | TEXT | Fórmula padrão |
-| `tamanho_batelada` | NUMERIC | Batelada padrão |
-| `status` | TEXT | `Em Aberto` = aguardando OP |
-| `data_emissao` | DATE | Sincronizado da OP ao criar |
-
-### Tabela `formulas`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `formula_id` | TEXT | Identificador (sem ponto de milhar) |
-| `produto` | TEXT | Produto ao qual pertence |
-| `sequencia` | INTEGER | Ordem dos ingredientes |
-| `cod_mp` | TEXT | Código da MP no TID |
-| `materia_prima` | TEXT | Nome da MP |
-| `unidade` | TEXT | Unidade (kg, l, etc.) |
-| `percentual` | NUMERIC | % da batelada |
-| `ativo` | BOOLEAN | Se o item está ativo |
-
-### Tabela `produtos_tid`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `cod_produto` | INTEGER | Código do produto no TID |
-| `produto` | TEXT | Nome do produto |
-| `unidade` | TEXT | Unidade de medida |
-| `formula_id` | TEXT | Referência à fórmula |
-| `ativo` | BOOLEAN | Se está ativo |
-
-### Tabela `ordens_formula`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `ordem_id` | UUID | FK para ordens |
-| `sequencia` | INTEGER | Sequência do item |
-| `materia_prima` | TEXT | Nome |
-| `quantidade_kg` | NUMERIC | Quantidade customizada para a OP |
-
-### Tabela `registros_diarios`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `ordem_id` | UUID | FK para ordens |
-| `data` | DATE | Data do registro |
-| `hora_inicio` | TIME | Início |
-| `hora_fim` | TIME | Fim |
-| `registro_producao` | JSONB | Array de `{qty, peso}` (bateladas × kg) |
-
-### Tabela `paradas`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `linha` | INTEGER | Linha afetada |
-| `data` | DATE | Data da parada |
-| `motivo` | TEXT | `manutencao`, `sem_material`, `problema_processo`, `falta_energia`, `reuniao`, `outros` |
-| `hora_inicio` | TIME | Início da parada |
-| `hora_fim` | TIME | Fim da parada |
-| `criado_em` | TIMESTAMP | Criação |
-
-### Tabela `notas_programacao`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `texto` | TEXT | Conteúdo da nota |
-| `cor` | TEXT | `amarelo`, `azul`, `verde`, `rosa` |
-| `data` | DATE | Dia ao qual a nota pertence (null = global) |
-| `criado_em` | TIMESTAMP | Criação |
-
-### Tabela `historico`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `ordem_id` | UUID | FK para ordens |
-| `status_anterior` | TEXT | Status antes |
-| `status_novo` | TEXT | Status depois |
-| `alterado_em` | TIMESTAMP | Quando ocorreu |
-
-### Tabela `ordens_servico`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `descricao_problema` | TEXT | Descrição do problema |
-| `prioridade` | TEXT | `baixa`, `media`, `alta`, `critica` |
-| `status` | TEXT | `aberta`, `em_andamento`, `aguardando_aprovacao`, `concluida` |
-| `aberta_por` | TEXT | Nome de quem abriu |
-| `tecnico_nome` | TEXT | Nome do técnico responsável |
-| `solucao_aplicada` | TEXT | Solução ao concluir |
-| `aberta_em` | TIMESTAMP | Data/hora de abertura |
-| `iniciado_em` | TIMESTAMP | Início do atendimento |
-| `concluido_em` | TIMESTAMP | Conclusão |
-| `equipamentos` | FK | Relação com equipamentos |
-| `tipo` | TEXT | Tipo da OS |
-| `externa` | BOOLEAN | Se é OS externa |
-| `reprovacao` | TEXT | Motivo de reprovação (se houver) |
-
-### Tabela `equipamentos`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `nome` | TEXT | Nome do equipamento |
-| `tag` | TEXT | TAG de identificação |
-| `linha` | INTEGER | Linha associada (opcional) |
-
-### Tabela `estoque_manutencao`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `descricao` | TEXT | Descrição da peça/material |
-| `quantidade` | NUMERIC | Quantidade em estoque |
-| `minimo` | NUMERIC | Estoque mínimo |
-
-### Tabela `pecas_avulsas_os`
-Movimentações de peças de estoque vinculadas a uma OS de manutenção.
-
-### Tabela `perfis`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | UUID do usuário (Supabase Auth) |
-| `nome` | TEXT | Nome de exibição |
-| `papel` | TEXT | `gestor`, `operador`, `tecnico`, `comercial`, `desenvolvimento`, `compras` |
-| `balanca` | TEXT | Estação do operador (apenas para papel `operador`) |
-
-### Tabela `mp_depara`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `cod_excel` | TEXT | Código da MP na planilha Excel do lab |
-| `cod_tid` | TEXT | Código TID correspondente |
-| `tipo` | TEXT | Tipo da MP (opcional) |
-| `descricao` | TEXT | Nome/descrição da MP |
-
-### Tabela `formulas_excel`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `formula_id` | TEXT | ID da fórmula |
-| `sequencia` | INTEGER | Ordem do item |
-| `cod_mp_excel` | TEXT | Código Excel da MP |
-| `materia_prima` | TEXT | Nome da MP |
-| `percentual` | NUMERIC | % na fórmula |
-| `produto_chave` | TEXT | Chave do produto (ex.: `MBG-10-3593-1`) |
-
-### Tabela `consumo_mp`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `cod_mp_excel` | TEXT | Código Excel da MP retirada |
-| `materia_prima` | TEXT | Nome da MP |
-| `quantidade_kg` | NUMERIC | Quantidade retirada |
-| `data_retirada` | DATE | Data da retirada física |
-| `observacao` | TEXT | Observação opcional |
-| `retirado_por` | TEXT | Nome do responsável |
-| `criado_em` | TIMESTAMP | Criação do registro |
-
-### Tabela `reaproveitamentos`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `codigo` | TEXT | Código SDR (ex.: `SDR-001`) — gerado automaticamente |
-| `produto` | TEXT | Produto a reaproveitar |
-| `formula_id` | TEXT | Fórmula do produto |
-| `quantidade_kg` | NUMERIC | Quantidade em kg |
-| `status` | TEXT | `pendente` ou `utilizado` |
-| `observacao` | TEXT | Observação |
-| `tipo_erro` | TEXT | `producao` ou `comercial` |
-| `criado_por` | TEXT | Nome de quem criou |
-| `criado_em` | TIMESTAMP | Criação |
-| `utilizado_em` | TIMESTAMP | Quando foi utilizado |
-| `utilizado_por` | TEXT | Quem utilizou |
-
-### Tabela `reaproveitamentos_itens`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `reaproveitamento_id` | UUID | FK para reaproveitamentos |
-| `sequencia` | INTEGER | Ordem do item na fórmula |
-| `materia_prima` | TEXT | Nome da MP |
-| `cod_mp_excel` | TEXT | Código Excel da MP |
-| `percentual` | NUMERIC | % na fórmula |
-| `eh_reaproveitado` | BOOLEAN | Se este item é o material sendo reaproveitado |
-
-### Tabela `mp_testadas`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `pigmento_zc` | TEXT | Nome do pigmento (identificação interna ZC) |
-| `codigo_cliente` | TEXT | Código do cliente/fornecedor |
-| `fornecedor` | TEXT | Nome do fornecedor |
-| `data_teste` | DATE | Data do teste laboratorial |
-| `lote` | TEXT | Lote do material testado |
-| `situacao` | TEXT | `aprovado`, `reprovado`, `observacao`, `aguardando` |
-| `motivo` | TEXT | Motivo da situação (obrigatório em reprovação/observação) |
-| `criado_por` | TEXT | Nome de quem registrou |
-| `criado_em` | TIMESTAMP | Criação |
-
-### Tabela `cores_formulas`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `formula_id` | TEXT | Referência à fórmula (nullable — cor pode não ter fórmula associada) |
-| `produto` | TEXT | Nome do produto/cor |
-| `lab_l` | NUMERIC | Valor L\* (luminosidade) no espaço CIELAB |
-| `lab_a` | NUMERIC | Valor a\* (verde→vermelho) no espaço CIELAB |
-| `lab_b` | NUMERIC | Valor b\* (azul→amarelo) no espaço CIELAB |
-| `observacao` | TEXT | Observação opcional |
-| `criado_por` | TEXT | Quem cadastrou |
-| `criado_em` | TIMESTAMP | Criação |
-
-### Tabela `estoque_mp`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `cod_mp_excel` | TEXT | Código Excel da MP (unique) |
-| `materia_prima` | TEXT | Nome da MP |
-| `saldo_kg` | NUMERIC | Saldo atual em kg |
-| `minimo_kg` | NUMERIC | Estoque mínimo em kg |
-| `atualizado_em` | TIMESTAMP | Última atualização |
-
-### Tabela `estoque_movimentacoes`
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `id` | UUID | PK |
-| `cod_mp_excel` | TEXT | Código Excel da MP |
-| `materia_prima` | TEXT | Nome da MP |
-| `tipo` | TEXT | `entrada`, `saida`, `estorno`, `ajuste`, `saldo_inicial` |
-| `quantidade_kg` | NUMERIC | Quantidade da movimentação |
-| `saldo_apos` | NUMERIC | Saldo resultante após a movimentação |
-| `ordem_id` | UUID | FK para ordens (nullable — apenas em baixas/estornos por OP) |
-| `ordem_lote` | TEXT | Número do lote da OP vinculada |
-| `observacao` | TEXT | Justificativa (obrigatória em ajustes) |
-| `criado_por` | TEXT | Nome do responsável |
-| `criado_em` | TIMESTAMP | Criação |
-
----
-
-## 9. Hooks
-
-### `useAuth.ts`
-- Busca o perfil do usuário autenticado na tabela `perfis`.
-- Retorna: `perfil`, `email`, `loading`, `logout`.
-- Escuta mudanças de sessão via `onAuthStateChange`.
-
-### `useOrdens.ts`
-Sub-hooks exportados:
-- `useOrdens(date?)` — OPs por data ou todas as não concluídas. Realtime com debounce de 1500ms.
-- `useHistorico(dataInicio?, dataFim?)` — OPs concluídas com todos os detalhes.
-- `useAnalises(dataInicio, dataFim)` — OPs para dashboard analítico.
-- `useParadasLinha(linha, data)` — Paradas de uma linha em uma data.
-- `useParadasAnalises(dataInicio, dataFim)` — Paradas para analytics.
-- `useRegistrosDiariosOrdem(ordemId)` — Registros diários de uma OP específica.
-- `useRegistrosDiariosAnalises(dataInicio, dataFim)` — Registros para analytics.
-
-### `useFormula.ts`
-- Busca itens da fórmula (`materia_prima`, `percentual`, `quantidade_kg`).
-- Calcula quantidades baseadas no tamanho da batelada.
-- Permite editar quantidades por item.
-- Retorna: `itens`, `loading`, `error`, `setQuantidade`.
-
-### `useCompras.ts`
-- `useComprasConsumo(dataInicio, dataFim, filtros?)` — consumo teórico por período.
-- `useComprasPrevisao(dataInicio, dataFim)` — previsão para OPs em aberto.
-- Cálculo central: `kg_mp = (percentual/100) × qtd_op`.
-- Rastreia `mesesComDados` para média correta.
-
-### `useTheme.ts`
-- Detecta dark/light mode via `class="dark"` no `<html>`.
-- Retorna: `theme`, `toggle`.
-
-### `use-toast.ts`
-- Sistema de notificações toast (Sonner provider).
-
----
-
-## 10. Utilitários e Funções Principais (`src/lib/`)
-
-| Arquivo | Função | O que faz |
-|---|---|---|
-| `diasUteis.ts` | `diasUteis(de, ate)` | Conta dias úteis entre duas datas (exclui feriados brasileiros) |
-| `diasUteis.ts` | `proximoDiaUtil(data)` | Retorna o próximo dia útil após a data |
-| `diasUteis.ts` | `somarDiasUteis(data, n)` | Soma N dias úteis a uma data |
-| `recalcularPosicoes.ts` | `recalcularPosicoes(linha)` | Renumera a fila de uma linha no banco |
-| `printEtiqueta.ts` | `printEtiqueta(ordem, itens)` | Gera e imprime a etiqueta da OP (fonte Anton) |
-| `obsUtils.ts` | `parseObsItems(obs)` | Decodifica o JSON de adições para mistura |
-| `compararFormulas.ts` | `compararFormulas(...)` | Compara fórmula TID vs. Excel com suporte à variante -1 |
-| `colorUtils.ts` | `deltaE2000(lab1, lab2)` | Calcula distância perceptual de cor (DeltaE 2000) |
-| `colorUtils.ts` | `labToXyz`, `xyzToLab`, etc. | Conversões do espaço CIELAB |
-| `estoqueUtils.ts` | `baixarEstoqueOP(...)` | Calcula e aplica baixa de estoque por OP |
-| `estoqueUtils.ts` | `estornarBaixaOP(...)` | Reverte baixa de estoque de uma OP |
-| `formulasCache.ts` | — | Cache in-memory de fórmulas para evitar re-fetch |
-| `deparaCache.ts` | — | Cache in-memory do de-para de MPs |
-| `antonFont.ts` | — | Fonte Anton embutida para etiqueta impressa |
-| `utils.ts` | `sortOrdens(ordens)` | Ordena OPs: concluídas/em liberação no topo, depois por posição |
-| `utils.ts` | `formatKg(valor)` | Formata número como kg (3 casas, pt-BR) |
-| `utils.ts` | `parseHoras(inicio, fim)` | Calcula horas entre dois horários HH:MM |
-
----
-
-## 11. Componentes Reutilizáveis
-
-| Componente | Descrição |
-|---|---|
-| `StatusBadge` | Badge colorido com o status da OP |
-| `MarcaBadge` | Badge da marca (Pigma / Zan Collor) |
-| `MarcaCard` | Card de métrica com ícone de marca |
-| `EditarOrdemDialog` | Modal de edição completa de uma OP |
-| `DetalheOrdemDialog` | Modal com histórico completo de registros da OP |
-| `EditarRegistrosDiariosModal` | Modal para editar/deletar registros diários |
-| `ComparatorPanel` | Painel visual de comparação TID × Excel |
-| `ErrorBoundary` | Captura erros React e exibe fallback amigável |
-
----
-
-## 12. Funcionalidades em Tempo Real
-
-| Painel | Canal | Debounce |
-|---|---|---|
-| Painel Gestor | `gestor-pendentes-global` | 300ms |
-| Programação | `programacao-ordens` | 1500ms (com filtro por relevância de data) |
-| Balança | Canal por balança | 300ms |
-| Mistura | `mistura-realtime` | 300ms |
-| Linha | Canal por linha | 300ms |
-| Paradas | Canal por linha | imediato |
-| Registros diários | Canal por ordem | imediato |
-
-> **Nota:** A subscription do PainelProgramacao filtra eventos por relevância — só dispara refetch quando o evento toca o dia atual (`data_programacao`, `data_reprovacao` ou `data` do registro).
-
----
-
-## 13. Keep-Alive de Abas (`Index.tsx`)
-
-Painéis com fetch de dados montam apenas na **primeira visita** e ficam no DOM com `display: none` nas demais, evitando re-fetch ao trocar de aba.
-
-**Abas com keep-alive:**
-`gestor`, `programacao`, `programacao_balanca`, `pre_programacao`, `historico`, `liberacao`, `analises`, `comercial`, `balanca1`, `balanca2`, `mistura`, `linha1`–`linha5`, `painel_manutencao`, `analise_manutencao`, `cadastro_equipamentos`, `estoque_manutencao`, `consumo_mp`, `compras_consumo`, `compras_media_mensal`, `reaproveitamento`, `analise_reaproveitamento`, `mp_testadas`, `controle_cor`, `estoque_mp`, `estoque_mp_pg`, `historico_mov_mp`.
-
-**Abas que sempre remontam (formulários/one-shot):**
-`criar`, `importar`, `importar_excel`, `abrir_os`, `consulta_formula`, `ferramentas_manutencao`, `historico_paradas`.
-
----
-
-## 14. Dark Mode
-
-Suporte completo a dark mode via Tailwind (`dark:` classes) em todas as páginas e via paleta dinâmica (`buildPalette(dark)`) nos painéis com gráficos Recharts.
-
-Detecção do tema: `MutationObserver` no `document.documentElement` observando mudanças na classe `dark`. Toggle disponível na sidebar de todos os perfis.
-
-Páginas com `buildPalette` + MutationObserver:
-- `PainelAnalises.tsx`
-- `PainelAnaliseManutencao.tsx`
-- `ComprasConsumo.tsx`, `ComprasPrevisao.tsx`, `ComprasMediaMensal.tsx`
-
----
-
-## 15. Estrutura de Arquivos
-
-```
-src/
-├── pages/
-│   ├── Index.tsx                        # Shell principal, roteamento por papel + keep-alive
-│   ├── Login.tsx                        # Autenticação
-│   ├── PaginaInicial.tsx                # Landing page de boas-vindas
-│   ├── PainelGestor.tsx                 # Dashboard do gestor
-│   ├── PreProgramacao.tsx               # Fila de OPs em pré-programação
-│   ├── PainelProgramacao.tsx            # Kanban de programação (5 linhas)
-│   ├── PainelProgramacaoBalanca.tsx     # Programação por balança
-│   ├── CriarOrdem.tsx                   # Criação de nova OP
-│   ├── PainelBalanca.tsx                # Estação de pesagem
-│   ├── PainelMistura.tsx                # Estação de mistura
-│   ├── PainelLinha.tsx                  # Linha de produção
-│   ├── PainelLiberacao.tsx              # Liberação/qualidade
-│   ├── PainelHistorico.tsx              # Histórico de OPs concluídas
-│   ├── HistoricoParadas.tsx             # Histórico de paradas por linha
-│   ├── PainelAnalises.tsx               # Dashboard analítico de produção
-│   ├── PainelAnaliseManutencao.tsx      # Dashboard analítico de manutenção
-│   ├── PainelAnaliseReaproveitamento.tsx# Dashboard analítico de reaproveitamento
-│   ├── PainelComercial.tsx              # Consulta de disponibilidade
-│   ├── PainelConsultaFormula.tsx        # Consulta de fórmulas
-│   ├── PainelManutencao.tsx             # Central de OS de manutenção
-│   ├── AbrirOS.tsx                      # Formulário de nova OS
-│   ├── CadastroEquipamentos.tsx         # CRUD de equipamentos
-│   ├── EstoqueManutencao.tsx            # Estoque de manutenção
-│   ├── FerramentasManutencao.tsx        # Ferramentas de manutenção
-│   ├── ImportarProgramacao.tsx          # Importação TXT (lotes + fórmulas TID)
-│   ├── ImportarExcelLab.tsx             # Importação Excel do lab (MPs + fórmulas)
-│   ├── ConsumoMP.tsx                    # Registro de retiradas reais de MP (lab)
-│   ├── Reaproveitamento.tsx             # Sistema SDR de reaproveitamento
-│   ├── ControleMPTestada.tsx            # Controle de aprovação de MP por fornecedor
-│   ├── ControleCor.tsx                  # Banco de cores CIELAB
-│   ├── EstoqueMP.tsx                    # Estoque de MP ZC (saldo + mínimo)
-│   ├── EstoqueMPPG.tsx                  # Estoque de MP PG (saldo + mínimo)
-│   ├── HistoricoMovimentacoesMP.tsx     # Auditoria de movimentações de estoque de MP
-│   ├── ComprasConsumo.tsx               # Consumo teórico de MP por período
-│   ├── ComprasPrevisao.tsx              # Previsão de consumo (OPs em aberto)
-│   └── ComprasMediaMensal.tsx           # Média mensal de consumo de MP
-├── components/
-│   ├── StatusBadge.tsx
-│   ├── MarcaBadge.tsx
-│   ├── MarcaCard.tsx
-│   ├── EditarOrdemDialog.tsx
-│   ├── DetalheOrdemDialog.tsx
-│   ├── EditarRegistrosDiariosModal.tsx
-│   ├── ComparatorPanel.tsx
-│   ├── ErrorBoundary.tsx
-│   └── ui/                              # Componentes shadcn/ui (40+ componentes Radix UI)
-├── hooks/
-│   ├── useAuth.ts                       # Autenticação e perfil do usuário
-│   ├── useTheme.ts                      # Tema dark/light
-│   ├── useOrdens.ts                     # Busca e atualização de OPs
-│   ├── useFormula.ts                    # Busca de fórmulas
-│   ├── useCompras.ts                    # Consumo e previsão de MP (módulo Compras)
-│   └── use-toast.ts                     # Sistema de notificações toast
-├── lib/
-│   ├── diasUteis.ts                     # Cálculo de dias úteis e feriados brasileiros
-│   ├── recalcularPosicoes.ts            # Reordenação da fila por linha
-│   ├── obsUtils.ts                      # Parse do JSON de adições para mistura
-│   ├── printEtiqueta.ts                 # Geração e impressão de etiqueta
-│   ├── compararFormulas.ts              # Comparador TID × Excel (com variante -1)
-│   ├── colorUtils.ts                    # CIELAB e DeltaE 2000
-│   ├── estoqueUtils.ts                  # Baixa e estorno de estoque por OP
-│   ├── formulasCache.ts                 # Cache in-memory de fórmulas
-│   ├── deparaCache.ts                   # Cache in-memory do de-para de MPs
-│   ├── antonFont.ts                     # Fonte Anton para etiqueta impressa
-│   └── utils.ts                         # sortOrdens, formatKg, parseHoras
-└── integrations/supabase/
-    ├── client.ts
-    └── types.ts
-
-supabase/                                # Configuração e seeds Supabase
-```
-
----
-
-## 16. Otimizações de Performance
-
-### `PainelProgramacao.tsx`
-- Subscription realtime filtra por relevância: eventos que não tocam o dia atual são descartados antes do debounce.
-- `handleDeletarRegistro`: usa `registrosDoDiaRef` em vez de dependência instável para evitar invalidar o memo das 5 `LinhaColumn`.
-- `handleMoverLinha`: envolvido em `useCallback` — `FormulaDialog` (memoizado) deixa de re-renderizar em todo `setState` do pai.
-- `notasVisiveis` e `todayStr`: movidos para `useMemo`.
-
-### `PainelHistorico.tsx`
-- Totais do `<tfoot>` extraídos para `useMemo` — não recalculam mais a cada render.
-
-### `PainelLinha.tsx`
-- Constante `today` em `useMemo(() => ..., [])` dentro do componente — corrige bug onde a data não atualizava se o app ficasse aberto após meia-noite.
-
-### `Index.tsx`
-- `handleCriarOP` envolvido em `useCallback`.
-- `activeLabel` movido para `useMemo`.
-- Keep-alive de abas via `mountedTabs`: elimina re-fetch ao Supabase em cada troca de aba.
-- Pre-fetch lazy de painéis críticos (Linha, Balança, Programação, Liberação, Histórico) 200ms após montagem.
-
-### `use-toast.ts`
-- Dep array `[state]` → `[]` no `useEffect` do listener. Antes, o listener era re-registrado a cada toast disparado.
-
-### `PainelAnaliseManutencao.tsx`
-- `PRIORIDADE_CONFIG` e `STATUS_CONFIG` convertidos para funções `getPrioridadeConfig(D)` / `getStatusConfig(D)` para refletir o tema atual.
-
----
-
-## 17. Histórico de Mudanças Relevantes
-
-### Jul/2026 — Importador Excel e comparador TID × Excel
-- `ImportarExcelLab.tsx` + `excelImport.worker.ts`: importação via Web Worker.
-- `lib/compararFormulas.ts` + `ComparatorPanel.tsx`: comparador com variante "-1".
-- Tabelas: `mp_depara`, `formulas_excel`.
-- **Bug corrigido:** segundo formato de cabeçalho de bloco (`VALOR MP`) não reconhecido — fórmula 4507 recebia itens da 4496. Corrigido com `isBlockHeader` dual.
-
-### Jul/2026 — Migração da base de fórmulas
-- 4.486 fórmulas duplicadas (com ponto de milhar no ID) removidas.
-- 453 OPs e `cadastro_lotes` normalizados.
-- Coluna `cod_mp` adicionada à tabela `formulas`.
-- Tabela `produtos_tid` criada.
-- Regra permanente: `formula_id` sem ponto de milhar.
-
-### Jul/2026 — Módulo Compras e Consumo Real de MP
-- `useCompras.ts`, `ComprasConsumo.tsx`, `ComprasPrevisao.tsx`, `ComprasMediaMensal.tsx`.
-- `ConsumoMP.tsx` + tabela `consumo_mp`.
-- `HistoricoParadas.tsx`.
-- Regra de média mensal por meses com dados (não por calendário).
-
-### Ago/2026 — Laboratório, Estoque e Reaproveitamento
-- `Reaproveitamento.tsx` — sistema SDR completo.
-- `PainelAnaliseReaproveitamento.tsx`.
-- `ControleMPTestada.tsx` + tabela `mp_testadas`.
-- `ControleCor.tsx` + tabela `cores_formulas`.
-- `lib/colorUtils.ts` — CIELAB e DeltaE 2000.
-- `EstoqueMP.tsx` + `EstoqueMPPG.tsx` + tabelas `estoque_mp`, `estoque_movimentacoes`.
-- `HistoricoMovimentacoesMP.tsx`.
-- `lib/estoqueUtils.ts` — baixa e estorno de estoque por OP.
-- `PreProgramacao.tsx` — status `pre_programacao` adicionado ao fluxo.
-- Perfis `desenvolvimento` e `compras` adicionados ao sistema.
+12. **types.ts está desatualizado**: o schema TypeScript do Supabase (gerado automaticamente) só tem 5 tabelas — `consumo_mp`, `cadastro_lotes`, `formulas`, `historico`, `ordens`, `perfis`. Todas as outras tabelas são acessadas com `(supabase as any).from(...)` ou simplesmente com tipagem implícita. Isso não é um bug, mas significa que autocompletar e type-checking não cobrem a maioria das tabelas operacionais.

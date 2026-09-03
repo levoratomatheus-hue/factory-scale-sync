@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight, Users } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -36,7 +36,6 @@ const EstoqueMP                     = lazy(() => import('./EstoqueMP'));
 const EstoqueMPPG                   = lazy(() => import('./EstoqueMPPG'));
 const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoesMP'));
 const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'));
-const CadastroUsuarios              = lazy(() => import('./CadastroUsuarios'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { AlertaRelatorioMP } from '@/components/AlertaRelatorioMP';
@@ -77,8 +76,7 @@ type TabGestorId =
   | 'estoque_mp'
   | 'estoque_mp_pg'
   | 'historico_mov_mp'
-  | 'conferencia_estoque'
-  | 'cadastro_usuarios';
+  | 'conferencia_estoque';
 
 const gruposGestor = [
   {
@@ -170,7 +168,6 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['estoque_mp_pg' as TabGestorId, 'Estoque MP PG'],
   ['historico_mov_mp' as TabGestorId, 'Histórico de Movimentações'],
   ['conferencia_estoque' as TabGestorId, 'Conferência de Estoque'],
-  ['cadastro_usuarios' as TabGestorId, 'Cadastro de Usuários'],
 ]);
 
 function resolveLinhaNumber(balanca: string | null): number | null {
@@ -218,7 +215,6 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'estoque_mp_pg',
   'historico_mov_mp',
   'conferencia_estoque',
-  'cadastro_usuarios',
 ]);
 
 // Mantém o componente montado no DOM mas invisível quando a aba não está ativa.
@@ -1216,35 +1212,6 @@ export default function Index() {
             </SidebarGroupContent>
             )}
           </SidebarGroup>
-          <SidebarGroup>
-            <button
-              onClick={() => toggleGroup('administracao')}
-              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-widest uppercase text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
-            >
-              <span className="flex items-center gap-1.5">
-                <Settings className="h-3 w-3 shrink-0" />
-                <span className="group-data-[collapsible=icon]:hidden">Administração</span>
-              </span>
-              <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform duration-200 group-data-[collapsible=icon]:hidden', !openGroups.has('administracao') && '-rotate-90')} />
-            </button>
-            {openGroups.has('administracao') && (
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={activeTab === 'cadastro_usuarios'}
-                    tooltip="Cadastro de Usuários"
-                    onClick={() => goToTab('cadastro_usuarios')}
-                    size="sm"
-                  >
-                    <Users className="h-3.5 w-3.5 shrink-0" />
-                    <span>Usuários</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-            )}
-          </SidebarGroup>
         </SidebarContent>
 
         <SidebarFooter className="border-t">
@@ -1488,13 +1455,6 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'conferencia_estoque'}>
                   <Suspense fallback={TAB_LOADING}>
                     <ConferenciaEstoque />
-                  </Suspense>
-                </KeepAlive>
-              )}
-              {mountedTabs.has('cadastro_usuarios') && (
-                <KeepAlive active={activeTab === 'cadastro_usuarios'}>
-                  <Suspense fallback={TAB_LOADING}>
-                    <CadastroUsuarios perfilAtual={perfil.papel} />
                   </Suspense>
                 </KeepAlive>
               )}

@@ -1,0 +1,4 @@
+Claro! Manda isso para o Cursor:
+
+No src/pages/Index.tsx, remova toda a lógica do splash de boas-vindas: os estados showWelcome e welcomeFading, os useEffects e o useCallback que os controlam, o bloco if (showWelcome) return <PaginaInicial ...>, as constantes WELCOME_SESSION_KEY e WELCOME_ROLES, e o import do PaginaInicial.
+No src/pages/PaginaInicial.tsx, remova a prop onEnter da interface e do componente, e substitua o ternário que alterna entre o botão "Entrar" e o link "Acessar Sistema" pelo link "Acessar Sistema" diretamente.
