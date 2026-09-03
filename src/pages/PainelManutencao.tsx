@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle, ChevronDown } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -211,6 +211,15 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [andamentoPecasAvulsas, setAndamentoPecasAvulsas] = useState<string[]>([]);
   const [solucaoPecasAvulsas, setSolucaoPecasAvulsas] = useState<string[]>([]);
   const [expandedAvulsas, setExpandedAvulsas] = useState<Record<string, boolean>>({});
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
+  const toggleCard = useCallback((id: string) => {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
 
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
@@ -900,339 +909,166 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           Nenhuma OS com status "{STATUS_TABS.find(t => t.value === tabAtiva)?.label}".
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           {ossFiltradas.map((os) => {
             const prio = PRIORIDADE_CONFIG[os.prioridade] ?? { label: os.prioridade, class: "bg-muted text-muted-foreground" };
             const st = STATUS_CONFIG[os.status] ?? { label: os.status, class: "bg-muted text-muted-foreground" };
             const equip = os.equipamentos;
             const hoje = new Date().toISOString().split("T")[0];
             const prazoVencido = os.externa && os.prazo_retorno && os.prazo_retorno < hoje && os.status !== "concluida";
+            const isExpanded = expandedCards.has(os.id);
+            const movs = movsPorOS[os.id];
 
-            /* ── Card compacto para OS concluída ── */
-            if (os.status === "concluida") {
-              const movs = movsPorOS[os.id];
-              return (
-                <div key={os.id} className="rounded-lg border bg-green-50 border-green-200 p-3 space-y-2">
-                  {/* Cabeçalho — tudo em uma linha */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm leading-tight">
-                      {equip?.nome ?? "Equipamento removido"}
-                    </span>
-                    {equip?.tag && (
-                      <span className="font-mono text-xs border border-green-300 rounded px-1.5 py-0.5 text-muted-foreground">
-                        {equip.tag}
-                      </span>
-                    )}
-                    {equip?.linha != null && (
-                      <span className="text-xs text-muted-foreground">L{equip.linha}</span>
-                    )}
-                    <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                      {os.externa && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
-                          <Building2 className="h-3 w-3" />
-                          {os.empresa_externa ?? "Externa"}
-                        </span>
-                      )}
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                        {(os.tipo ?? "corretiva") === "preventiva" ? "Preventiva" : "Corretiva"}
-                      </span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${prio.class}`}>
-                        {prio.label}
-                      </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                        Concluída
-                      </span>
-                    </div>
-                  </div>
+            const cardBorder =
+              os.status === "concluida"            ? "border-green-200 dark:border-green-900" :
+              os.status === "em_andamento"         ? "border-orange-200 dark:border-orange-900" :
+              os.status === "aguardando_peca"      ? "border-yellow-200 dark:border-yellow-900" :
+              os.status === "aguardando_aprovacao" ? "border-amber-200 dark:border-amber-900" :
+              "border-border";
 
-                  {/* Descrição */}
-                  <p className="text-sm text-foreground/80 line-clamp-2">{os.descricao_problema}</p>
-
-                  {/* Solução */}
-                  {os.solucao_aplicada && (
-                    <div className="rounded-md bg-green-100/70 border border-green-200 px-2.5 py-1.5 space-y-0.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700 flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Solução
-                      </p>
-                      <p className="text-xs text-green-900">{os.solucao_aplicada}</p>
-                    </div>
-                  )}
-
-                  {/* Peças utilizadas — somente leitura */}
-                  {(movs && movs.length > 0 || (avulsasPorOS[os.id] ?? []).length > 0) && (
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                        <Package className="h-3 w-3" /> Peças Utilizadas
-                      </p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5">
-                        {(movs ?? []).map(mov => (
-                          <span key={mov.id} className="text-xs text-muted-foreground">
-                            {mov.nome}{" "}
-                            <span className="font-medium text-foreground tabular-nums">
-                              {mov.quantidade} {mov.unidade}
-                            </span>
-                          </span>
-                        ))}
-                        {(avulsasPorOS[os.id] ?? []).map(av => {
-                          const expanded = expandedAvulsas[av.id] ?? false;
-                          return (
-                            <span key={av.id} className="text-xs text-muted-foreground flex items-start gap-1">
-                              <span
-                                onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
-                                title={expanded ? undefined : av.descricao}
-                                className={`cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate max-w-[200px]"}`}
-                              >
-                                {av.descricao}
-                              </span>
-                              <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Rodapé: datas + técnico + ações */}
-                  <div className="flex items-center justify-between gap-2 pt-0.5">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {fmtDate(os.aberta_em)} por {os.aberta_por ?? "—"}
-                      </span>
-                      {os.tecnico_nome && (
-                        <span>· <span className="font-medium text-foreground">{os.tecnico_nome}</span></span>
-                      )}
-                      {os.concluido_em && (
-                        <span>· Concluída {fmtDate(os.concluido_em)}</span>
-                      )}
-                    </div>
-                    {papel === "gestor" && (
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                          onClick={() => abrirEdicao(os)}
-                          title="Editar"
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-green-100 transition-colors"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => deletarOS(os)}
-                          title="Excluir"
-                          className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            }
+            const cardBg =
+              os.status === "concluida"            ? "bg-green-50/60 dark:bg-green-950/20" :
+              os.status === "em_andamento"         ? "bg-orange-50/60 dark:bg-orange-950/20" :
+              os.status === "aguardando_peca"      ? "bg-yellow-50/60 dark:bg-yellow-950/20" :
+              os.status === "aguardando_aprovacao" ? "bg-amber-50/60 dark:bg-amber-950/20" :
+              "bg-card";
 
             return (
-              <div key={os.id} className={`rounded-lg border p-4 space-y-3 ${
-                os.status === "aberta"               ? "bg-blue-50 border-blue-200" :
-                os.status === "em_andamento"         ? "bg-orange-50 border-orange-200" :
-                os.status === "aguardando_peca"      ? "bg-red-50 border-red-200" :
-                os.status === "aguardando_aprovacao" ? "bg-yellow-50 border-yellow-200" :
-                "bg-card border"
-              }`}>
-                {/* Topo */}
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-base">
+              <div key={os.id} className={`rounded-lg border overflow-hidden ${cardBorder} ${cardBg}`}>
+
+                {/* ── HEADER (sempre visível, clicável) ── */}
+                <div
+                  className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:brightness-[0.97] dark:hover:brightness-110 transition-all"
+                  onClick={() => toggleCard(os.id)}
+                >
+                  {/* Identidade do equipamento + descrição */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-sm leading-tight">
                         {equip?.nome ?? "Equipamento removido"}
                       </span>
                       {equip?.tag && (
-                        <span className="font-mono text-xs text-muted-foreground border rounded px-1.5 py-0.5">
+                        <span className="font-mono text-[11px] border rounded px-1 py-px text-muted-foreground leading-tight">
                           {equip.tag}
                         </span>
                       )}
                       {equip?.linha != null && (
-                        <span className="text-xs text-muted-foreground">L{equip.linha}</span>
+                        <span className="text-xs text-muted-foreground">· L{equip.linha}</span>
                       )}
+                      <span className="text-xs text-muted-foreground truncate max-w-[260px]">
+                        · {os.descricao_problema}
+                      </span>
                     </div>
-                    <p className="text-sm text-foreground/80 line-clamp-2">{os.descricao_problema}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+
+                  {/* Badges + chevron */}
+                  <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     {os.externa && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
-                        <Building2 className="h-3 w-3" />
-                        {os.empresa_externa ?? "Externa"}
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700">
+                        <Building2 className="h-2.5 w-2.5" />
+                        {os.empresa_externa ?? "Ext."}
                       </span>
                     )}
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] font-semibold ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"}`}>
                       {(os.tipo ?? "corretiva") === "preventiva" ? "Preventiva" : "Corretiva"}
                     </span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${prio.class}`}>
+                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] font-semibold ${prio.class}`}>
                       {prio.label}
                     </span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${st.class}`}>
+                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] font-semibold ${st.class}`}>
                       {st.label}
                     </span>
+                    <ChevronDown className={`h-4 w-4 ml-1 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                   </div>
                 </div>
 
-                {/* Bloco de manutenção externa */}
-                {os.externa && (
-                  <div className={`rounded-md border px-3 py-2 text-sm flex items-start gap-2 ${prazoVencido ? "bg-red-50 border-red-300" : "bg-purple-50 border-purple-200"}`}>
-                    <Building2 className={`h-4 w-4 shrink-0 mt-0.5 ${prazoVencido ? "text-red-500" : "text-purple-500"}`} />
-                    <div className="space-y-0.5">
-                      <p className={`font-semibold text-xs ${prazoVencido ? "text-red-700" : "text-purple-700"}`}>
-                        Manutenção Externa{os.empresa_externa ? `: ${os.empresa_externa}` : ""}
-                      </p>
-                      {os.contato_externo && (
-                        <p className="text-xs text-muted-foreground">Contato: {os.contato_externo}</p>
-                      )}
-                      {os.prazo_retorno && (
-                        <p className={`text-xs font-medium flex items-center gap-1 ${prazoVencido ? "text-red-700" : "text-purple-700"}`}>
-                          {prazoVencido && <AlertCircle className="h-3 w-3" />}
-                          Prazo de retorno: {format(new Date(os.prazo_retorno + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                          {prazoVencido && " — VENCIDO"}
+                {/* ── BODY (só ao expandir) ── */}
+                {isExpanded && (
+                  <div className="px-3 pb-3 space-y-2.5 border-t border-dashed border-black/10 dark:border-white/10 pt-2.5">
+
+                    {/* Descrição completa */}
+                    <p className="text-sm text-foreground/80">{os.descricao_problema}</p>
+
+                    {/* Manutenção externa */}
+                    {os.externa && (
+                      <div className={`rounded-md border px-3 py-2 text-sm flex items-start gap-2 ${prazoVencido ? "bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-800" : "bg-purple-50 border-purple-200 dark:bg-purple-950/30 dark:border-purple-700"}`}>
+                        <Building2 className={`h-4 w-4 shrink-0 mt-0.5 ${prazoVencido ? "text-red-500" : "text-purple-500"}`} />
+                        <div className="space-y-0.5">
+                          <p className={`font-semibold text-xs ${prazoVencido ? "text-red-700 dark:text-red-400" : "text-purple-700 dark:text-purple-300"}`}>
+                            Manutenção Externa{os.empresa_externa ? `: ${os.empresa_externa}` : ""}
+                          </p>
+                          {os.contato_externo && <p className="text-xs text-muted-foreground">Contato: {os.contato_externo}</p>}
+                          {os.prazo_retorno && (
+                            <p className={`text-xs font-medium flex items-center gap-1 ${prazoVencido ? "text-red-700 dark:text-red-400" : "text-purple-700 dark:text-purple-300"}`}>
+                              {prazoVencido && <AlertCircle className="h-3 w-3" />}
+                              Prazo: {format(new Date(os.prazo_retorno + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                              {prazoVencido && " — VENCIDO"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Peça aguardada */}
+                    {os.peca_aguardada && (
+                      <div className="rounded-md bg-yellow-50 border border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800 px-3 py-2 text-sm flex items-start gap-2">
+                        <Package className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold text-yellow-700 dark:text-yellow-400">Aguardando peça: </span>
+                          <span className="text-yellow-800 dark:text-yellow-300">{os.peca_aguardada}</span>
+                          {os.peca_previsao && (
+                            <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
+                              · Previsão: {format(new Date(os.peca_previsao + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Solução */}
+                    {os.solucao_aplicada && (
+                      <div className={`rounded-md border px-3 py-2 text-sm ${os.status === "concluida" ? "bg-green-100/70 border-green-200 dark:bg-green-950/40 dark:border-green-800" : "bg-muted/50 border"}`}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1 mb-0.5">
+                          <CheckCircle2 className="h-3 w-3" /> Solução
                         </p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                        <p className="text-sm">{os.solucao_aplicada}</p>
+                      </div>
+                    )}
 
-                {/* Peça aguardada (destaque âmbar) */}
-                {os.peca_aguardada && (
-                  <div className="rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm flex items-start gap-2">
-                    <Package className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-yellow-700">Aguardando peça: </span>
-                      <span className="text-yellow-800">{os.peca_aguardada}</span>
-                      {os.peca_previsao && (
-                        <span className="ml-2 text-yellow-600 text-xs">
-                          · Previsão: {format(new Date(os.peca_previsao + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
+                    {/* Observações de andamento */}
+                    {os.observacoes_andamento && (
+                      <div className="rounded-md bg-blue-50/50 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900 px-3 py-2 text-sm">
+                        <span className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wide">Andamento: </span>
+                        {os.observacoes_andamento}
+                      </div>
+                    )}
 
-                {/* Solução (se houver) */}
-                {os.solucao_aplicada && (
-                  <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm">
-                    <span className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">Solução: </span>
-                    {os.solucao_aplicada}
-                  </div>
-                )}
-
-                {/* Observações de andamento */}
-                {os.observacoes_andamento && (
-                  <div className="rounded-md bg-blue-50/50 border border-blue-100 px-3 py-2 text-sm">
-                    <span className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">Andamento: </span>
-                    {os.observacoes_andamento}
-                  </div>
-                )}
-
-                {/* Peças registradas — em_andamento (editável) */}
-                {os.status === "em_andamento" && (
-                  (movsPorOS[os.id] !== undefined && movsPorOS[os.id].length > 0) ||
-                  (avulsasPorOS[os.id] !== undefined && avulsasPorOS[os.id].length > 0)
-                ) && (
-                  <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Package className="h-3 w-3" /> Peças registradas até agora
-                    </p>
-                    {(movsPorOS[os.id] ?? []).map(mov => {
-                      const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
-                      const salvando = savingMovIds[mov.id] ?? false;
-                      return (
-                        <div key={mov.id} className="flex items-center gap-2 text-sm">
-                          <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
-                          <input
-                            type="number" min="0.01" step="0.01"
-                            value={qtdAtual}
-                            onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
-                            className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                          />
-                          <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
-                          <button
-                            onClick={() => salvarQtdMov(mov, os.id)}
-                            disabled={salvando}
-                            title="Salvar"
-                            className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
-                          >
-                            {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
-                          </button>
-                          <button
-                            onClick={() => removerMovimentacao(mov, os.id)}
-                            disabled={salvando}
-                            title="Remover peça"
-                            className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {(avulsasPorOS[os.id] ?? []).map(av => {
-                      const expanded = expandedAvulsas[av.id] ?? false;
-                      return (
-                        <div key={av.id} className="flex items-start gap-2 text-sm">
-                          <span
-                            onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
-                            title={expanded ? undefined : av.descricao}
-                            className={`flex-1 min-w-0 text-foreground/80 cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}
-                          >
-                            {av.descricao}
-                          </span>
-                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
-                          <button
-                            onClick={() => removerAvulsa(av.id, os.id)}
-                            title="Remover peça avulsa"
-                            className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Peças utilizadas — aguardando_aprovacao e concluida */}
-                {(os.status === "aguardando_aprovacao" || os.status === "concluida") && (
-                  <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Package className="h-3 w-3" /> Peças utilizadas
-                    </p>
-                    {(movsPorOS[os.id] === undefined) ? (
-                      <p className="text-xs text-muted-foreground">Carregando...</p>
-                    ) : (movsPorOS[os.id].length === 0 && (avulsasPorOS[os.id] ?? []).length === 0) ? (
-                      <p className="text-xs text-muted-foreground">Nenhuma peça registrada</p>
-                    ) : (
-                      <>
-                        {movsPorOS[os.id].map(mov => {
+                    {/* Peças registradas — em_andamento (editável) */}
+                    {os.status === "em_andamento" && (
+                      (movsPorOS[os.id] !== undefined && movsPorOS[os.id].length > 0) ||
+                      (avulsasPorOS[os.id] !== undefined && avulsasPorOS[os.id].length > 0)
+                    ) && (
+                      <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <Package className="h-3 w-3" /> Peças registradas até agora
+                        </p>
+                        {(movsPorOS[os.id] ?? []).map(mov => {
                           const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
                           const salvando = savingMovIds[mov.id] ?? false;
                           return (
                             <div key={mov.id} className="flex items-center gap-2 text-sm">
                               <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
-                              <input
-                                type="number" min="0.01" step="0.01"
-                                value={qtdAtual}
+                              <input type="number" min="0.01" step="0.01" value={qtdAtual}
                                 onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
                                 className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                               />
                               <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
-                              <button
-                                onClick={() => salvarQtdMov(mov, os.id)}
-                                disabled={salvando}
-                                title="Salvar"
-                                className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0"
-                              >
+                              <button onClick={() => salvarQtdMov(mov, os.id)} disabled={salvando} title="Salvar"
+                                className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0">
                                 {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
                               </button>
-                              <button
-                                onClick={() => removerMovimentacao(mov, os.id)}
-                                disabled={salvando}
-                                title="Remover peça"
-                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                              >
+                              <button onClick={() => removerMovimentacao(mov, os.id)} disabled={salvando} title="Remover peça"
+                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
                                 <Trash2 className="h-3 w-3" />
                               </button>
                             </div>
@@ -1242,158 +1078,161 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                           const expanded = expandedAvulsas[av.id] ?? false;
                           return (
                             <div key={av.id} className="flex items-start gap-2 text-sm">
-                              <span
-                                onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
+                              <span onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
                                 title={expanded ? undefined : av.descricao}
-                                className={`flex-1 min-w-0 text-foreground/80 cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}
-                              >
+                                className={`flex-1 min-w-0 text-foreground/80 cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}>
                                 {av.descricao}
                               </span>
                               <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
-                              <button
-                                onClick={() => removerAvulsa(av.id, os.id)}
-                                title="Remover peça avulsa"
-                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
-                              >
+                              <button onClick={() => removerAvulsa(av.id, os.id)} title="Remover peça avulsa"
+                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors shrink-0">
                                 <Trash2 className="h-3 w-3" />
                               </button>
                             </div>
                           );
                         })}
-                      </>
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {/* Banner de reprovação */}
-                {os.motivo_reprovacao && os.status === "em_andamento" && (
-                  <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                    <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-red-500" />
-                    <div>
-                      <p className="font-semibold mb-0.5">Reprovada pelo gestor{os.reprovada_em ? ` em ${fmtDate(os.reprovada_em)}` : ""}:</p>
-                      <p>{os.motivo_reprovacao}</p>
+                    {/* Peças utilizadas — aguardando_aprovacao / concluida */}
+                    {(os.status === "aguardando_aprovacao" || os.status === "concluida") && (
+                      <div className="rounded-md bg-muted/30 border px-3 py-2 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <Package className="h-3 w-3" /> Peças utilizadas
+                        </p>
+                        {movs === undefined ? (
+                          <p className="text-xs text-muted-foreground">Carregando...</p>
+                        ) : movs.length === 0 && (avulsasPorOS[os.id] ?? []).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">Nenhuma peça registrada</p>
+                        ) : (
+                          <>
+                            {movs.map(mov => {
+                              const qtdAtual = qtdEditadas[mov.id] ?? String(mov.quantidade);
+                              const salvando = savingMovIds[mov.id] ?? false;
+                              return (
+                                <div key={mov.id} className="flex items-center gap-2 text-sm">
+                                  <span className="flex-1 text-foreground/80 min-w-0 truncate">{mov.nome}</span>
+                                  <input type="number" min="0.01" step="0.01" value={qtdAtual}
+                                    onChange={(e) => setQtdEditadas(prev => ({ ...prev, [mov.id]: e.target.value }))}
+                                    className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                                  />
+                                  <span className="text-xs text-muted-foreground w-5 shrink-0">{mov.unidade}</span>
+                                  <button onClick={() => salvarQtdMov(mov, os.id)} disabled={salvando} title="Salvar"
+                                    className="px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shrink-0">
+                                    {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
+                                  </button>
+                                  <button onClick={() => removerMovimentacao(mov, os.id)} disabled={salvando} title="Remover peça"
+                                    className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                            {(avulsasPorOS[os.id] ?? []).map(av => {
+                              const expanded = expandedAvulsas[av.id] ?? false;
+                              return (
+                                <div key={av.id} className="flex items-start gap-2 text-sm">
+                                  <span onClick={() => setExpandedAvulsas(prev => ({ ...prev, [av.id]: !prev[av.id] }))}
+                                    title={expanded ? undefined : av.descricao}
+                                    className={`flex-1 min-w-0 text-foreground/80 cursor-pointer hover:text-foreground transition-colors ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}>
+                                    {av.descricao}
+                                  </span>
+                                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 shrink-0">avulsa</span>
+                                  <button onClick={() => removerAvulsa(av.id, os.id)} title="Remover peça avulsa"
+                                    className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors shrink-0">
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Banner de reprovação */}
+                    {os.motivo_reprovacao && os.status === "em_andamento" && (
+                      <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+                        <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-red-500" />
+                        <div>
+                          <p className="font-semibold mb-0.5">Reprovada pelo gestor{os.reprovada_em ? ` em ${fmtDate(os.reprovada_em)}` : ""}:</p>
+                          <p>{os.motivo_reprovacao}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Metadados */}
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Aberta {fmtDate(os.aberta_em)} por {os.aberta_por ?? "—"}
+                      </span>
+                      {os.tecnico_nome && (
+                        <span>· Técnico: <span className="font-medium text-foreground">{os.tecnico_nome}</span></span>
+                      )}
+                      {os.concluido_em && (
+                        <span>· Concluída {fmtDate(os.concluido_em)}</span>
+                      )}
+                    </div>
+
+                    {/* Ações */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(papel === "tecnico" || papel === "gestor") && os.status === "aberta" && (
+                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => setIniciarConfirmOS(os)}>
+                          <Play className="h-3 w-3" /> Iniciar
+                        </Button>
+                      )}
+                      {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
+                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs text-yellow-700 border-yellow-300 hover:bg-yellow-50"
+                          onClick={() => { setAguardarPecaOS(os); setPecaText(os.peca_aguardada ?? ""); setPrevisaoText(os.peca_previsao ?? ""); }}>
+                          <Package className="h-3 w-3" /> Aguardar Peça
+                        </Button>
+                      )}
+                      {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
+                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs text-blue-700 border-blue-300 hover:bg-blue-50"
+                          onClick={() => abrirAndamento(os)}>
+                          <ClipboardList className="h-3 w-3" /> Registrar Andamento
+                        </Button>
+                      )}
+                      {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
+                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                          onClick={() => { abrirDialogSolucao(os); setSolucaoText(os.solucao_aplicada ?? ""); }}>
+                          <CheckCircle2 className="h-3 w-3" /> Registrar Solução
+                        </Button>
+                      )}
+                      {(papel === "tecnico" || papel === "gestor") && os.status === "aguardando_peca" && (
+                        <Button size="sm" className="gap-1.5 h-7 text-xs bg-yellow-500 hover:bg-yellow-600 text-white"
+                          onClick={() => pecaChegou(os)}>
+                          <PackageCheck className="h-3 w-3" /> Peça Chegou
+                        </Button>
+                      )}
+                      {papel === "gestor" && os.status === "aguardando_aprovacao" && (
+                        <>
+                          <Button size="sm" className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => { setConfirmarConclusaoOS(os); setDataConclusao(hojeEmSP()); setErroConclusao(""); }}>
+                            <CheckCircle2 className="h-3 w-3" /> Aprovar e Concluir
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => { setReprovarDialogOS(os); setMotivoReprovacao(""); }}>
+                            <XCircle className="h-3 w-3" /> Reprovar
+                          </Button>
+                        </>
+                      )}
+                      {papel === "gestor" && (
+                        <div className="flex items-center gap-1 ml-auto">
+                          <button onClick={() => abrirEdicao(os)} title="Editar"
+                            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => deletarOS(os)} title="Excluir"
+                            className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
-
-                {/* Metadados */}
-                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Aberta {fmtDate(os.aberta_em)} por {os.aberta_por ?? "—"}
-                  </span>
-                  {os.tecnico_nome && (
-                    <span>· Técnico: <span className="font-medium text-foreground">{os.tecnico_nome}</span></span>
-                  )}
-                  {os.concluido_em && (
-                    <span>· Concluída {fmtDate(os.concluido_em)}</span>
-                  )}
-                </div>
-
-                {/* Ações */}
-                <div className="flex items-center gap-2 pt-1 flex-wrap">
-                  {/* Técnico: iniciar OS aberta */}
-                  {(papel === "tecnico" || papel === "gestor") && os.status === "aberta" && (
-                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => setIniciarConfirmOS(os)}>
-                      <Play className="h-3 w-3" />
-                      Iniciar
-                    </Button>
-                  )}
-
-                  {/* Técnico: aguardar peça */}
-                  {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 h-7 text-xs text-yellow-700 border-yellow-300 hover:bg-yellow-50"
-                      onClick={() => { setAguardarPecaOS(os); setPecaText(os.peca_aguardada ?? ""); setPrevisaoText(os.peca_previsao ?? ""); }}
-                    >
-                      <Package className="h-3 w-3" />
-                      Aguardar Peça
-                    </Button>
-                  )}
-
-                  {/* Técnico: registrar andamento */}
-                  {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 h-7 text-xs text-blue-700 border-blue-300 hover:bg-blue-50"
-                      onClick={() => abrirAndamento(os)}
-                    >
-                      <ClipboardList className="h-3 w-3" />
-                      Registrar Andamento
-                    </Button>
-                  )}
-
-                  {/* Técnico: registrar solução */}
-                  {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 h-7 text-xs"
-                      onClick={() => { abrirDialogSolucao(os); setSolucaoText(os.solucao_aplicada ?? ""); }}
-                    >
-                      <CheckCircle2 className="h-3 w-3" />
-                      Registrar Solução
-                    </Button>
-                  )}
-
-                  {/* Técnico: peça chegou */}
-                  {(papel === "tecnico" || papel === "gestor") && os.status === "aguardando_peca" && (
-                    <Button
-                      size="sm"
-                      className="gap-1.5 h-7 text-xs bg-yellow-500 hover:bg-yellow-600 text-white"
-                      onClick={() => pecaChegou(os)}
-                    >
-                      <PackageCheck className="h-3 w-3" />
-                      Peça Chegou
-                    </Button>
-                  )}
-
-                  {/* Gestor: aprovar/concluir + reprovar */}
-                  {papel === "gestor" && os.status === "aguardando_aprovacao" && (
-                    <>
-                      <Button
-                        size="sm"
-                        className="gap-1.5 h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => { setConfirmarConclusaoOS(os); setDataConclusao(hojeEmSP()); setErroConclusao(""); }}
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        Aprovar e Concluir
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 h-7 text-xs border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                        onClick={() => { setReprovarDialogOS(os); setMotivoReprovacao(""); }}
-                      >
-                        <XCircle className="h-3 w-3" />
-                        Reprovar
-                      </Button>
-                    </>
-                  )}
-
-                  {/* Gestor: editar e excluir */}
-                  {papel === "gestor" && (
-                    <div className="flex items-center gap-1 ml-auto">
-                      <button
-                        onClick={() => abrirEdicao(os)}
-                        title="Editar"
-                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => deletarOS(os)}
-                        title="Excluir"
-                        className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
             );
           })}
