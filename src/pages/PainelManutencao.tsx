@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,13 @@ interface OS {
   contato_externo: string | null;
   prazo_retorno: string | null;
   equipamentos?: { nome: string; tag: string | null; linha: number | null } | null;
+}
+
+interface Andamento {
+  id: string;
+  texto: string;
+  criado_por: string | null;
+  criado_em: string | null;
 }
 
 interface PainelManutencaoProps {
@@ -213,13 +220,32 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [expandedAvulsas, setExpandedAvulsas] = useState<Record<string, boolean>>({});
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
+  const [andamentosPorOS, setAndamentosPorOS] = useState<Record<string, Andamento[]>>({});
+  const [novoAndamentoTexts, setNovoAndamentoTexts] = useState<Record<string, string>>({});
+  const [savingAndamentoId, setSavingAndamentoId] = useState<string | null>(null);
+  const andamentosLoadedRef = useRef<Set<string>>(new Set());
+
+  const carregarAndamentos = useCallback(async (osId: string) => {
+    const { data } = await (supabase as any)
+      .from("os_andamentos")
+      .select("id, texto, criado_por, criado_em")
+      .eq("os_id", osId)
+      .order("criado_em", { ascending: true });
+    setAndamentosPorOS((prev) => ({ ...prev, [osId]: data ?? [] }));
+  }, []);
+
   const toggleCard = useCallback((id: string) => {
     setExpandedCards((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  }, []);
+    // Load andamentos on first expand
+    if (!andamentosLoadedRef.current.has(id)) {
+      andamentosLoadedRef.current.add(id);
+      carregarAndamentos(id);
+    }
+  }, [carregarAndamentos]);
 
   const mesAtual = useMemo(() => calcAtalho("mes"), []);
   const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
@@ -355,6 +381,25 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setAndamentoEstoque(data ?? []);
   }
 
+  async function registrarAndamento(osId: string) {
+    const texto = (novoAndamentoTexts[osId] ?? "").trim();
+    if (!texto) return;
+    setSavingAndamentoId(osId);
+    const { error } = await (supabase as any).from("os_andamentos").insert({
+      os_id: osId,
+      texto,
+      criado_por: perfilNome,
+    });
+    setSavingAndamentoId(null);
+    if (error) {
+      toast({ title: "Erro ao registrar andamento", description: error.message, variant: "destructive" });
+    } else {
+      setNovoAndamentoTexts((prev) => ({ ...prev, [osId]: "" }));
+      await carregarAndamentos(osId);
+      toast({ title: "Andamento registrado!" });
+    }
+  }
+
   function adicionarAndamentoPeca() {
     setAndamentoPecas(prev => [...prev, { item_id: "", nome: "", unidade: "", quantidade: "1" }]);
   }
@@ -374,16 +419,6 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   async function salvarAndamento() {
     if (!andamentoOS) return;
     setSavingAndamento(true);
-
-    const { error } = await (supabase as any).from("ordens_servico").update({
-      observacoes_andamento: andamentoObs.trim() || null,
-    }).eq("id", andamentoOS.id);
-
-    if (error) {
-      setSavingAndamento(false);
-      toast({ title: "Erro ao salvar andamento", description: error.message, variant: "destructive" });
-      return;
-    }
 
     const pecasValidas = andamentoPecas.filter(p => p.item_id && parseFloat(p.quantidade) > 0);
     for (const peca of pecasValidas) {
@@ -1035,13 +1070,56 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       </div>
                     )}
 
-                    {/* Observações de andamento */}
-                    {os.observacoes_andamento && (
-                      <div className="rounded-md bg-blue-50/50 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900 px-3 py-2 text-sm">
-                        <span className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wide">Andamento: </span>
-                        {os.observacoes_andamento}
-                      </div>
-                    )}
+                    {/* Histórico de andamentos */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                        <ClipboardList className="h-3 w-3" /> Andamentos
+                      </p>
+                      {/* Legacy: campo único migrado */}
+                      {os.observacoes_andamento && (
+                        <div className="border-l-2 border-slate-200 dark:border-slate-700 pl-2.5 py-0.5">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">Registro anterior</p>
+                          <p className="text-xs text-foreground/80 whitespace-pre-wrap">{os.observacoes_andamento}</p>
+                        </div>
+                      )}
+                      {/* Feed de os_andamentos */}
+                      {andamentosPorOS[os.id] === undefined ? (
+                        <p className="text-xs text-muted-foreground italic">Carregando...</p>
+                      ) : andamentosPorOS[os.id].length === 0 && !os.observacoes_andamento ? (
+                        <p className="text-xs text-muted-foreground italic">Nenhum andamento registrado ainda.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {andamentosPorOS[os.id].map((a) => (
+                            <div key={a.id} className="border-l-2 border-blue-300 dark:border-blue-700 pl-2.5 py-0.5">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[10px] font-semibold text-foreground/70">{a.criado_por ?? "—"}</span>
+                                <span className="text-[10px] text-muted-foreground">{fmtDate(a.criado_em)}</span>
+                              </div>
+                              <p className="text-xs text-foreground/80 whitespace-pre-wrap">{a.texto}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Nova entrada — só tecnico/gestor, OS não concluída */}
+                      {(papel === "tecnico" || papel === "gestor") && os.status !== "concluida" && (
+                        <div className="flex gap-2 pt-0.5">
+                          <textarea
+                            value={novoAndamentoTexts[os.id] ?? ""}
+                            onChange={(e) => setNovoAndamentoTexts((prev) => ({ ...prev, [os.id]: e.target.value }))}
+                            rows={2}
+                            placeholder="Adicionar atualização..."
+                            className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                          />
+                          <button
+                            onClick={() => registrarAndamento(os.id)}
+                            disabled={savingAndamentoId === os.id || !(novoAndamentoTexts[os.id] ?? "").trim()}
+                            className="self-end px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-1"
+                          >
+                            {savingAndamentoId === os.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Registrar"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Peças registradas — em_andamento (editável) */}
                     {os.status === "em_andamento" && (
@@ -1189,9 +1267,9 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                         </Button>
                       )}
                       {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
-                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs text-blue-700 border-blue-300 hover:bg-blue-50"
+                        <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs text-orange-700 border-orange-300 hover:bg-orange-50"
                           onClick={() => abrirAndamento(os)}>
-                          <ClipboardList className="h-3 w-3" /> Registrar Andamento
+                          <Package className="h-3 w-3" /> Registrar Peças
                         </Button>
                       )}
                       {(papel === "tecnico" || papel === "gestor") && os.status === "em_andamento" && (
@@ -1379,11 +1457,11 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Registrar Andamento */}
+      {/* Dialog: Registrar Peças */}
       <Dialog open={!!andamentoOS} onOpenChange={(o) => { if (!o) { setAndamentoOS(null); setAndamentoPecas([]); setAndamentoPecasAvulsas([]); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registrar Andamento</DialogTitle>
+            <DialogTitle>Registrar Peças</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {andamentoOS && (
@@ -1391,16 +1469,6 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 {andamentoOS.equipamentos?.nome} — {andamentoOS.descricao_problema}
               </p>
             )}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Observação do andamento</label>
-              <textarea
-                value={andamentoObs}
-                onChange={(e) => setAndamentoObs(e.target.value)}
-                rows={3}
-                placeholder="Descreva o que foi feito até agora..."
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              />
-            </div>
 
             {/* Peças utilizadas */}
             <div className="space-y-2">
@@ -1470,7 +1538,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             <Button variant="outline" onClick={() => { setAndamentoOS(null); setAndamentoPecas([]); setAndamentoPecasAvulsas([]); }}>Cancelar</Button>
             <Button onClick={salvarAndamento} disabled={savingAndamento} className="gap-2">
               {savingAndamento && <Loader2 className="h-4 w-4 animate-spin" />}
-              Salvar Andamento
+              Salvar Peças
             </Button>
           </DialogFooter>
         </DialogContent>
