@@ -837,54 +837,54 @@ export default function PainelAnalises() {
       reg(6); doc.setTextColor(C.muted);
       doc.text(unit, kx + kpiW / 2, curY + 19.5, { align: "center" });
     });
-    curY += kpiH + 10;
+    curY += kpiH + 6;
 
     // ── Helpers de gráfico ─────────────────────────────────────────────────────
     function drawBars(title: string, data: { label: string; value: number }[], fillColor: string) {
-      bld(9); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 5;
-      const cH = 46, padB = 9, padT = 6, barsH = cH - padB - padT;
-      const n = data.length; if (!n) { curY += cH + 6; return; }
+      bld(8.5); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 3;
+      const cH = 28, padB = 7, padT = 4, barsH = cH - padB - padT; // 17mm úteis
+      const n = data.length; if (!n) { curY += cH + 4; return; }
       const maxV = Math.max(...data.map((d) => d.value), 1);
-      const slotW = cW / n, bW = Math.max(2, slotW * 0.62), bOff = (slotW - bW) / 2;
+      const slotW = cW / n, bW = Math.max(1.5, slotW * 0.62), bOff = (slotW - bW) / 2;
 
       doc.setFillColor("#f8fafc"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
       doc.rect(mL, curY, cW, cH, "FD");
-      doc.setDrawColor(C.grid); doc.setLineWidth(0.15);
-      [1, 2, 3].forEach((g) => doc.line(mL, curY + padT + (barsH / 3) * g, mL + cW, curY + padT + (barsH / 3) * g));
+      doc.setDrawColor(C.grid); doc.setLineWidth(0.12);
+      [1, 2].forEach((g) => doc.line(mL, curY + padT + (barsH / 2) * g, mL + cW, curY + padT + (barsH / 2) * g));
 
       data.forEach((d, i) => {
-        const bh = Math.max(0.3, barsH * (d.value / maxV));
+        const bh = Math.max(0.2, barsH * (d.value / maxV));
         const bx = mL + i * slotW + bOff;
         const by = curY + padT + barsH - bh;
         doc.setFillColor(fillColor); doc.rect(bx, by, bW, bh, "F");
-        reg(5.5); doc.setTextColor(C.text);
-        doc.text(n2k(d.value), bx + bW / 2, Math.max(by - 0.5, curY + 3), { align: "center" });
-        reg(5.5); doc.setTextColor(C.muted);
-        doc.text(d.label, bx + bW / 2, curY + padT + barsH + 5.5, { align: "center" });
+        reg(5); doc.setTextColor(C.text);
+        doc.text(n2k(d.value), bx + bW / 2, Math.max(by - 0.3, curY + padT - 0.5), { align: "center" });
+        reg(5); doc.setTextColor(C.muted);
+        doc.text(d.label, bx + bW / 2, curY + padT + barsH + 4.5, { align: "center" });
       });
-      curY += cH + 8;
+      curY += cH + 5;
     }
 
     function drawLine(title: string, data: { label: string; value: number | null }[], lineColor: string, metaVal?: number) {
-      bld(9); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 5;
-      const cH = 46, padB = 9, padT = 6, plotH = cH - padB - padT;
+      bld(8.5); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 3;
+      const cH = 28, padB = 7, padT = 4, plotH = cH - padB - padT; // 17mm úteis
       const valid = data.map((d) => d.value).filter((v): v is number => v !== null);
       const maxV = Math.max(...valid, metaVal ?? 0, 1) * 1.15;
       const slotW = data.length > 1 ? cW / (data.length - 1) : cW;
 
       doc.setFillColor("#f8fafc"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
       doc.rect(mL, curY, cW, cH, "FD");
-      doc.setDrawColor(C.grid); doc.setLineWidth(0.15);
-      [1, 2, 3].forEach((g) => doc.line(mL, curY + padT + (plotH / 3) * g, mL + cW, curY + padT + (plotH / 3) * g));
+      doc.setDrawColor(C.grid); doc.setLineWidth(0.12);
+      [1, 2].forEach((g) => doc.line(mL, curY + padT + (plotH / 2) * g, mL + cW, curY + padT + (plotH / 2) * g));
 
       if (metaVal !== undefined) {
         const ry = curY + padT + plotH * (1 - metaVal / maxV);
-        doc.setDrawColor("#FACC15"); doc.setLineWidth(0.4);
-        doc.setLineDashPattern([2, 2], 0);
+        doc.setDrawColor("#FACC15"); doc.setLineWidth(0.35);
+        doc.setLineDashPattern([1.5, 1.5], 0);
         doc.line(mL, ry, mL + cW, ry);
         doc.setLineDashPattern([], 0);
-        reg(5.5); doc.setTextColor("#b45309");
-        doc.text(`Meta ${metaVal}`, mL + cW - 1, ry - 1, { align: "right" });
+        reg(5); doc.setTextColor("#b45309");
+        doc.text(`Meta ${metaVal}`, mL + cW - 1, ry - 0.8, { align: "right" });
       }
 
       const snapY = curY; // freeze current y for point calculations
@@ -893,17 +893,17 @@ export default function PainelAnalises() {
         .filter((p): p is { x: number; py: number } => p.py !== null);
 
       if (pts.length >= 2) {
-        doc.setDrawColor(lineColor); doc.setLineWidth(0.8);
+        doc.setDrawColor(lineColor); doc.setLineWidth(0.7);
         for (let i = 0; i < pts.length - 1; i++) doc.line(pts[i].x, pts[i].py, pts[i + 1].x, pts[i + 1].py);
       }
       doc.setFillColor(lineColor);
-      pts.forEach((p) => doc.circle(p.x, p.py, 0.9, "F"));
+      pts.forEach((p) => doc.circle(p.x, p.py, 0.7, "F"));
 
       data.forEach((d, i) => {
-        reg(5.5); doc.setTextColor(C.muted);
-        doc.text(d.label, mL + i * slotW, curY + padT + plotH + 5.5, { align: "center" });
+        reg(5); doc.setTextColor(C.muted);
+        doc.text(d.label, mL + i * slotW, curY + padT + plotH + 4.5, { align: "center" });
       });
-      curY += cH + 8;
+      curY += cH + 5;
     }
 
     // ── Produção Mensal ────────────────────────────────────────────────────────
@@ -922,9 +922,9 @@ export default function PainelAnalises() {
     );
 
     // ── Por Classe ─────────────────────────────────────────────────────────────
-    bld(9); doc.setTextColor(C.text);
+    bld(8.5); doc.setTextColor(C.text);
     doc.text("Producao do Periodo por Classe", mL, curY);
-    curY += 6;
+    curY += 5;
 
     const kgTotalClasses = dadosPorClasse.reduce((s, c) => s + c.kg, 0);
     const cols = [25, 44, 30, 44, 37] as const; // Classe | kg | % | kg/h | OPs = 180mm
