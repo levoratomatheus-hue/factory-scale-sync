@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, memo, createContext, useCont
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X, XCircle as XCircleIcon } from "lucide-react";
+import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X, XCircle as XCircleIcon, FileDown } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -755,6 +755,239 @@ export default function PainelAnalises() {
       .sort((a, b) => b.kg - a.kg);
   }, [registrosDiariosRaw, linhaFiltro, materialFiltro, ordensAnuaisIdsNoClasse, horasMap]);
 
+  // ── Capacidade produtiva / real (L1+L2+L4) ──────────────────────────────────
+  const { capProdutivaMes, capRealMes } = useMemo(() => {
+    const LINHAS_ATIVAS = [1, 2, 4] as const;
+    const capP = LINHAS_ATIVAS.reduce((s, l) => {
+      const media = porLinha.find((p) => p.linha === l)?.media ?? 0;
+      return s + (media > 0 ? media * 9 * 20 : 0);
+    }, 0);
+    const capR = LINHAS_ATIVAS.reduce((s, l) => {
+      const media = porLinha.find((p) => p.linha === l)?.media ?? 0;
+      const h = horasPorLinha.find((p) => p.linha === l);
+      if (!h || !media || h.diasAtivos === 0) return s;
+      const horasUteis = Math.max(0, 9 - h.horasLimpeza / h.diasAtivos);
+      return s + media * horasUteis * 20;
+    }, 0);
+    return { capProdutivaMes: capP, capRealMes: capR };
+  }, [porLinha, horasPorLinha]);
+
+  // ── Gerar relatório PDF ──────────────────────────────────────────────────────
+  const gerarRelatorioPDF = useCallback(async () => {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    const mL = 15, cW = 180;
+    const C = {
+      cyan:    "#0891b2",
+      text:    "#0f172a",
+      muted:   "#64748b",
+      border:  "#cbd5e1",
+      grid:    "#e2e8f0",
+      emerald: "#059669",
+    };
+
+    let curY = 15;
+
+    const bld = (size: number) => { doc.setFont("helvetica", "bold");   doc.setFontSize(size); };
+    const reg = (size: number) => { doc.setFont("helvetica", "normal"); doc.setFontSize(size); };
+    const n2k = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+
+    // ── Cabeçalho ──────────────────────────────────────────────────────────────
+    doc.setFillColor(C.cyan);
+    doc.rect(mL, curY, 3, 22, "F");
+
+    bld(18); doc.setTextColor(C.text);
+    doc.text("Relatorio de Producao", mL + 7, curY + 8);
+
+    reg(10); doc.setTextColor(C.muted);
+    doc.text(`Periodo: ${dataInicio.split("-").reverse().join("/") + " - " + dataFim.split("-").reverse().join("/")}`, mL + 7, curY + 15);
+    if (linhaFiltro !== 0) doc.text(`Linha: ${linhaFiltro}`, mL + 7 + 90, curY + 15);
+
+    const agora = new Date();
+    reg(8);
+    doc.text(
+      `Gerado em: ${agora.toLocaleDateString("pt-BR")} ${agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`,
+      mL + 7, curY + 21,
+    );
+    curY += 29;
+
+    doc.setDrawColor(C.border); doc.setLineWidth(0.3);
+    doc.line(mL, curY, mL + cW, curY);
+    curY += 8;
+
+    // ── KPIs ───────────────────────────────────────────────────────────────────
+    const kpiW = (cW - 9) / 4;
+    const kpiH = 22;
+    const kpis = [
+      { label: "Producao Total",    value: producaoTotal.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), unit: "kg",           color: C.cyan    },
+      { label: "Media kg/hora",     value: mediaKgHora.toLocaleString("pt-BR",   { maximumFractionDigits: 1 }), unit: "kg/h",         color: C.cyan    },
+      { label: "Cap. Produtiva/mes",value: capProdutivaMes > 0 ? capProdutivaMes.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "\u2014", unit: "kg/mes (L1+L2+L4)", color: C.emerald },
+      { label: "Cap. Real/mes",     value: capRealMes     > 0 ? capRealMes.toLocaleString("pt-BR",     { maximumFractionDigits: 0 }) : "\u2014", unit: "kg/mes (L1+L2+L4)", color: C.emerald },
+    ];
+    kpis.forEach(({ label, value, unit, color }, i) => {
+      const kx = mL + i * (kpiW + 3);
+      doc.setDrawColor(C.border); doc.setLineWidth(0.3);
+      doc.rect(kx, curY, kpiW, kpiH, "S");
+      doc.setFillColor(color); doc.rect(kx, curY, kpiW, 1.5, "F");
+      reg(7); doc.setTextColor(C.muted);
+      doc.text(label, kx + kpiW / 2, curY + 7, { align: "center" });
+      bld(12); doc.setTextColor(color);
+      doc.text(value, kx + kpiW / 2, curY + 14, { align: "center" });
+      reg(6); doc.setTextColor(C.muted);
+      doc.text(unit, kx + kpiW / 2, curY + 19.5, { align: "center" });
+    });
+    curY += kpiH + 10;
+
+    // ── Helpers de gráfico ─────────────────────────────────────────────────────
+    function drawBars(title: string, data: { label: string; value: number }[], fillColor: string) {
+      bld(9); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 5;
+      const cH = 46, padB = 9, padT = 6, barsH = cH - padB - padT;
+      const n = data.length; if (!n) { curY += cH + 6; return; }
+      const maxV = Math.max(...data.map((d) => d.value), 1);
+      const slotW = cW / n, bW = Math.max(2, slotW * 0.62), bOff = (slotW - bW) / 2;
+
+      doc.setFillColor("#f8fafc"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
+      doc.rect(mL, curY, cW, cH, "FD");
+      doc.setDrawColor(C.grid); doc.setLineWidth(0.15);
+      [1, 2, 3].forEach((g) => doc.line(mL, curY + padT + (barsH / 3) * g, mL + cW, curY + padT + (barsH / 3) * g));
+
+      data.forEach((d, i) => {
+        const bh = Math.max(0.3, barsH * (d.value / maxV));
+        const bx = mL + i * slotW + bOff;
+        const by = curY + padT + barsH - bh;
+        doc.setFillColor(fillColor); doc.rect(bx, by, bW, bh, "F");
+        reg(5.5); doc.setTextColor(C.text);
+        doc.text(n2k(d.value), bx + bW / 2, Math.max(by - 0.5, curY + 3), { align: "center" });
+        reg(5.5); doc.setTextColor(C.muted);
+        doc.text(d.label, bx + bW / 2, curY + padT + barsH + 5.5, { align: "center" });
+      });
+      curY += cH + 8;
+    }
+
+    function drawLine(title: string, data: { label: string; value: number | null }[], lineColor: string, metaVal?: number) {
+      bld(9); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 5;
+      const cH = 46, padB = 9, padT = 6, plotH = cH - padB - padT;
+      const valid = data.map((d) => d.value).filter((v): v is number => v !== null);
+      const maxV = Math.max(...valid, metaVal ?? 0, 1) * 1.15;
+      const slotW = data.length > 1 ? cW / (data.length - 1) : cW;
+
+      doc.setFillColor("#f8fafc"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
+      doc.rect(mL, curY, cW, cH, "FD");
+      doc.setDrawColor(C.grid); doc.setLineWidth(0.15);
+      [1, 2, 3].forEach((g) => doc.line(mL, curY + padT + (plotH / 3) * g, mL + cW, curY + padT + (plotH / 3) * g));
+
+      if (metaVal !== undefined) {
+        const ry = curY + padT + plotH * (1 - metaVal / maxV);
+        doc.setDrawColor("#FACC15"); doc.setLineWidth(0.4);
+        doc.setLineDashPattern([2, 2], 0);
+        doc.line(mL, ry, mL + cW, ry);
+        doc.setLineDashPattern([], 0);
+        reg(5.5); doc.setTextColor("#b45309");
+        doc.text(`Meta ${metaVal}`, mL + cW - 1, ry - 1, { align: "right" });
+      }
+
+      const snapY = curY; // freeze current y for point calculations
+      const pts = data
+        .map((d, i) => ({ x: mL + i * slotW, py: d.value !== null ? snapY + padT + plotH * (1 - d.value / maxV) : null }))
+        .filter((p): p is { x: number; py: number } => p.py !== null);
+
+      if (pts.length >= 2) {
+        doc.setDrawColor(lineColor); doc.setLineWidth(0.8);
+        for (let i = 0; i < pts.length - 1; i++) doc.line(pts[i].x, pts[i].py, pts[i + 1].x, pts[i + 1].py);
+      }
+      doc.setFillColor(lineColor);
+      pts.forEach((p) => doc.circle(p.x, p.py, 0.9, "F"));
+
+      data.forEach((d, i) => {
+        reg(5.5); doc.setTextColor(C.muted);
+        doc.text(d.label, mL + i * slotW, curY + padT + plotH + 5.5, { align: "center" });
+      });
+      curY += cH + 8;
+    }
+
+    // ── Produção Mensal ────────────────────────────────────────────────────────
+    drawBars(
+      "Producao Mensal (kg) - Ultimos 12 meses",
+      dadosMensais.map((d) => ({ label: d.mes, value: d.kg })),
+      C.cyan,
+    );
+
+    // ── Produtividade kg/h ────────────────────────────────────────────────────
+    drawLine(
+      "Media kg/hora por Mes - Ultimos 12 meses",
+      dadosProdutividadeMensal.map((d) => ({ label: d.mes, value: d.kgH })),
+      C.cyan,
+      115,
+    );
+
+    // ── Por Classe ─────────────────────────────────────────────────────────────
+    bld(9); doc.setTextColor(C.text);
+    doc.text("Producao do Periodo por Classe", mL, curY);
+    curY += 6;
+
+    const kgTotalClasses = dadosPorClasse.reduce((s, c) => s + c.kg, 0);
+    const cols = [25, 44, 30, 44, 37] as const; // Classe | kg | % | kg/h | OPs = 180mm
+    const colHeaders = ["Classe", "kg produzidos", "% do total", "Media kg/h", "OPs"];
+    const rowH = 7;
+    const colX = (i: number) => mL + (cols.slice(0, i) as number[]).reduce((s, v) => s + v, 0);
+
+    // Header row
+    doc.setFillColor("#f1f5f9"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
+    doc.rect(mL, curY, cW, rowH, "FD");
+    colHeaders.forEach((h, i) => {
+      bld(7.5); doc.setTextColor(C.muted);
+      doc.text(h, colX(i) + cols[i] / 2, curY + 4.5, { align: "center" });
+    });
+    curY += rowH;
+
+    dadosPorClasse.forEach(({ classe, kg, media, ops }, idx) => {
+      if (curY + rowH > 282) { doc.addPage(); curY = 15; }
+      const pct = kgTotalClasses > 0 ? (kg / kgTotalClasses) * 100 : 0;
+      if (idx % 2 === 0) { doc.setFillColor("#f8fafc"); doc.rect(mL, curY, cW, rowH, "F"); }
+      doc.setDrawColor(C.border); doc.setLineWidth(0.1);
+      doc.line(mL, curY + rowH, mL + cW, curY + rowH);
+
+      bld(8); doc.setTextColor(C.cyan);
+      doc.text(classe, colX(0) + cols[0] / 2, curY + 4.5, { align: "center" });
+      reg(8); doc.setTextColor(C.text);
+      doc.text(kg.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), colX(1) + cols[1] - 2, curY + 4.5, { align: "right" });
+      doc.setTextColor(C.muted);
+      doc.text(`${pct.toFixed(1)}%`, colX(2) + cols[2] / 2, curY + 4.5, { align: "center" });
+      doc.text(
+        media > 0 ? `${media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg/h` : "\u2014",
+        colX(3) + cols[3] / 2, curY + 4.5, { align: "center" },
+      );
+      doc.text(String(ops), colX(4) + cols[4] / 2, curY + 4.5, { align: "center" });
+      curY += rowH;
+    });
+
+    // Linha de total
+    if (dadosPorClasse.length > 0) {
+      if (curY + rowH > 282) { doc.addPage(); curY = 15; }
+      doc.setFillColor("#f1f5f9"); doc.setDrawColor(C.border); doc.setLineWidth(0.3);
+      doc.rect(mL, curY, cW, rowH, "FD");
+      bld(8); doc.setTextColor(C.text);
+      doc.text("TOTAL", colX(0) + cols[0] / 2, curY + 4.5, { align: "center" });
+      doc.text(kgTotalClasses.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), colX(1) + cols[1] - 2, curY + 4.5, { align: "right" });
+      reg(8); doc.setTextColor(C.muted);
+      doc.text("100%", colX(2) + cols[2] / 2, curY + 4.5, { align: "center" });
+      curY += rowH;
+    }
+
+    // Rodapé
+    curY += 6;
+    if (curY < 285) {
+      doc.setDrawColor(C.border); doc.setLineWidth(0.2);
+      doc.line(mL, curY, mL + cW, curY);
+      curY += 4;
+      reg(7); doc.setTextColor(C.muted);
+      doc.text("Gerado automaticamente pelo sistema de gestao de producao", mL, curY);
+    }
+
+    doc.save(`relatorio-producao-${dataInicio}-${dataFim}.pdf`);
+  }, [producaoTotal, mediaKgHora, capProdutivaMes, capRealMes, dadosMensais, dadosProdutividadeMensal, dadosPorClasse, dataInicio, dataFim, linhaFiltro]);
+
   // ── Retrabalho ───────────────────────────────────────────────────────────────
   // Registros com reprovado=true e contou_volume=true: extrusado mas fora de spec,
   // conta no volume total mas não no kg/h — OP concluída, operador cria nova OP manualmente.
@@ -798,11 +1031,11 @@ export default function PainelAnalises() {
     <div style={{ background: D.page, minHeight: "calc(100vh - 3rem)", padding: "1.5rem", margin: "-1.5rem", width: "calc(100% + 3rem)", display: "flex", flexDirection: "column", gap: "2rem" }}>
 
       {/* Cabeçalho */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 40, width: 40, borderRadius: "0.75rem", background: "#06B6D41a", flexShrink: 0 }}>
           <BarChart2 size={20} style={{ color: D.cyan }} />
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: D.text, margin: 0 }}>Análises da Produção</h2>
           <p style={{ fontSize: "0.875rem", color: D.muted, margin: "0.25rem 0 0" }}>
             {ordens.length} OPs concluídas · {descPeriodo}
@@ -811,6 +1044,23 @@ export default function PainelAnalises() {
             {classeFiltro !== "todas" && <span style={{ marginLeft: "0.25rem", fontWeight: 600, color: D.cyan }}> · {classeFiltro}</span>}
           </p>
         </div>
+        <button
+          onClick={gerarRelatorioPDF}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.4rem",
+            padding: "0.5rem 1rem", borderRadius: "0.5rem",
+            background: D.cyan, color: "#fff",
+            border: "none", cursor: "pointer",
+            fontSize: "0.8125rem", fontWeight: 600,
+            flexShrink: 0,
+            transition: "opacity 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          <FileDown size={15} />
+          Gerar Relatório PDF
+        </button>
       </div>
 
       {/* Filtro de período */}
