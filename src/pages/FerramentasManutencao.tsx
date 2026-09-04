@@ -155,10 +155,12 @@ export default function FerramentasManutencao({ papel, perfilNome }: Props) {
   }, []);
 
   const fetchEmprestimosAbertos = useCallback(async () => {
+    // .is("devolvido", false) → gera IS FALSE no Postgres, correto para boolean
     const { data } = await (supabase as any)
       .from("emprestimos_ferramentas")
       .select("*")
-      .eq("devolvido", false);
+      .is("devolvido", false);
+    // rebuild completo: só registros com devolvido IS FALSE entram no mapa
     const map: Record<string, Emprestimo> = {};
     (data ?? []).forEach((e: Emprestimo) => { map[e.ferramenta_id] = e; });
     setEmprestimosAbertos(map);
@@ -298,6 +300,12 @@ export default function FerramentasManutencao({ papel, perfilNome }: Props) {
     const aberto = emprestimosAbertos[ferramenta.id];
     if (!aberto) { toast({ title: "Nenhum empréstimo em aberto encontrado", variant: "destructive" }); return; }
     setDevolvendoId(ferramenta.id);
+    // Limpeza otimista: remove imediatamente do mapa antes mesmo do re-fetch
+    setEmprestimosAbertos(prev => {
+      const next = { ...prev };
+      delete next[ferramenta.id];
+      return next;
+    });
     const [{ error: e1 }, { error: e2 }] = await Promise.all([
       (supabase as any).from("emprestimos_ferramentas").update({
         devolvido: true,
@@ -307,9 +315,12 @@ export default function FerramentasManutencao({ papel, perfilNome }: Props) {
     ]);
     setDevolvendoId(null);
     if (e1 || e2) {
+      // Reverte limpeza otimista em caso de erro
+      setEmprestimosAbertos(prev => ({ ...prev, [ferramenta.id]: aberto }));
       toast({ title: "Erro ao registrar devolução", description: (e1 ?? e2)?.message, variant: "destructive" });
     } else {
       toast({ title: "Ferramenta devolvida!" });
+      // Re-fetch para garantir consistência com o banco
       await Promise.all([fetchFerramentas(), fetchEmprestimosAbertos()]);
     }
   }
