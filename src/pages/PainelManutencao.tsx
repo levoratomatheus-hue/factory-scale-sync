@@ -92,10 +92,10 @@ interface PainelManutencaoProps {
 }
 
 const PRIORIDADE_CONFIG: Record<string, { label: string; class: string }> = {
-  baixa:   { label: "Baixa",   class: "bg-slate-100 text-slate-600" },
-  media:   { label: "Média",   class: "bg-blue-100 text-blue-700" },
-  alta:    { label: "Alta",    class: "bg-amber-100 text-amber-700" },
-  critica: { label: "Crítica", class: "bg-red-100 text-red-700 font-bold" },
+  baixa:   { label: "Baixa",   class: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" },
+  media:   { label: "Média",   class: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700" },
+  alta:    { label: "Alta",    class: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700" },
+  critica: { label: "Crítica", class: "bg-red-100 text-red-700 border-red-200 font-bold dark:bg-red-900/40 dark:text-red-300 dark:border-red-700" },
 };
 
 const STATUS_TABS = [
@@ -107,11 +107,19 @@ const STATUS_TABS = [
 ] as const;
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
-  aberta:               { label: "Aberta",             class: "bg-slate-100 text-slate-700" },
-  em_andamento:         { label: "Em Andamento",        class: "bg-blue-100 text-blue-700" },
-  aguardando_peca:      { label: "Aguard. Peça",        class: "bg-yellow-100 text-yellow-700" },
-  aguardando_aprovacao: { label: "Aguard. Aprovação",   class: "bg-amber-100 text-amber-700" },
-  concluida:            { label: "Concluída",           class: "bg-green-100 text-green-700" },
+  aberta:               { label: "Aberta",             class: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" },
+  em_andamento:         { label: "Em Andamento",        class: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700" },
+  aguardando_peca:      { label: "Aguard. Peça",        class: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-700" },
+  aguardando_aprovacao: { label: "Aguard. Aprovação",   class: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700" },
+  concluida:            { label: "Concluída",           class: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700" },
+};
+
+const STATUS_DOT: Record<string, string> = {
+  aberta:               "bg-slate-400",
+  em_andamento:         "bg-amber-500",
+  aguardando_peca:      "bg-yellow-500",
+  aguardando_aprovacao: "bg-orange-500",
+  concluida:            "bg-green-500",
 };
 
 const _spFmt = new Intl.DateTimeFormat("pt-BR", {
@@ -829,114 +837,112 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 flex-wrap">
-        {STATUS_TABS.map(({ value, label }) => {
-          const count = counts[value] ?? 0;
-          return (
-            <button
-              key={value}
-              onClick={() => setTabAtiva(value)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                tabAtiva === value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              {label}
-              {count > 0 && (
-                <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                  tabAtiva === value ? "bg-white/20" : "bg-background"
-                }`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Filtros por tipo e origem */}
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium">Tipo:</span>
-          {(["todas", "corretiva", "preventiva"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTipoFiltro(t)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                tipoFiltro === t
-                  ? t === "corretiva"
-                    ? "bg-red-100 text-red-700 border-red-300"
-                    : t === "preventiva"
-                    ? "bg-green-100 text-green-700 border-green-300"
-                    : "bg-primary text-primary-foreground border-primary"
-                  : "border-input bg-background text-muted-foreground hover:border-foreground/30"
-              }`}
-            >
-              {t === "todas" ? "Todas" : t === "corretiva" ? "Corretiva" : "Preventiva"}
-            </button>
-          ))}
+      {/* Bloco de filtros unificado */}
+      <div className="rounded-xl border bg-muted/30 dark:bg-muted/10 px-4 py-3 space-y-3">
+        {/* Linha 1 — Status */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0 w-12">Status</span>
+          <div className="flex gap-1.5 flex-wrap">
+            {STATUS_TABS.map(({ value, label }) => {
+              const count = counts[value] ?? 0;
+              const isActive = tabAtiva === value;
+              const activeCls =
+                value === "concluida"    ? "bg-blue-600 text-white border-blue-600" :
+                value === "em_andamento" ? "bg-amber-500 text-white border-amber-500" :
+                "bg-primary text-primary-foreground border-primary";
+              return (
+                <button
+                  key={value}
+                  onClick={() => setTabAtiva(value)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    isActive ? activeCls : "border-border bg-background text-muted-foreground hover:border-foreground/40"
+                  }`}
+                >
+                  {label}
+                  {count > 0 && <span className="ml-1.5 tabular-nums">{count}</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium">Origem:</span>
-          {(["todas", "interna", "externa"] as const).map((o) => (
-            <button
-              key={o}
-              onClick={() => setExternaFiltro(o)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                externaFiltro === o
-                  ? o === "externa"
-                    ? "bg-purple-100 text-purple-700 border-purple-300"
-                    : o === "interna"
-                    ? "bg-blue-100 text-blue-700 border-blue-300"
-                    : "bg-primary text-primary-foreground border-primary"
-                  : "border-input bg-background text-muted-foreground hover:border-foreground/30"
-              }`}
-            >
-              {o === "todas" ? "Todas" : o === "interna" ? "Interna" : "Externa"}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Filtro de período — apenas na aba Concluída */}
-      {tabAtiva === "concluida" && (
-        <div className="flex items-center gap-3 flex-wrap rounded-lg border bg-card px-4 py-3">
-          <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="flex gap-1 flex-wrap">
-            {ATALHOS.map((a) => (
+        {/* Linha 2 — Tipo + Origem + Período (se concluída) */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0 w-12">Tipo</span>
+          <div className="flex gap-1.5">
+            {(["todas", "corretiva", "preventiva"] as const).map((t) => (
               <button
-                key={a.id}
-                type="button"
-                onClick={() => aplicarAtalho(a.id)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                  atalhoAtivo === a.id
+                key={t}
+                onClick={() => setTipoFiltro(t)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  tipoFiltro === t
                     ? "bg-primary text-primary-foreground border-primary"
-                    : "border-input bg-background text-muted-foreground hover:border-foreground/30"
+                    : "border-border bg-background text-muted-foreground hover:border-foreground/40"
                 }`}
               >
-                {a.label}
+                {t === "todas" ? "Todas" : t === "corretiva" ? "Corretiva" : "Preventiva"}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => { setDataInicio(e.target.value); setAtalhoAtivo(null); }}
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <span className="text-xs text-muted-foreground">até</span>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => { setDataFim(e.target.value); setAtalhoAtivo(null); }}
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+
+          <div className="h-4 w-px bg-border mx-1 shrink-0" />
+
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Origem</span>
+          <div className="flex gap-1.5">
+            {(["todas", "interna", "externa"] as const).map((o) => (
+              <button
+                key={o}
+                onClick={() => setExternaFiltro(o)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  externaFiltro === o
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border bg-background text-muted-foreground hover:border-foreground/40"
+                }`}
+              >
+                {o === "todas" ? "Todas" : o === "interna" ? "Interna" : "Externa"}
+              </button>
+            ))}
           </div>
+
+          {tabAtiva === "concluida" && (
+            <>
+              <div className="h-4 w-px bg-border mx-1 shrink-0" />
+              <CalendarRange className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <div className="flex gap-1.5 flex-wrap">
+                {ATALHOS.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => aplicarAtalho(a.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      atalhoAtivo === a.id
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border bg-background text-muted-foreground hover:border-foreground/40"
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+                <input
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => { setDataInicio(e.target.value); setAtalhoAtivo(null); }}
+                  className="rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <span className="text-xs text-muted-foreground">até</span>
+                <input
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => { setDataFim(e.target.value); setAtalhoAtivo(null); }}
+                  className="rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Lista de OS */}
       {ossFiltradas.length === 0 ? (
@@ -954,66 +960,49 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             const isExpanded = expandedCards.has(os.id);
             const movs = movsPorOS[os.id];
 
-            const cardBorder =
-              os.status === "concluida"            ? "border-green-200 dark:border-green-900" :
-              os.status === "em_andamento"         ? "border-orange-200 dark:border-orange-900" :
-              os.status === "aguardando_peca"      ? "border-yellow-200 dark:border-yellow-900" :
-              os.status === "aguardando_aprovacao" ? "border-amber-200 dark:border-amber-900" :
-              "border-border";
-
-            const cardBg =
-              os.status === "concluida"            ? "bg-green-50/60 dark:bg-green-950/20" :
-              os.status === "em_andamento"         ? "bg-orange-50/60 dark:bg-orange-950/20" :
-              os.status === "aguardando_peca"      ? "bg-yellow-50/60 dark:bg-yellow-950/20" :
-              os.status === "aguardando_aprovacao" ? "bg-amber-50/60 dark:bg-amber-950/20" :
-              "bg-card";
-
             return (
-              <div key={os.id} className={`rounded-lg border overflow-hidden ${cardBorder} ${cardBg}`}>
+              <div key={os.id} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
 
                 {/* ── HEADER (sempre visível, clicável) ── */}
                 <div
-                  className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:brightness-[0.97] dark:hover:brightness-110 transition-all"
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
                   onClick={() => toggleCard(os.id)}
                 >
-                  {/* Identidade do equipamento + descrição */}
+                  {/* Bolinha de status */}
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${STATUS_DOT[os.status] ?? "bg-slate-400"}`} />
+
+                  {/* Identidade — 2 linhas */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-semibold text-sm leading-tight">
-                        {equip?.nome ?? "Equipamento removido"}
-                      </span>
+                    <p className="font-semibold text-sm leading-tight">
+                      {equip?.nome ?? "Equipamento removido"}
                       {equip?.tag && (
-                        <span className="font-mono text-[11px] border rounded px-1 py-px text-muted-foreground leading-tight">
-                          {equip.tag}
-                        </span>
+                        <span className="font-mono text-[11px] text-muted-foreground ml-1.5">· {equip.tag}</span>
                       )}
                       {equip?.linha != null && (
-                        <span className="text-xs text-muted-foreground">· L{equip.linha}</span>
+                        <span className="text-xs text-muted-foreground ml-1">· L{equip.linha}</span>
                       )}
-                      <span className="text-xs text-muted-foreground truncate max-w-[260px]">
-                        · {os.descricao_problema}
-                      </span>
-                    </div>
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{os.descricao_problema}</p>
                   </div>
 
                   {/* Badges + chevron */}
-                  <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     {os.externa && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700">
+                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700">
                         <Building2 className="h-2.5 w-2.5" />
                         {os.empresa_externa ?? "Ext."}
                       </span>
                     )}
-                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] font-semibold ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${(os.tipo ?? "corretiva") === "preventiva" ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700" : "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700"}`}>
                       {(os.tipo ?? "corretiva") === "preventiva" ? "Preventiva" : "Corretiva"}
                     </span>
-                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] font-semibold ${prio.class}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${prio.class}`}>
                       {prio.label}
                     </span>
-                    <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[11px] font-semibold ${st.class}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${st.class}`}>
                       {st.label}
                     </span>
-                    <ChevronDown className={`h-4 w-4 ml-1 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`h-4 w-4 ml-0.5 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                   </div>
                 </div>
 
