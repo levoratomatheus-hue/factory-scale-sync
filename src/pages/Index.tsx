@@ -465,7 +465,7 @@ export default function Index() {
                 {activeTab === 'abrir_os'
                   ? <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
                   : activeTab === 'ferramentas_manutencao'
-                  ? <FerramentasManutencao papel={perfil.papel} />
+                  ? <FerramentasManutencao papel={perfil.papel} perfilNome={perfil.nome} />
                   : <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
               </Suspense>
             </ErrorBoundary>
@@ -1377,7 +1377,7 @@ export default function Index() {
               )}
               {activeTab === 'ferramentas_manutencao' && (
                 <Suspense fallback={TAB_LOADING}>
-                  <FerramentasManutencao papel={perfil.papel} />
+                  <FerramentasManutencao papel={perfil.papel} perfilNome={perfil.nome} />
                 </Suspense>
               )}
               {activeTab === 'historico_paradas' && (
