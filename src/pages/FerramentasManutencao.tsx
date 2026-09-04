@@ -139,7 +139,7 @@ export default function FerramentasManutencao({ papel, perfilNome }: Props) {
   const fetchFerramentas = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("ferramentas_manutencao")
-      .select("*")
+      .select("id, nome, codigo, localizacao, status, criado_em")
       .order("codigo", { ascending: true });
     if (error) toast({ title: "Erro ao carregar ferramentas", description: error.message, variant: "destructive" });
     else setFerramentas(data ?? []);
@@ -158,7 +158,7 @@ export default function FerramentasManutencao({ papel, perfilNome }: Props) {
     // .is("devolvido", false) → gera IS FALSE no Postgres, correto para boolean
     const { data } = await (supabase as any)
       .from("emprestimos_ferramentas")
-      .select("*")
+      .select("id, ferramenta_id, ferramenta_nome, emprestado_para, data_emprestimo, devolvido, data_devolucao, registrado_por, criado_em")
       .is("devolvido", false);
     // rebuild completo: só registros com devolvido IS FALSE entram no mapa
     const map: Record<string, Emprestimo> = {};
@@ -170,7 +170,7 @@ export default function FerramentasManutencao({ papel, perfilNome }: Props) {
     setLoadingHist(true);
     const { data, error } = await (supabase as any)
       .from("emprestimos_ferramentas")
-      .select("*")
+      .select("id, ferramenta_id, ferramenta_nome, emprestado_para, data_emprestimo, devolvido, data_devolucao, registrado_por, criado_em")
       .order("criado_em", { ascending: false });
     if (error) toast({ title: "Erro ao carregar histórico", description: error.message, variant: "destructive" });
     else setEmprestimos(data ?? []);

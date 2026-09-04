@@ -273,7 +273,15 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const fetchOss = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("ordens_servico")
-      .select("*, equipamentos(nome, tag, linha)")
+      .select([
+        "id", "equipamento_id", "descricao_problema", "prioridade", "tipo", "status",
+        "aberta_por", "tecnico_id", "tecnico_nome", "solucao_aplicada",
+        "peca_aguardada", "peca_previsao", "peca_solicitada", "peca_solicitada_em",
+        "aberta_em", "iniciado_em", "concluido_em",
+        "observacoes_andamento", "motivo_reprovacao", "reprovada_em",
+        "externa", "empresa_externa", "contato_externo", "prazo_retorno",
+        "equipamentos(nome, tag, linha)",
+      ].join(", "))
       .order("aberta_em", { ascending: false });
     if (error) {
       console.error("[PainelManutencao] fetchOss error:", error);
@@ -291,7 +299,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       .channel("ordens-servico-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens_servico" }, () => {
         if (debounce) clearTimeout(debounce);
-        debounce = setTimeout(() => fetchOss(), 300);
+        debounce = setTimeout(() => fetchOss(), 800);
       })
       .subscribe();
     return () => {
@@ -330,10 +338,11 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   useEffect(() => {
     if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida" && tabAtiva !== "em_andamento") return;
-    ossFiltradas.forEach(os => {
-      recarregarMovsOS(os.id);
-      recarregarAvulsasOS(os.id);
-    });
+    const osIds = ossFiltradas.map(os => os.id);
+    if (osIds.length === 0) return;
+    // batch: 2 queries no lugar de N*2
+    recarregarMovsLote(osIds);
+    recarregarAvulsasLote(osIds);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabAtiva, ossFiltradas]);
 
@@ -757,6 +766,57 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       .eq("os_id", osId)
       .order("criado_em", { ascending: true });
     setAvulsasPorOS(prev => ({ ...prev, [osId]: data ?? [] }));
+  }
+
+  // Batch: carrega movimentações de N OS em 2 queries (uma para movs, uma para itens)
+  async function recarregarMovsLote(osIds: string[]) {
+    if (osIds.length === 0) return;
+    const { data: movData } = await (supabase as any)
+      .from("movimentacoes_estoque")
+      .select("id, item_id, quantidade, ordem_servico_id")
+      .in("ordem_servico_id", osIds)
+      .eq("tipo", "saida");
+
+    // Inicializa todos os IDs com array vazio para limpar entradas antigas
+    const grouped: Record<string, { id: string; item_id: string; quantidade: number; nome: string; unidade: string }[]> = {};
+    osIds.forEach(id => { grouped[id] = []; });
+
+    if (movData && movData.length > 0) {
+      const itemIds = [...new Set(movData.map((m: any) => m.item_id))];
+      const { data: estoqueData } = await (supabase as any)
+        .from("estoque_manutencao")
+        .select("id, nome, unidade")
+        .in("id", itemIds);
+      const itemMap: Record<string, { nome: string; unidade: string }> = {};
+      (estoqueData ?? []).forEach((i: any) => { itemMap[i.id] = { nome: i.nome, unidade: i.unidade }; });
+      movData.forEach((m: any) => {
+        if (!grouped[m.ordem_servico_id]) grouped[m.ordem_servico_id] = [];
+        grouped[m.ordem_servico_id].push({
+          id: m.id, item_id: m.item_id, quantidade: m.quantidade,
+          nome: itemMap[m.item_id]?.nome ?? "—",
+          unidade: itemMap[m.item_id]?.unidade ?? "",
+        });
+      });
+    }
+    setMovsPorOS(prev => ({ ...prev, ...grouped }));
+  }
+
+  // Batch: carrega peças avulsas de N OS em 1 query
+  async function recarregarAvulsasLote(osIds: string[]) {
+    if (osIds.length === 0) return;
+    const { data } = await (supabase as any)
+      .from("pecas_avulsas_os")
+      .select("id, descricao, os_id")
+      .in("os_id", osIds)
+      .order("criado_em", { ascending: true });
+
+    const grouped: Record<string, { id: string; descricao: string }[]> = {};
+    osIds.forEach(id => { grouped[id] = []; });
+    (data ?? []).forEach((av: any) => {
+      if (!grouped[av.os_id]) grouped[av.os_id] = [];
+      grouped[av.os_id].push({ id: av.id, descricao: av.descricao });
+    });
+    setAvulsasPorOS(prev => ({ ...prev, ...grouped }));
   }
 
   async function removerAvulsa(id: string, osId: string) {
