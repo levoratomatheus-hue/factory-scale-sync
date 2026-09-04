@@ -983,6 +983,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
 
   const resumo = useMemo(() => {
     const pendentes = lista.filter((r) => r.status === "pendente");
+    const utilizados = lista.filter((r) => r.status === "utilizado");
     return {
       qtdPendentes: pendentes.length,
       kgPendentes: pendentes.reduce((s, r) => {
@@ -991,6 +992,13 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
           return s + r.materiais.reduce((ms, m) => ms + m.quantidade_material, 0);
         }
         return s + r.quantidade_material;
+      }, 0),
+      kgUtilizados: utilizados.reduce((s, r) => {
+        // Soma quantidade_utilizada dos materiais; se nulo usa quantidade_material
+        if (r.materiais && r.materiais.length > 0) {
+          return s + r.materiais.reduce((ms, m) => ms + (m.quantidade_utilizada ?? m.quantidade_material), 0);
+        }
+        return s + (r.quantidade_utilizada ?? r.quantidade_material);
       }, 0),
     };
   }, [lista]);
@@ -1577,6 +1585,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
               <SummaryCard label="SDRs pendentes" value={String(resumo.qtdPendentes)} highlight />
               <SummaryCard label="Material em espera" value={formatKg(resumo.kgPendentes)} sub="soma dos SDRs pendentes" />
               <SummaryCard label="Total de SDRs" value={String(lista.length)} />
+              <SummaryCard label="Material Reaproveitado" value={formatKg(resumo.kgUtilizados)} sub="soma dos SDRs utilizados" />
             </div>
 
             {/* Filtros */}
