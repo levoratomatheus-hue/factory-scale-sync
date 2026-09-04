@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle, ChevronDown } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle, ChevronDown, ShoppingCart } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -75,6 +75,8 @@ interface OS {
   empresa_externa: string | null;
   contato_externo: string | null;
   prazo_retorno: string | null;
+  peca_solicitada: boolean | null;
+  peca_solicitada_em: string | null;
   equipamentos?: { nome: string; tag: string | null; linha: number | null } | null;
 }
 
@@ -227,6 +229,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [solucaoPecasAvulsas, setSolucaoPecasAvulsas] = useState<string[]>([]);
   const [expandedAvulsas, setExpandedAvulsas] = useState<Record<string, boolean>>({});
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [savingPecaSolicitada, setSavingPecaSolicitada] = useState<Set<string>>(new Set());
 
   const [andamentosPorOS, setAndamentosPorOS] = useState<Record<string, Andamento[]>>({});
   const [novoAndamentoTexts, setNovoAndamentoTexts] = useState<Record<string, string>>({});
@@ -812,6 +815,18 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     }
   }
 
+  async function togglePecaSolicitada(os: OS) {
+    const novoValor = !os.peca_solicitada;
+    setSavingPecaSolicitada((prev) => new Set(prev).add(os.id));
+    const { error } = await (supabase as any).from("ordens_servico").update({
+      peca_solicitada: novoValor,
+      peca_solicitada_em: novoValor ? new Date().toISOString() : null,
+    }).eq("id", os.id);
+    setSavingPecaSolicitada((prev) => { const s = new Set(prev); s.delete(os.id); return s; });
+    if (error) toast({ title: "Erro ao atualizar marcador", description: error.message, variant: "destructive" });
+    else toast({ title: novoValor ? "Peça marcada como solicitada" : "Marcador removido" });
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1002,6 +1017,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${st.class}`}>
                       {st.label}
                     </span>
+                    {os.status === "aguardando_peca" && os.peca_solicitada && (
+                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700">
+                        <ShoppingCart className="h-2.5 w-2.5" />
+                        Solicitada
+                      </span>
+                    )}
                     <ChevronDown className={`h-4 w-4 ml-0.5 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                   </div>
                 </div>
@@ -1035,17 +1056,50 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
                     {/* Peça aguardada */}
                     {os.peca_aguardada && (
-                      <div className="rounded-md bg-yellow-50 border border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800 px-3 py-2 text-sm flex items-start gap-2">
-                        <Package className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
-                        <div>
-                          <span className="font-semibold text-yellow-700 dark:text-yellow-400">Aguardando peça: </span>
-                          <span className="text-yellow-800 dark:text-yellow-300">{os.peca_aguardada}</span>
-                          {os.peca_previsao && (
-                            <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
-                              · Previsão: {format(new Date(os.peca_previsao + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                            </span>
-                          )}
+                      <div className="rounded-md bg-yellow-50 border border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800 px-3 py-2 text-sm space-y-2">
+                        <div className="flex items-start gap-2">
+                          <Package className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-semibold text-yellow-700 dark:text-yellow-400">Aguardando peça: </span>
+                            <span className="text-yellow-800 dark:text-yellow-300">{os.peca_aguardada}</span>
+                            {os.peca_previsao && (
+                              <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
+                                · Previsão: {format(new Date(os.peca_previsao + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        {/* Marcador de peça solicitada — só quando aguardando_peca */}
+                        {os.status === "aguardando_peca" && (
+                          os.peca_solicitada ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700">
+                                <ShoppingCart className="h-3 w-3" />
+                                Peça solicitada{os.peca_solicitada_em ? ` em ${fmtDate(os.peca_solicitada_em)}` : ""}
+                              </span>
+                              {papel === "gestor" && (
+                                <button
+                                  onClick={() => togglePecaSolicitada(os)}
+                                  disabled={savingPecaSolicitada.has(os.id)}
+                                  className="text-xs text-muted-foreground hover:text-red-600 underline underline-offset-2 transition-colors disabled:opacity-50"
+                                >
+                                  {savingPecaSolicitada.has(os.id) ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "Desmarcar"}
+                                </button>
+                              )}
+                            </div>
+                          ) : papel === "gestor" ? (
+                            <button
+                              onClick={() => togglePecaSolicitada(os)}
+                              disabled={savingPecaSolicitada.has(os.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/40 transition-colors disabled:opacity-50"
+                            >
+                              {savingPecaSolicitada.has(os.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShoppingCart className="h-3 w-3" />}
+                              Marcar peça como solicitada
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Peça ainda não solicitada ao setor de compras.</span>
+                          )
+                        )}
                       </div>
                     )}
 
