@@ -385,6 +385,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   async function pecaChegou(os: OS) {
     if (savingPecaChegou.has(os.id)) return;
     setSavingPecaChegou((prev) => new Set(prev).add(os.id));
+    const pecaNome = os.peca_aguardada?.trim() || "";
+    const textoPecaChegou = pecaNome ? `Peça chegou: ${pecaNome}` : "Peça chegou";
     try {
       const { error } = await (supabase as any).from("ordens_servico").update({
         status: "em_andamento",
@@ -393,7 +395,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       }).eq("id", os.id);
       if (error) { toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" }); return; }
       await (supabase as any).from("os_andamentos").insert({
-        os_id: os.id, tipo: "peca_chegou", texto: "Peça chegou", criado_por: perfilNome,
+        os_id: os.id, tipo: "peca_chegou", texto: textoPecaChegou, criado_por: perfilNome,
       });
       await carregarAndamentos(os.id);
       toast({ title: "Peça registrada — OS voltou para Em Andamento" });
@@ -593,6 +595,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     }
 
     const osIdSolucao = solucao_aplicadaDialogOS.id;
+    const textoSolucao = solucao_aplicadaText.trim() || "Solução registrada";
     setSavingSolucao(false);
     toast({ title: "Solução registrada — aguardando aprovação do gestor" });
     setSolucaoDialogOS(null);
@@ -600,7 +603,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setPecasUtilizadas([]);
     setSolucaoPecasAvulsas([]);
     await (supabase as any).from("os_andamentos").insert({
-      os_id: osIdSolucao, tipo: "conclusao", texto: "Solução registrada", criado_por: perfilNome,
+      os_id: osIdSolucao, tipo: "conclusao", texto: textoSolucao, criado_por: perfilNome,
     });
     await carregarAndamentos(osIdSolucao);
   }
@@ -1239,7 +1242,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">Linha do tempo</p>
                                 <div className="space-y-1">
                                   {estadoEvents.map((ev, i) => {
-                                    let extra = "";
+                                    let duracao = "";
                                     if (ev.tipo === "peca_chegou") {
                                       const prevPeca = estadoEvents.slice(0, i).reverse().find(e => e.tipo === "aguardando_peca");
                                       if (prevPeca?.criado_em && ev.criado_em) {
@@ -1248,17 +1251,17 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                                         );
                                         const de = fmtDate(prevPeca.criado_em).slice(0, 5);
                                         const ate = fmtDate(ev.criado_em).slice(0, 5);
-                                        extra = ` · aguardou ${dias} dia${dias !== 1 ? "s" : ""} (${de} a ${ate})`;
+                                        duracao = ` · aguardou ${dias} dia${dias !== 1 ? "s" : ""} (${de} a ${ate})`;
                                       }
                                     }
-                                    const labelBase = TIPO_LABEL[ev.tipo] ?? ev.tipo;
-                                    const labelCompleto = ev.tipo === "aguardando_peca" && ev.texto
-                                      ? ev.texto
-                                      : labelBase + extra;
+                                    const label = (TIPO_LABEL[ev.tipo] ?? ev.tipo) + duracao;
                                     return (
                                       <div key={ev.id} className="border-l-2 border-slate-300 dark:border-slate-600 pl-2.5 py-0.5">
-                                        <p className="text-xs text-foreground/80 font-medium">{labelCompleto}</p>
-                                        <p className="text-[10px] text-muted-foreground">{fmtDate(ev.criado_em)}</p>
+                                        <p className="text-xs text-foreground/80 font-medium">{label}</p>
+                                        {ev.texto && (
+                                          <p className="text-[10px] text-muted-foreground">{ev.texto}</p>
+                                        )}
+                                        <p className="text-[10px] text-muted-foreground/60">{fmtDate(ev.criado_em)}</p>
                                       </div>
                                     );
                                   })}
