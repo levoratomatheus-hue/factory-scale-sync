@@ -82,10 +82,18 @@ interface OS {
 
 interface Andamento {
   id: string;
+  tipo: string;
   texto: string;
   criado_por: string | null;
   criado_em: string | null;
 }
+
+const TIPO_LABEL: Record<string, string> = {
+  inicio:          "OS iniciada",
+  aguardando_peca: "Aguardando peça",
+  peca_chegou:     "Peça chegou",
+  conclusao:       "Solução registrada",
+};
 
 interface PainelManutencaoProps {
   papel: string;
@@ -239,7 +247,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const carregarAndamentos = useCallback(async (osId: string) => {
     const { data } = await (supabase as any)
       .from("os_andamentos")
-      .select("id, texto, criado_por, criado_em")
+      .select("id, tipo, texto, criado_por, criado_em")
       .eq("os_id", osId)
       .order("criado_em", { ascending: true });
     setAndamentosPorOS((prev) => ({ ...prev, [osId]: data ?? [] }));
@@ -353,19 +361,23 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       return;
     }
     setSavingPeca(true);
+    const osId = aguardarPecaOS.id;
+    const pecaNome = pecaText.trim();
     const { error } = await (supabase as any).from("ordens_servico").update({
       status: "aguardando_peca",
-      peca_aguardada: pecaText.trim(),
+      peca_aguardada: pecaNome,
       peca_previsao: previsaoText || null,
-    }).eq("id", aguardarPecaOS.id);
+    }).eq("id", osId);
     setSavingPeca(false);
-    if (error) toast({ title: "Erro ao registrar peça", description: error.message, variant: "destructive" });
-    else {
-      toast({ title: "OS aguardando peça" });
-      setAguardarPecaOS(null);
-      setPecaText("");
-      setPrevisaoText("");
-    }
+    if (error) { toast({ title: "Erro ao registrar peça", description: error.message, variant: "destructive" }); return; }
+    await (supabase as any).from("os_andamentos").insert({
+      os_id: osId, tipo: "aguardando_peca", texto: `Aguardando peça: ${pecaNome}`, criado_por: perfilNome,
+    });
+    await carregarAndamentos(osId);
+    toast({ title: "OS aguardando peça" });
+    setAguardarPecaOS(null);
+    setPecaText("");
+    setPrevisaoText("");
   }
 
   async function pecaChegou(os: OS) {
@@ -374,8 +386,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       peca_aguardada: null,
       peca_previsao: null,
     }).eq("id", os.id);
-    if (error) toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" });
-    else toast({ title: "Peça registrada — OS voltou para Em Andamento" });
+    if (error) { toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" }); return; }
+    await (supabase as any).from("os_andamentos").insert({
+      os_id: os.id, tipo: "peca_chegou", texto: "Peça chegou", criado_por: perfilNome,
+    });
+    await carregarAndamentos(os.id);
+    toast({ title: "Peça registrada — OS voltou para Em Andamento" });
   }
 
   async function iniciarOS(os: OS) {
@@ -385,8 +401,13 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       tecnico_nome: perfilNome,
       iniciado_em: new Date().toISOString(),
     }).eq("id", os.id);
-    if (error) toast({ title: "Erro ao iniciar OS", description: error.message, variant: "destructive" });
-    else { toast({ title: "OS iniciada!" }); setIniciarConfirmOS(null); }
+    if (error) { toast({ title: "Erro ao iniciar OS", description: error.message, variant: "destructive" }); return; }
+    await (supabase as any).from("os_andamentos").insert({
+      os_id: os.id, tipo: "inicio", texto: "OS iniciada", criado_por: perfilNome,
+    });
+    await carregarAndamentos(os.id);
+    toast({ title: "OS iniciada!" });
+    setIniciarConfirmOS(null);
   }
 
   async function abrirAndamento(os: OS) {
@@ -557,12 +578,17 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       });
     }
 
+    const osIdSolucao = solucao_aplicadaDialogOS.id;
     setSavingSolucao(false);
     toast({ title: "Solução registrada — aguardando aprovação do gestor" });
     setSolucaoDialogOS(null);
     setSolucaoText("");
     setPecasUtilizadas([]);
     setSolucaoPecasAvulsas([]);
+    await (supabase as any).from("os_andamentos").insert({
+      os_id: osIdSolucao, tipo: "conclusao", texto: "Solução registrada", criado_por: perfilNome,
+    });
+    await carregarAndamentos(osIdSolucao);
   }
 
   async function abrirEdicao(os: OS) {
@@ -1188,20 +1214,65 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       {/* Feed de os_andamentos */}
                       {andamentosPorOS[os.id] === undefined ? (
                         <p className="text-xs text-muted-foreground italic">Carregando...</p>
-                      ) : andamentosPorOS[os.id].length === 0 && !os.observacoes_andamento ? (
-                        <p className="text-xs text-muted-foreground italic">Nenhum andamento registrado ainda.</p>
                       ) : (
-                        <div className="space-y-1.5">
-                          {andamentosPorOS[os.id].map((a) => (
-                            <div key={a.id} className="border-l-2 border-blue-300 dark:border-blue-700 pl-2.5 py-0.5">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-[10px] font-semibold text-foreground/70">{a.criado_por ?? "—"}</span>
-                                <span className="text-[10px] text-muted-foreground">{fmtDate(a.criado_em)}</span>
+                        <>
+                          {/* ── Linha do tempo de estados ── */}
+                          {(() => {
+                            const estadoEvents = (andamentosPorOS[os.id] ?? []).filter(a => a.tipo !== "anotacao");
+                            if (estadoEvents.length === 0) return null;
+                            return (
+                              <div className="space-y-1 pb-0.5">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">Linha do tempo</p>
+                                <div className="space-y-1">
+                                  {estadoEvents.map((ev, i) => {
+                                    let extra = "";
+                                    if (ev.tipo === "peca_chegou") {
+                                      const prevPeca = estadoEvents.slice(0, i).reverse().find(e => e.tipo === "aguardando_peca");
+                                      if (prevPeca?.criado_em && ev.criado_em) {
+                                        const dias = Math.round(
+                                          (toUtc(ev.criado_em).getTime() - toUtc(prevPeca.criado_em).getTime()) / 86_400_000
+                                        );
+                                        const de = fmtDate(prevPeca.criado_em).slice(0, 5);
+                                        const ate = fmtDate(ev.criado_em).slice(0, 5);
+                                        extra = ` · aguardou ${dias} dia${dias !== 1 ? "s" : ""} (${de} a ${ate})`;
+                                      }
+                                    }
+                                    const labelBase = TIPO_LABEL[ev.tipo] ?? ev.tipo;
+                                    const labelCompleto = ev.tipo === "aguardando_peca" && ev.texto
+                                      ? ev.texto
+                                      : labelBase + extra;
+                                    return (
+                                      <div key={ev.id} className="border-l-2 border-slate-300 dark:border-slate-600 pl-2.5 py-0.5">
+                                        <p className="text-xs text-foreground/80 font-medium">{labelCompleto}</p>
+                                        <p className="text-[10px] text-muted-foreground">{fmtDate(ev.criado_em)}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                              <p className="text-xs text-foreground/80 whitespace-pre-wrap">{a.texto}</p>
-                            </div>
-                          ))}
-                        </div>
+                            );
+                          })()}
+                          {/* ── Feed de anotações ── */}
+                          {(() => {
+                            const anotacoes = (andamentosPorOS[os.id] ?? []).filter(a => a.tipo === "anotacao");
+                            if (anotacoes.length === 0 && !os.observacoes_andamento) return (
+                              <p className="text-xs text-muted-foreground italic">Nenhum andamento registrado ainda.</p>
+                            );
+                            return (
+                              <div className="space-y-1.5">
+                                {anotacoes.map((a) => (
+                                  <div key={a.id} className="border-l-2 border-blue-300 dark:border-blue-700 pl-2.5 py-0.5">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <span className="text-[10px] font-semibold text-foreground/70">{a.criado_por ?? "—"}</span>
+                                      <span className="text-[10px] text-muted-foreground">{fmtDate(a.criado_em)}</span>
+                                    </div>
+                                    <p className="text-xs text-foreground/80 whitespace-pre-wrap">{a.texto}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </>
                       )}
                       {/* Nova entrada — só tecnico/gestor, OS não concluída */}
                       {(papel === "tecnico" || papel === "gestor") && os.status !== "concluida" && (
