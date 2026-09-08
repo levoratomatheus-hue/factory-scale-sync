@@ -238,6 +238,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [expandedAvulsas, setExpandedAvulsas] = useState<Record<string, boolean>>({});
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [savingPecaSolicitada, setSavingPecaSolicitada] = useState<Set<string>>(new Set());
+  const [savingPecaChegou, setSavingPecaChegou] = useState<Set<string>>(new Set());
+  const [savingIniciarOS, setSavingIniciarOS] = useState(false);
 
   const [andamentosPorOS, setAndamentosPorOS] = useState<Record<string, Andamento[]>>({});
   const [novoAndamentoTexts, setNovoAndamentoTexts] = useState<Record<string, string>>({});
@@ -355,7 +357,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }, [tabAtiva, ossFiltradas]);
 
   async function salvarAguardarPeca() {
-    if (!aguardarPecaOS) return;
+    if (!aguardarPecaOS || savingPeca) return;
     if (!pecaText.trim()) {
       toast({ title: "Informe qual peça está sendo aguardada", variant: "destructive" });
       return;
@@ -381,33 +383,45 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }
 
   async function pecaChegou(os: OS) {
-    const { error } = await (supabase as any).from("ordens_servico").update({
-      status: "em_andamento",
-      peca_aguardada: null,
-      peca_previsao: null,
-    }).eq("id", os.id);
-    if (error) { toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" }); return; }
-    await (supabase as any).from("os_andamentos").insert({
-      os_id: os.id, tipo: "peca_chegou", texto: "Peça chegou", criado_por: perfilNome,
-    });
-    await carregarAndamentos(os.id);
-    toast({ title: "Peça registrada — OS voltou para Em Andamento" });
+    if (savingPecaChegou.has(os.id)) return;
+    setSavingPecaChegou((prev) => new Set(prev).add(os.id));
+    try {
+      const { error } = await (supabase as any).from("ordens_servico").update({
+        status: "em_andamento",
+        peca_aguardada: null,
+        peca_previsao: null,
+      }).eq("id", os.id);
+      if (error) { toast({ title: "Erro ao registrar chegada da peça", description: error.message, variant: "destructive" }); return; }
+      await (supabase as any).from("os_andamentos").insert({
+        os_id: os.id, tipo: "peca_chegou", texto: "Peça chegou", criado_por: perfilNome,
+      });
+      await carregarAndamentos(os.id);
+      toast({ title: "Peça registrada — OS voltou para Em Andamento" });
+    } finally {
+      setSavingPecaChegou((prev) => { const s = new Set(prev); s.delete(os.id); return s; });
+    }
   }
 
   async function iniciarOS(os: OS) {
-    const { error } = await (supabase as any).from("ordens_servico").update({
-      status: "em_andamento",
-      tecnico_id: perfilId,
-      tecnico_nome: perfilNome,
-      iniciado_em: new Date().toISOString(),
-    }).eq("id", os.id);
-    if (error) { toast({ title: "Erro ao iniciar OS", description: error.message, variant: "destructive" }); return; }
-    await (supabase as any).from("os_andamentos").insert({
-      os_id: os.id, tipo: "inicio", texto: "OS iniciada", criado_por: perfilNome,
-    });
-    await carregarAndamentos(os.id);
-    toast({ title: "OS iniciada!" });
-    setIniciarConfirmOS(null);
+    if (savingIniciarOS) return;
+    setSavingIniciarOS(true);
+    try {
+      const { error } = await (supabase as any).from("ordens_servico").update({
+        status: "em_andamento",
+        tecnico_id: perfilId,
+        tecnico_nome: perfilNome,
+        iniciado_em: new Date().toISOString(),
+      }).eq("id", os.id);
+      if (error) { toast({ title: "Erro ao iniciar OS", description: error.message, variant: "destructive" }); return; }
+      await (supabase as any).from("os_andamentos").insert({
+        os_id: os.id, tipo: "inicio", texto: "OS iniciada", criado_por: perfilNome,
+      });
+      await carregarAndamentos(os.id);
+      toast({ title: "OS iniciada!" });
+      setIniciarConfirmOS(null);
+    } finally {
+      setSavingIniciarOS(false);
+    }
   }
 
   async function abrirAndamento(os: OS) {
@@ -530,7 +544,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   }
 
   async function registrarSolucao() {
-    if (!solucao_aplicadaDialogOS) return;
+    if (!solucao_aplicadaDialogOS || savingSolucao) return;
     if (!solucao_aplicadaText.trim()) {
       toast({ title: "Descreva a solução aplicada", variant: "destructive" });
       return;
@@ -1454,8 +1468,9 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                       )}
                       {(papel === "tecnico" || papel === "gestor") && os.status === "aguardando_peca" && (
                         <Button size="sm" className="gap-1.5 h-7 text-xs bg-yellow-500 hover:bg-yellow-600 text-white"
-                          onClick={() => pecaChegou(os)}>
-                          <PackageCheck className="h-3 w-3" /> Peça Chegou
+                          onClick={() => pecaChegou(os)}
+                          disabled={savingPecaChegou.has(os.id)}>
+                          {savingPecaChegou.has(os.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <PackageCheck className="h-3 w-3" />} Peça Chegou
                         </Button>
                       )}
                       {papel === "gestor" && os.status === "aguardando_aprovacao" && (
@@ -1730,7 +1745,12 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => iniciarConfirmOS && iniciarOS(iniciarConfirmOS)}>
+            <AlertDialogAction
+              onClick={() => iniciarConfirmOS && iniciarOS(iniciarConfirmOS)}
+              disabled={savingIniciarOS}
+              className="gap-1.5"
+            >
+              {savingIniciarOS && <Loader2 className="h-4 w-4 animate-spin" />}
               Confirmar
             </AlertDialogAction>
           </AlertDialogFooter>
