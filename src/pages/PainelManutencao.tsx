@@ -127,7 +127,7 @@ const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
 const STATUS_DOT: Record<string, string> = {
   aberta:               "bg-slate-400",
   em_andamento:         "bg-amber-500",
-  aguardando_peca:      "bg-yellow-500",
+  aguardando_peca:      "bg-pink-500",
   aguardando_aprovacao: "bg-orange-500",
   concluida:            "bg-green-500",
 };
