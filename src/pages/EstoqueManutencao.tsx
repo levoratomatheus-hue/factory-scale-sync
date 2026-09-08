@@ -115,6 +115,23 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     };
   }, [fetchItems]);
 
+  async function proximoCodigoDoBanco(): Promise<string> {
+    const { data } = await (supabase as any)
+      .from("estoque_manutencao")
+      .select("codigo");
+    const max = (data ?? []).reduce((acc: number, item: { codigo: string | null }) => {
+      const n = parseInt(item.codigo ?? "0", 10);
+      return isNaN(n) ? acc : Math.max(acc, n);
+    }, 0);
+    return String(max + 1).padStart(4, "0");
+  }
+
+  async function abrirCadastro() {
+    const proximoCodigo = await proximoCodigoDoBanco();
+    setCadastroForm({ nome: "", codigo: proximoCodigo, unidade: "un", quantidade: "", quantidade_minima: "", localizacao: "" });
+    setModalCadastro(true);
+  }
+
   async function salvarCadastro() {
     if (!cadastroForm.nome.trim()) {
       toast({ title: "Nome é obrigatório", variant: "destructive" }); return;
@@ -131,10 +148,21 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       localizacao: cadastroForm.localizacao.trim() || null,
     });
     setSavingCadastro(false);
-    if (error) { toast({ title: "Erro ao cadastrar", description: error.message, variant: "destructive" }); return; }
+    if (error) {
+      if (error.code === "23505") {
+        const proximoCodigo = await proximoCodigoDoBanco();
+        setCadastroForm(f => ({ ...f, codigo: proximoCodigo }));
+        await fetchItems();
+        toast({ title: "Código já existe", description: `Código ${cadastroForm.codigo} já está em uso. Um novo código foi sugerido.`, variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao cadastrar", description: error.message, variant: "destructive" });
+      }
+      return;
+    }
     toast({ title: "Item cadastrado!" });
     setModalCadastro(false);
     setCadastroForm({ nome: "", codigo: "", unidade: "un", quantidade: "", quantidade_minima: "", localizacao: "" });
+    fetchItems();
   }
 
   async function salvarMovimentacao() {
@@ -276,15 +304,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
             <RefreshCw className="h-3.5 w-3.5" /> Atualizar
           </Button>
           {papel === "gestor" && (
-            <Button size="sm" onClick={() => {
-              const maxCodigo = items.reduce((max, item) => {
-                const n = parseInt(item.codigo ?? "0", 10);
-                return isNaN(n) ? max : Math.max(max, n);
-              }, 0);
-              const proximoCodigo = String(maxCodigo + 1).padStart(4, "0");
-              setCadastroForm(f => ({ ...f, codigo: proximoCodigo }));
-              setModalCadastro(true);
-            }} className="gap-1.5">
+            <Button size="sm" onClick={abrirCadastro} className="gap-1.5">
               <Plus className="h-4 w-4" /> Cadastrar Item
             </Button>
           )}
