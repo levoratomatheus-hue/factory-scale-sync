@@ -940,6 +940,27 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
 
   return (
     <div className="space-y-6">
+      {/* Abas Interna / Externa */}
+      <div className="flex gap-1 border-b border-border">
+        {(["todas", "interna", "externa"] as const).map((v) => {
+          const label = v === "todas" ? "Todas" : v === "interna" ? "Interna" : "Externa";
+          const isActive = externaFiltro === v;
+          return (
+            <button
+              key={v}
+              onClick={() => setExternaFiltro(v)}
+              className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors -mb-px ${
+                isActive
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -999,25 +1020,6 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
                 }`}
               >
                 {t === "todas" ? "Todas" : t === "corretiva" ? "Corretiva" : "Preventiva"}
-              </button>
-            ))}
-          </div>
-
-          <div className="h-4 w-px bg-border mx-1 shrink-0" />
-
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Origem</span>
-          <div className="flex gap-1.5">
-            {(["todas", "interna", "externa"] as const).map((o) => (
-              <button
-                key={o}
-                onClick={() => setExternaFiltro(o)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                  externaFiltro === o
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border bg-background text-muted-foreground hover:border-foreground/40"
-                }`}
-              >
-                {o === "todas" ? "Todas" : o === "interna" ? "Interna" : "Externa"}
               </button>
             ))}
           </div>
