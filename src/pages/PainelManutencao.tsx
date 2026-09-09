@@ -318,14 +318,20 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     };
   }, [fetchOss]);
 
+  const ossPorOrigem = useMemo(() => {
+    if (externaFiltro === "externa") return oss.filter((o) => o.externa === true);
+    if (externaFiltro === "interna") return oss.filter((o) => !o.externa);
+    return oss;
+  }, [oss, externaFiltro]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    oss.forEach((o) => { c[o.status] = (c[o.status] ?? 0) + 1; });
+    ossPorOrigem.forEach((o) => { c[o.status] = (c[o.status] ?? 0) + 1; });
     return c;
-  }, [oss]);
+  }, [ossPorOrigem]);
 
   const ossFiltradas = useMemo(() => {
-    let porStatus = oss.filter((o) => o.status === tabAtiva);
+    let porStatus = ossPorOrigem.filter((o) => o.status === tabAtiva);
     if (tabAtiva === "concluida") {
       porStatus = porStatus.filter((o) => {
         if (!o.concluido_em) return false;
@@ -338,13 +344,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     if (tipoFiltro !== "todas") {
       porStatus = porStatus.filter((o) => (o.tipo ?? "corretiva") === tipoFiltro);
     }
-    if (externaFiltro === "externa") {
-      porStatus = porStatus.filter((o) => o.externa === true);
-    } else if (externaFiltro === "interna") {
-      porStatus = porStatus.filter((o) => !o.externa);
-    }
     return porStatus;
-  }, [oss, tabAtiva, dataInicio, dataFim, tipoFiltro, externaFiltro]);
+  }, [ossPorOrigem, tabAtiva, dataInicio, dataFim, tipoFiltro]);
 
   useEffect(() => {
     if (tabAtiva !== "aguardando_aprovacao" && tabAtiva !== "concluida" && tabAtiva !== "em_andamento") return;
@@ -967,7 +968,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
           <Wrench className="h-6 w-6 text-primary" />
           <div>
             <h2 className="text-xl font-bold">Painel de Manutenção</h2>
-            <p className="text-sm text-muted-foreground">{oss.length} OS{oss.length !== 1 ? "s" : ""} no total</p>
+            <p className="text-sm text-muted-foreground">{ossPorOrigem.length} OS{ossPorOrigem.length !== 1 ? "s" : ""} no total</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={fetchOss} className="gap-1.5">
