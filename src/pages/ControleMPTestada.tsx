@@ -43,6 +43,8 @@ function inp(D: Palette, extra?: React.CSSProperties): React.CSSProperties {
 
 type Situacao = "aprovado" | "reprovado" | "observacao" | "aguardando";
 
+type AbaAtiva = "homologacao" | "lote";
+
 interface MpTestada {
   id: string;
   pigmento_zc: string;
@@ -54,6 +56,7 @@ interface MpTestada {
   motivo: string | null;
   criado_por: string | null;
   criado_em: string;
+  tipo: string;
 }
 
 interface FormState {
@@ -207,7 +210,7 @@ function hoje() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function exportarCSV(rows: MpTestada[]) {
+function exportarCSV(rows: MpTestada[], aba: AbaAtiva) {
   const header = ["Pigmento ZC", "Código Cliente", "Fornecedor", "Data", "Lote", "Situação", "Motivo"];
   const lines = rows.map(r => [
     r.pigmento_zc,
@@ -223,7 +226,7 @@ function exportarCSV(rows: MpTestada[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `mp_testadas_${hoje()}.csv`;
+  a.download = `mp_${aba === "homologacao" ? "homologacao" : "lotes"}_${hoje()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -419,14 +422,19 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
 
   const D = buildPalette(dark);
 
+  // ── Aba ──────────────────────────────────────────────────────────────────────
+  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>("homologacao");
+
   // ── Dados ────────────────────────────────────────────────────────────────────
   const [registros, setRegistros] = useState<MpTestada[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchRegistros = useCallback(async () => {
+    setLoading(true);
     const { data, error } = await (supabase as any)
       .from("mp_testadas")
       .select("*")
+      .eq("tipo", abaAtiva)
       .order("data_teste", { ascending: false, nullsFirst: false })
       .order("criado_em", { ascending: false });
     if (error) {
@@ -435,7 +443,7 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
       setRegistros((data ?? []) as MpTestada[]);
     }
     setLoading(false);
-  }, []);
+  }, [abaAtiva]);
 
   useEffect(() => { fetchRegistros(); }, [fetchRegistros]);
 
@@ -531,6 +539,7 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
       lote:           f.lote.trim() || null,
       situacao:       f.situacao,
       motivo:         f.motivo.trim() || null,
+      tipo:           abaAtiva,
     };
 
     let error;
@@ -548,7 +557,7 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
     toast({ title: editando ? "Teste atualizado" : "Teste cadastrado" });
     fecharModal();
     fetchRegistros();
-  }, [editando, perfilNome, fetchRegistros]);
+  }, [editando, perfilNome, fetchRegistros, abaAtiva]);
 
   // ── Excluir ──────────────────────────────────────────────────────────────────
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
@@ -568,19 +577,56 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
     fetchRegistros();
   }, [excluindoId, fetchRegistros]);
 
+  const tituloAba = abaAtiva === "homologacao" ? "Homologação" : "Lotes";
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: D.page, minHeight: "100vh", padding: "0 0 2rem" }}>
+
+      {/* ── Abas ── */}
+      <div style={{ display: "flex", gap: 0, marginBottom: "1.25rem", borderBottom: `2px solid ${D.border}` }}>
+        {(["homologacao", "lote"] as AbaAtiva[]).map(aba => {
+          const label = aba === "homologacao" ? "Homologação" : "Lotes";
+          const ativa = aba === abaAtiva;
+          return (
+            <button
+              key={aba}
+              onClick={() => {
+                if (!ativa) {
+                  setAbaAtiva(aba);
+                  setBusca("");
+                  setFiltroSituacao("todos");
+                  setFiltroFornecedor("");
+                }
+              }}
+              style={{
+                padding: "0.55rem 1.4rem",
+                fontSize: 14,
+                fontWeight: ativa ? 700 : 500,
+                border: "none",
+                borderBottom: ativa ? "2px solid #2563eb" : "2px solid transparent",
+                marginBottom: -2,
+                background: "none",
+                color: ativa ? "#2563eb" : D.muted,
+                cursor: ativa ? "default" : "pointer",
+                transition: "color 0.15s",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* ── Header ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <FlaskConical size={20} color="#2563eb" />
-          <span style={{ fontSize: 18, fontWeight: 700, color: D.text }}>Controle de MP Testada</span>
+          <span style={{ fontSize: 18, fontWeight: 700, color: D.text }}>Controle de MP Testada — {tituloAba}</span>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
-            onClick={() => exportarCSV(filtrado)}
+            onClick={() => exportarCSV(filtrado, abaAtiva)}
             style={{
               display: "flex", alignItems: "center", gap: 5,
               padding: "0.4rem 0.9rem", borderRadius: "0.5rem",
@@ -645,7 +691,7 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
           <input
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por pigmento, fornecedor, lote…"
+            placeholder={`Buscar por pigmento, fornecedor, lote… (${tituloAba})`}
             style={{ ...inp(D), paddingLeft: 30 }}
           />
         </div>
