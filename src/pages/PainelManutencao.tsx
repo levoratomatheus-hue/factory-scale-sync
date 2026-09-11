@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle, ChevronDown, ShoppingCart } from "lucide-react";
+import { Loader2, Wrench, Play, CheckCircle2, Clock, RefreshCw, CalendarRange, Package, PackageCheck, Pencil, Trash2, ClipboardList, XCircle, Building2, AlertCircle, ChevronDown, ShoppingCart, Users } from "lucide-react";
 
 function toStr(d: Date) { return d.toISOString().split("T")[0]; }
 function inicioSemana(d: Date) {
@@ -240,6 +240,14 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const [savingPecaSolicitada, setSavingPecaSolicitada] = useState<Set<string>>(new Set());
   const [savingPecaChegou, setSavingPecaChegou] = useState<Set<string>>(new Set());
   const [savingIniciarOS, setSavingIniciarOS] = useState(false);
+  const [tecnicoSelecionadoNome, setTecnicoSelecionadoNome] = useState("");
+
+  const [tecnicos, setTecnicos] = useState<{ id: string; nome: string; ativo: boolean }[]>([]);
+  const [todosOsTecnicos, setTodosOsTecnicos] = useState<{ id: string; nome: string; ativo: boolean }[]>([]);
+  const [tecnicosModalOpen, setTecnicosModalOpen] = useState(false);
+  const [novoTecnicoNome, setNovoTecnicoNome] = useState("");
+  const [savingNovoTecnico, setSavingNovoTecnico] = useState(false);
+  const [togglingTecnicoId, setTogglingTecnicoId] = useState<string | null>(null);
 
   const [andamentosPorOS, setAndamentosPorOS] = useState<Record<string, Andamento[]>>({});
   const [novoAndamentoTexts, setNovoAndamentoTexts] = useState<Record<string, string>>({});
@@ -302,8 +310,26 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setLoading(false);
   }, []);
 
+  const fetchTecnicos = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("tecnicos_manutencao")
+      .select("*")
+      .eq("ativo", true)
+      .order("nome");
+    setTecnicos(data ?? []);
+  }, []);
+
+  const fetchTodosTecnicos = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("tecnicos_manutencao")
+      .select("*")
+      .order("nome");
+    setTodosOsTecnicos(data ?? []);
+  }, []);
+
   useEffect(() => {
     fetchOss();
+    fetchTecnicos();
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel("ordens-servico-realtime")
@@ -357,6 +383,44 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabAtiva, ossFiltradas]);
 
+  async function adicionarTecnico() {
+    const nome = novoTecnicoNome.trim();
+    if (!nome) return;
+    setSavingNovoTecnico(true);
+    const { error } = await (supabase as any)
+      .from("tecnicos_manutencao")
+      .insert({ nome, ativo: true });
+    setSavingNovoTecnico(false);
+    if (error) {
+      if (error.code === "23505") {
+        toast({ title: "Técnico já cadastrado", variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao adicionar técnico", description: error.message, variant: "destructive" });
+      }
+      return;
+    }
+    setNovoTecnicoNome("");
+    toast({ title: "Técnico adicionado!" });
+    await fetchTecnicos();
+    await fetchTodosTecnicos();
+  }
+
+  async function toggleAtivoTecnico(id: string, ativo: boolean) {
+    setTogglingTecnicoId(id);
+    const { error } = await (supabase as any)
+      .from("tecnicos_manutencao")
+      .update({ ativo: !ativo })
+      .eq("id", id);
+    setTogglingTecnicoId(null);
+    if (error) {
+      toast({ title: "Erro ao atualizar técnico", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: ativo ? "Técnico desativado" : "Técnico reativado" });
+    await fetchTecnicos();
+    await fetchTodosTecnicos();
+  }
+
   async function salvarAguardarPeca() {
     if (!aguardarPecaOS || savingPeca) return;
     if (!pecaText.trim()) {
@@ -405,23 +469,24 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     }
   }
 
-  async function iniciarOS(os: OS) {
+  async function iniciarOS(os: OS, tecnicoNome: string) {
     if (savingIniciarOS) return;
     setSavingIniciarOS(true);
     try {
       const { error } = await (supabase as any).from("ordens_servico").update({
         status: "em_andamento",
-        tecnico_id: perfilId,
-        tecnico_nome: perfilNome,
+        tecnico_id: null,
+        tecnico_nome: tecnicoNome,
         iniciado_em: new Date().toISOString(),
       }).eq("id", os.id);
       if (error) { toast({ title: "Erro ao iniciar OS", description: error.message, variant: "destructive" }); return; }
       await (supabase as any).from("os_andamentos").insert({
-        os_id: os.id, tipo: "inicio", texto: "OS iniciada", criado_por: perfilNome,
+        os_id: os.id, tipo: "inicio", texto: "OS iniciada", criado_por: tecnicoNome,
       });
       await carregarAndamentos(os.id);
       toast({ title: "OS iniciada!" });
       setIniciarConfirmOS(null);
+      setTecnicoSelecionadoNome("");
     } finally {
       setSavingIniciarOS(false);
     }
@@ -971,10 +1036,18 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
             <p className="text-sm text-muted-foreground">{ossPorOrigem.length} OS{ossPorOrigem.length !== 1 ? "s" : ""} no total</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchOss} className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {papel === "gestor" && (
+            <Button variant="outline" size="sm" onClick={() => { setTecnicosModalOpen(true); fetchTodosTecnicos(); }} className="gap-1.5">
+              <Users className="h-3.5 w-3.5" />
+              Técnicos
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={fetchOss} className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Bloco de filtros unificado */}
@@ -1740,19 +1813,37 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
       </Dialog>
 
       {/* AlertDialog: Iniciar OS */}
-      <AlertDialog open={!!iniciarConfirmOS} onOpenChange={(o) => { if (!o) setIniciarConfirmOS(null); }}>
+      <AlertDialog open={!!iniciarConfirmOS} onOpenChange={(o) => { if (!o) { setIniciarConfirmOS(null); setTecnicoSelecionadoNome(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Iniciar atendimento</AlertDialogTitle>
             <AlertDialogDescription>
-              Confirma que você vai iniciar o atendimento desta OS?
-              Seu nome ficará registrado como técnico responsável.
+              Selecione o técnico que vai realizar o atendimento desta OS.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="py-3">
+            <select
+              value={tecnicoSelecionadoNome}
+              onChange={(e) => setTecnicoSelecionadoNome(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Selecione o técnico...</option>
+              {tecnicos.map(t => (
+                <option key={t.id} value={t.nome}>{t.nome}</option>
+              ))}
+            </select>
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setTecnicoSelecionadoNome("")}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => iniciarConfirmOS && iniciarOS(iniciarConfirmOS)}
+              onClick={(e) => {
+                if (!tecnicoSelecionadoNome) {
+                  e.preventDefault();
+                  toast({ title: "Selecione um técnico para iniciar a OS", variant: "destructive" });
+                  return;
+                }
+                iniciarConfirmOS && iniciarOS(iniciarConfirmOS, tecnicoSelecionadoNome);
+              }}
               disabled={savingIniciarOS}
               className="gap-1.5"
             >
@@ -1858,11 +1949,19 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
               ) : (
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Técnico responsável</label>
-                  <Input
+                  <select
                     value={editForm.tecnico_nome}
                     onChange={(e) => setEditForm(f => ({ ...f, tecnico_nome: e.target.value }))}
-                    placeholder="Nome do técnico"
-                  />
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Nenhum</option>
+                    {editForm.tecnico_nome && !tecnicos.some(t => t.nome === editForm.tecnico_nome) && (
+                      <option value={editForm.tecnico_nome}>{editForm.tecnico_nome} (inativo)</option>
+                    )}
+                    {tecnicos.map(t => (
+                      <option key={t.id} value={t.nome}>{t.nome}</option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>
@@ -1938,6 +2037,54 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
               {savingReprovacao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar Reprovação
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Gerenciar Técnicos (gestor) */}
+      <Dialog open={tecnicosModalOpen} onOpenChange={(o) => { if (!o) { setTecnicosModalOpen(false); setNovoTecnicoNome(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Técnicos da Oficina</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex gap-2">
+              <Input
+                value={novoTecnicoNome}
+                onChange={(e) => setNovoTecnicoNome(e.target.value)}
+                placeholder="Nome do novo técnico"
+                onKeyDown={(e) => { if (e.key === "Enter") adicionarTecnico(); }}
+              />
+              <Button onClick={adicionarTecnico} disabled={savingNovoTecnico || !novoTecnicoNome.trim()}>
+                {savingNovoTecnico ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adicionar"}
+              </Button>
+            </div>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {todosOsTecnicos.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum técnico cadastrado.</p>
+              )}
+              {todosOsTecnicos.map(t => (
+                <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-md border bg-background">
+                  <span className={`text-sm ${!t.ativo ? "text-muted-foreground line-through" : ""}`}>{t.nome}</span>
+                  <button
+                    onClick={() => toggleAtivoTecnico(t.id, t.ativo)}
+                    disabled={togglingTecnicoId === t.id}
+                    className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors disabled:opacity-50 ${
+                      t.ativo
+                        ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-700 dark:text-red-400"
+                        : "bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:border-green-700 dark:text-green-400"
+                    }`}
+                  >
+                    {togglingTecnicoId === t.id
+                      ? <Loader2 className="h-3 w-3 animate-spin inline" />
+                      : t.ativo ? "Desativar" : "Reativar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTecnicosModalOpen(false); setNovoTecnicoNome(""); }}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
