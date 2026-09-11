@@ -51,6 +51,10 @@ interface Movimentacao {
 
 const UNIDADES = ["un", "kg", "g", "L", "mL", "m", "cm", "pç", "cx", "par", "rolo"];
 
+function fmtQtd(n: number) {
+  return (Math.round(n * 1000) / 1000).toLocaleString("pt-BR");
+}
+
 interface Props {
   papel: string;
   perfilNome: string;
@@ -175,9 +179,11 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       toast({ title: "Quantidade insuficiente em estoque", variant: "destructive" }); return;
     }
     setSavingMov(true);
-    const novaQtd = modalMov.tipo === "entrada"
-      ? modalMov.item.quantidade + qtd
-      : modalMov.item.quantidade - qtd;
+    const novaQtd = Math.round(
+      (modalMov.tipo === "entrada"
+        ? modalMov.item.quantidade + qtd
+        : modalMov.item.quantidade - qtd) * 1000
+    ) / 1000;
 
     const [movErr, updErr] = await Promise.all([
       (supabase as any).from("movimentacoes_estoque").insert({
@@ -377,12 +383,12 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`font-bold tabular-nums ${critico ? "text-red-700" : ""}`}>
-                        {item.quantidade}
+                        {fmtQtd(item.quantidade)}
                       </span>
                       <span className="text-xs text-muted-foreground ml-1">{item.unidade}</span>
                     </td>
                     <td className="px-3 py-2.5 text-center text-muted-foreground tabular-nums">
-                      {item.quantidade_minima} <span className="text-xs">{item.unidade}</span>
+                      {fmtQtd(item.quantidade_minima)} <span className="text-xs">{item.unidade}</span>
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground text-xs">
                       {item.localizacao ?? "—"}
@@ -599,7 +605,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
               <p className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">{modalMov.item.nome}</span>
                 {" · "}Estoque atual:{" "}
-                <span className="font-semibold">{modalMov.item.quantidade} {modalMov.item.unidade}</span>
+                <span className="font-semibold">{fmtQtd(modalMov.item.quantidade)} {modalMov.item.unidade}</span>
               </p>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Quantidade *</label>
@@ -666,7 +672,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold ${m.tipo === "entrada" ? "text-green-700" : "text-red-700"}`}>
-                        {m.tipo === "entrada" ? "+" : "-"}{m.quantidade} {modalHist?.unidade}
+                        {m.tipo === "entrada" ? "+" : "-"}{fmtQtd(m.quantidade)} {modalHist?.unidade}
                       </span>
                       {m.os_id && (
                         <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">via OS</span>
