@@ -300,8 +300,8 @@ export default function PainelAnalises() {
     return () => obs.disconnect();
   }, []);
 
-  const D = useMemo(() => buildPalette(dark), [dark]);
-  const cardStyle = useMemo(() => makeCardStyle(D), [D]);
+  D = buildPalette(dark);
+  cardStyle = makeCardStyle(D);
 
   const { hoje, primeiroDiaMes, hojeStr, inicioAnual } = useMemo(() => {
     const d = new Date();
