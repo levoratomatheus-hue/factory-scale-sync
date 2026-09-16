@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatKg } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -198,7 +198,7 @@ function SetorInline({
 const PAGE_SIZE_RET = 50;
 const PAGE_SIZE_REL = 100;
 
-function PaginacaoBar({ page, pageSize, total, onChange }: { page: number; pageSize: number; total: number; onChange: (p: number) => void }) {
+const PaginacaoBar = memo(function PaginacaoBar({ page, pageSize, total, onChange }: { page: number; pageSize: number; total: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / pageSize);
   if (totalPages <= 1) return null;
   return (
@@ -212,7 +212,7 @@ function PaginacaoBar({ page, pageSize, total, onChange }: { page: number; pageS
       </div>
     </div>
   );
-}
+});
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 

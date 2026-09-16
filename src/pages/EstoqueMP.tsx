@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,7 +54,7 @@ function situacao(item: EstoqueItem): 'negativo' | 'abaixo' | 'ok' {
   return 'ok';
 }
 
-function SituacaoBadge({ item }: { item: EstoqueItem }) {
+const SituacaoBadge = memo(function SituacaoBadge({ item }: { item: EstoqueItem }) {
   const s = situacao(item);
   if (s === 'negativo')
     return (
@@ -73,7 +73,7 @@ function SituacaoBadge({ item }: { item: EstoqueItem }) {
       OK
     </span>
   );
-}
+});
 
 function tipoBadge(mov: Movimentacao) {
   const isManual = mov.tipo === 'saida' && !mov.ordem_id;
@@ -106,7 +106,7 @@ function fmtDatetime(iso: string) {
 
 const PAGE_SIZE = 50;
 
-function PaginacaoBar({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
+const PaginacaoBar = memo(function PaginacaoBar({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   if (totalPages <= 1) return null;
   return (
@@ -120,7 +120,7 @@ function PaginacaoBar({ page, total, onChange }: { page: number; total: number; 
       </div>
     </div>
   );
-}
+});
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
