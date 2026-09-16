@@ -310,8 +310,6 @@ export default function Index() {
     goToTab('criar');
   }, [goToTab]);
 
-  const handleIrParaRelatorio = useCallback(() => goToTab('consumo_mp'), [goToTab]);
-
   const activeLabel = useMemo(
     () => (activeTab === null ? '' : (ALL_TAB_LABELS.get(activeTab) ?? '')),
     [activeTab],
@@ -332,10 +330,10 @@ export default function Index() {
 
   if (!perfil) return <Login />;
 
-  const goHome = useCallback(() => {
+  const goHome = () => {
     goToTab(null);
     setOpenGroups(new Set());
-  }, [goToTab]);
+  };
 
   if (perfil.papel === 'operador' && (perfil.balanca === '1' || perfil.balanca === '2')) {
     return (
@@ -1242,7 +1240,7 @@ export default function Index() {
         <AlertaRelatorioMP
           isGestor={perfil.papel === 'gestor'}
           userId={perfil.id}
-          onIrParaRelatorio={handleIrParaRelatorio}
+          onIrParaRelatorio={() => goToTab('consumo_mp')}
         />
         {activeTab === null ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">

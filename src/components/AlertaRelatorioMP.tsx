@@ -1,4 +1,3 @@
-import { memo } from 'react';
 import { ClipboardList, X, Clock } from 'lucide-react';
 import { useAlertaRelatorioMP } from '@/hooks/useAlertaRelatorioMP';
 import { Button } from '@/components/ui/button';
@@ -9,7 +8,7 @@ interface Props {
   onIrParaRelatorio: () => void;
 }
 
-export const AlertaRelatorioMP = memo(function AlertaRelatorioMP({ isGestor, userId, onIrParaRelatorio }: Props) {
+export function AlertaRelatorioMP({ isGestor, userId, onIrParaRelatorio }: Props) {
   const { visivel, carregando, confirmarFeito, deixarParaDepois } = useAlertaRelatorioMP(
     isGestor,
     userId
@@ -64,4 +63,4 @@ export const AlertaRelatorioMP = memo(function AlertaRelatorioMP({ isGestor, use
       </div>
     </div>
   );
-});
+}

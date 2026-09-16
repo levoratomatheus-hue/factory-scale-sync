@@ -226,7 +226,7 @@ export function useParadasAnalises(dataInicio: string, dataFim: string) {
       .select("linha, data, motivo, hora_inicio, hora_fim")
       .gte("data", dataInicio)
       .lte("data", dataFim)
-      .limit(10000);
+      .limit(50000);
     if (!error && data) setParadas(data);
     setLoading(false);
   }, [dataInicio, dataFim]);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -106,7 +106,7 @@ function fmtDatetime(iso: string) {
 
 const PAGE_SIZE = 50;
 
-const PaginacaoBar = memo(function PaginacaoBar({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
+function PaginacaoBar({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   if (totalPages <= 1) return null;
   return (
@@ -120,7 +120,7 @@ const PaginacaoBar = memo(function PaginacaoBar({ page, total, onChange }: { pag
       </div>
     </div>
   );
-});
+}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
