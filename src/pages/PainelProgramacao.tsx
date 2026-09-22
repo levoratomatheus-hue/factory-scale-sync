@@ -461,7 +461,7 @@ const SortableCard = memo(function SortableCard({
             <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
 
             {/* Aguardando registro */}
-            {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha") && (
+            {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura") && (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5">
                 <Clock className="h-2.5 w-2.5 shrink-0" />
                 aguardando registro
@@ -537,7 +537,7 @@ const SortableCard = memo(function SortableCard({
                 <button onClick={(e) => { e.stopPropagation(); onEditar(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
                 <button onClick={(e) => { e.stopPropagation(); onEditarEmissao(ordem); }} className={ordem.data_emissao ? "text-muted-foreground/70 hover:text-amber-500" : "text-muted-foreground/50 hover:text-amber-500"} title="Emissão"><CalendarRange className="h-3.5 w-3.5" /></button>
                 <button onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }} className="text-muted-foreground/50 hover:text-orange-500" title="Reprogramar"><ArrowRightLeft className="h-3.5 w-3.5" /></button>
-                {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && <button onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }} className="text-muted-foreground/50 hover:text-blue-600" title="Registrar Dia"><CalendarCheck2 className="h-3.5 w-3.5" /></button>}
+                {(ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura") && <button onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }} className="text-muted-foreground/50 hover:text-blue-600" title="Registrar Dia"><CalendarCheck2 className="h-3.5 w-3.5" /></button>}
                 {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && <button onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }} className="text-muted-foreground/50 hover:text-green-600" title="Forçar Conclusão"><CheckCircle2 className="h-3.5 w-3.5" /></button>}
                 {ordem.status === "em_linha" && <button onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Voltar para Fila"><Undo2 className="h-3.5 w-3.5" /></button>}
                 {ordem.formula_id && <button onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver fórmula"><BookOpen className="h-3.5 w-3.5" /></button>}
@@ -556,8 +556,10 @@ const SortableCard = memo(function SortableCard({
                   { icon: Pencil,         label: 'Editar',      color: 'text-foreground',    action: () => { onEditar(ordem);           setAcoesAbertas(false); } },
                   { icon: CalendarRange,  label: 'Emissão',     color: 'text-amber-600',     action: () => { onEditarEmissao(ordem);    setAcoesAbertas(false); } },
                   { icon: ArrowRightLeft, label: 'Reprogramar', color: 'text-orange-500',    action: () => { onReprogramarClick(ordem); setAcoesAbertas(false); } },
-                  ...(ordem.status === "em_linha" || ordem.status === "aguardando_linha" ? [
+                  ...(ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura" ? [
                     { icon: CalendarCheck2, label: 'Reg. Dia', color: 'text-blue-600',  action: () => { onRegistrarDia(ordem);    setAcoesAbertas(false); } },
+                  ] : []),
+                  ...(ordem.status === "em_linha" || ordem.status === "aguardando_linha" ? [
                     { icon: CheckCircle2,   label: 'Concluir', color: 'text-green-600', action: () => { onForcarConclusao(ordem); setAcoesAbertas(false); } },
                   ] : []),
                   ...(ordem.status === "em_linha" ? [{ icon: Undo2, label: 'Voltar Fila', color: 'text-amber-600', action: () => { onVoltarFila(ordem); setAcoesAbertas(false); } }] : []),
