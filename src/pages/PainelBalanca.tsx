@@ -289,7 +289,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                     {displayItens.map((item, idx) => (
                       <tr
                         key={idx}
-                        className={cn("border-t cursor-pointer", checkedItens.has(idx) && "bg-green-50")}
+                        className={cn("border-t cursor-pointer", checkedItens.has(idx) && "bg-green-50 [&_td]:!text-gray-800")}
                         onClick={() =>
                           setCheckedItens((prev) => {
                             const next = new Set(prev);
