@@ -69,7 +69,6 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     }
 
     setCheckedItens(new Set());
-    setCarga(1);
     setObsPausaInicial(null);
     // Limpa imediatamente para não exibir dados de outra OP
     setFormulaId(null);
