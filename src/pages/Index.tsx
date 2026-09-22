@@ -1475,6 +1475,7 @@ interface OperadorLayoutProps {
 }
 
 function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayoutProps) {
+  const { theme, toggle: toggleTheme } = useTheme();
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
@@ -1499,6 +1500,12 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
 
         <SidebarFooter className="border-t">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} onClick={toggleTheme}>
+                {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Sair" onClick={onLogout}>
                 <LogOut className="h-4 w-4 shrink-0" />
