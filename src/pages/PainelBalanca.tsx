@@ -42,6 +42,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [loadingOrdem, setLoadingOrdem] = useState(false);
   const [checkedItens, setCheckedItens] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [carga, setCarga] = useState(1);
   const [bateladaAtual, setBateladaAtual] = useState(1);
   const lastBateladaPress = useRef<{ type: '+' | '-'; time: number } | null>(null);
   const [bateladaConfirm, setBateladaConfirm] = useState<{ type: '+' | '-' } | null>(null);
@@ -527,6 +528,22 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {emPesagem && (
+        <div className="fixed bottom-4 left-4 flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-md z-20">
+          <span className="text-xs font-semibold text-muted-foreground">Carga {carga}</span>
+          <div className="w-px h-4 bg-border" />
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => {
+              setCheckedItens(new Set());
+              setCarga((c) => c + 1);
+            }}
+          >
+            Limpar
+          </button>
         </div>
       )}
     </div>
