@@ -301,7 +301,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
         "equipamentos(nome, tag, linha)",
       ].join(", "))
       .order("aberta_em", { ascending: false })
-      .limit(500);
+      .limit(5000);
     if (error) {
       console.error("[PainelManutencao] fetchOss error:", error);
       toast({ title: "Erro ao carregar OS", description: error.message, variant: "destructive" });

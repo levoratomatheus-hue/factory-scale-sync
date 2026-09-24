@@ -216,7 +216,7 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
       .select("id, item_id, tipo, quantidade, motivo, os_id, criado_por, criado_em")
       .eq("item_id", item.id)
       .order("criado_em", { ascending: false })
-      .limit(500);
+      .limit(5000);
     setHist(data ?? []);
     setLoadingHist(false);
   }
