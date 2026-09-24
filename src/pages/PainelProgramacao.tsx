@@ -5,7 +5,7 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
-import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical, ChevronDown, Info, RefreshCw } from "lucide-react";
+import { GripVertical, Loader2, CalendarDays, ArrowRightLeft, Pencil, Trash2, Undo2, CheckCircle2, AlertTriangle, CalendarCheck2, Clock, FlaskConical, Lock, LockOpen, BookOpen, CalendarRange, PauseCircle, Plus, X, ShoppingCart, Package, MoreVertical, ChevronDown, Info, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -340,6 +340,7 @@ const SortableCard = memo(function SortableCard({
   onEditarEmissao,
   onAddParada,
   onToggleDestino,
+  onVoltarParaPesagem,
   isMobile,
 }: {
   ordem: Ordem;
@@ -360,6 +361,7 @@ const SortableCard = memo(function SortableCard({
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
   onToggleDestino: (ordem: Ordem) => void;
+  onVoltarParaPesagem: (ordem: Ordem) => void;
   isMobile?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -539,6 +541,7 @@ const SortableCard = memo(function SortableCard({
                 <button onClick={(e) => { e.stopPropagation(); onReprogramarClick(ordem); }} className="text-muted-foreground/50 hover:text-orange-500" title="Reprogramar"><ArrowRightLeft className="h-3.5 w-3.5" /></button>
                 {(ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura") && <button onClick={(e) => { e.stopPropagation(); onRegistrarDia(ordem); }} className="text-muted-foreground/50 hover:text-blue-600" title="Registrar Dia"><CalendarCheck2 className="h-3.5 w-3.5" /></button>}
                 {(ordem.status === "em_linha" || ordem.status === "aguardando_linha") && <button onClick={(e) => { e.stopPropagation(); onForcarConclusao(ordem); }} className="text-muted-foreground/50 hover:text-green-600" title="Forçar Conclusão"><CheckCircle2 className="h-3.5 w-3.5" /></button>}
+                {["aguardando_mistura", "em_mistura", "aguardando_linha"].includes(ordem.status) && <button onClick={(e) => { e.stopPropagation(); onVoltarParaPesagem(ordem); }} className="text-muted-foreground/50 hover:text-orange-500" title="Voltar para pesagem"><RotateCcw className="h-3.5 w-3.5" /></button>}
                 {ordem.status === "em_linha" && <button onClick={(e) => { e.stopPropagation(); onVoltarFila(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Voltar para Fila"><Undo2 className="h-3.5 w-3.5" /></button>}
                 {ordem.formula_id && <button onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver fórmula"><BookOpen className="h-3.5 w-3.5" /></button>}
                 <button onClick={(e) => { e.stopPropagation(); onLab(ordem); }} className={ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"} title="Lab"><FlaskConical className="h-3.5 w-3.5" /></button>
@@ -562,6 +565,7 @@ const SortableCard = memo(function SortableCard({
                   ...(ordem.status === "em_linha" || ordem.status === "aguardando_linha" ? [
                     { icon: CheckCircle2,   label: 'Concluir', color: 'text-green-600', action: () => { onForcarConclusao(ordem); setAcoesAbertas(false); } },
                   ] : []),
+                  ...(["aguardando_mistura", "em_mistura", "aguardando_linha"].includes(ordem.status) ? [{ icon: RotateCcw, label: 'Voltar Pesagem', color: 'text-orange-500', action: () => { onVoltarParaPesagem(ordem); setAcoesAbertas(false); } }] : []),
                   ...(ordem.status === "em_linha" ? [{ icon: Undo2, label: 'Voltar Fila', color: 'text-amber-600', action: () => { onVoltarFila(ordem); setAcoesAbertas(false); } }] : []),
                   ...(ordem.formula_id    ? [{ icon: BookOpen, label: 'Fórmula', color: 'text-primary', action: () => { onDblClick(ordem); setAcoesAbertas(false); } }] : []),
                   { icon: ordem.tipo_op === 'estoque' ? Package : ShoppingCart, label: ordem.tipo_op === 'estoque' ? 'Estoque' : 'Venda', color: ordem.tipo_op === 'estoque' ? 'text-purple-600' : 'text-blue-600', action: () => { onToggleDestino(ordem); setAcoesAbertas(false); } },
@@ -603,6 +607,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onEditarEmissao,
   onAddParada,
   onToggleDestino,
+  onVoltarParaPesagem,
   isMobile,
 }: {
   linha: number;
@@ -624,6 +629,7 @@ const LinhaColumn = memo(function LinhaColumn({
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
   onToggleDestino: (ordem: Ordem) => void;
+  onVoltarParaPesagem: (ordem: Ordem) => void;
   isMobile?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
@@ -665,7 +671,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} isMobile={isMobile} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} onVoltarParaPesagem={onVoltarParaPesagem} isMobile={isMobile} />
             ))
           )}
         </div>
@@ -696,6 +702,8 @@ export default function PainelProgramacao() {
   const [excluindo, setExcluindo] = useState(false);
   const [ordemParaVoltar, setOrdemParaVoltar] = useState<Ordem | null>(null);
   const [voltando, setVoltando] = useState(false);
+  const [ordemParaVoltarPesagem, setOrdemParaVoltarPesagem] = useState<Ordem | null>(null);
+  const [voltandoPesagem, setVoltandoPesagem] = useState(false);
   const [ordemParaForcar, setOrdemParaForcar] = useState<Ordem | null>(null);
   const [forcarHoraInicio, setForcarHoraInicio] = useState("");
   const [forcarHoraFim, setForcarHoraFim] = useState("");
@@ -1111,6 +1119,29 @@ export default function PainelProgramacao() {
     }
     setVoltando(false);
     setOrdemParaVoltar(null);
+  };
+
+  const handleVoltarParaPesagem = async () => {
+    if (!ordemParaVoltarPesagem) return;
+    setVoltandoPesagem(true);
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "pendente", bateladas_feitas: 0, obs_pausa: null } as any)
+      .eq("id", ordemParaVoltarPesagem.id);
+    if (!error) {
+      supabase.from("historico").insert({
+        ordem_id: ordemParaVoltarPesagem.id,
+        status_anterior: ordemParaVoltarPesagem.status,
+        status_novo: "pendente",
+        obs: "Retorno para pesagem solicitado pelo gestor — pesagem anterior cancelada",
+      } as any);
+      setOrdens((prev) => prev.map((o) => o.id === ordemParaVoltarPesagem!.id ? { ...o, status: "pendente", bateladas_feitas: 0, obs_pausa: null } : o));
+      toast({ title: "OP voltou para a pesagem" });
+    } else {
+      toast({ title: "Erro ao voltar para pesagem", description: error.message, variant: "destructive" });
+    }
+    setVoltandoPesagem(false);
+    setOrdemParaVoltarPesagem(null);
   };
 
   const handleForcarConclusao = async () => {
@@ -1751,6 +1782,7 @@ export default function PainelProgramacao() {
                     onEditar={setOrdemEditando}
                     onExcluir={setOrdemParaExcluir}
                     onVoltarFila={setOrdemParaVoltar}
+                    onVoltarParaPesagem={setOrdemParaVoltarPesagem}
                     onForcarConclusao={setOrdemParaForcar}
                     onRegistrarDia={handleRegistrarDiaClick}
                     onVerDetalhes={setOrdemDetalhe}
@@ -1974,6 +2006,28 @@ export default function PainelProgramacao() {
               {forcando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <CheckCircle2 className="mr-1.5 h-4 w-4" />
               Enviar para Liberação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => !open && setOrdemParaVoltarPesagem(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Voltar para pesagem?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemParaVoltarPesagem?.produto}</span>
+              <br />
+              A pesagem anterior será desfeita. O operador terá que pesar a OP inteira novamente. O estoque não será alterado.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemParaVoltarPesagem(null)} disabled={voltandoPesagem}>
+              Cancelar
+            </Button>
+            <Button onClick={handleVoltarParaPesagem} disabled={voltandoPesagem}>
+              {voltandoPesagem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
