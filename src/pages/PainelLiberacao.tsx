@@ -84,7 +84,7 @@ export default function PainelLiberacao() {
   const [novoRegData, setNovoRegData] = useState("");
   const [novoRegHoraInicio, setNovoRegHoraInicio] = useState("");
   const [novoRegHoraFim, setNovoRegHoraFim] = useState("");
-  const [novoRegItems, setNovoRegItems] = useState<Array<{ qty: string; peso: string }>>([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
+  const [novoRegItems, setNovoRegItems] = useState<Array<{ qty: string; peso: string }>>(() => [{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [novoRegSaving, setNovoRegSaving] = useState(false);
 
   const fetchOrdens = async () => {

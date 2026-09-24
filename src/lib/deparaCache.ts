@@ -27,7 +27,8 @@ export async function fetchAllDepara(): Promise<DeparaRow[]> {
   const { data } = await (supabase as any)
     .from("mp_depara")
     .select("cod_excel, cod_tid")
-    .not("cod_tid", "is", null);
+    .not("cod_tid", "is", null)
+    .limit(10000);
 
   const rows: DeparaRow[] = data ?? [];
   _cache = { rows, fetchedAt: Date.now() };

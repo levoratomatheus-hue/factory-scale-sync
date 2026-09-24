@@ -25,7 +25,8 @@ async function fetchFormulaItens(formulaId: string): Promise<
   const { data } = await supabase
     .from('formulas')
     .select('cod_mp, materia_prima, percentual')
-    .eq('formula_id', formulaId);
+    .eq('formula_id', formulaId)
+    .limit(500);
 
   return (data ?? []) as { cod_mp: string; materia_prima: string; percentual: number }[];
 }

@@ -890,9 +890,10 @@ export default function ConsumoMP({ perfilNome }: Props) {
     setCarregandoItens(true);
     const { data: rows } = await (supabase as any)
       .from('relatorios_consumo_mp_itens')
-      .select('*')
+      .select('id, relatorio_id, materia_prima, cod_tid, total_kg, percentual, setor')
       .eq('relatorio_id', rel.id)
-      .order('total_kg', { ascending: false });
+      .order('total_kg', { ascending: false })
+      .limit(5000);
     setItensAbertos((rows ?? []) as RelatorioSalvoItem[]);
     setCarregandoItens(false);
   };
@@ -1722,9 +1723,10 @@ export default function ConsumoMP({ perfilNome }: Props) {
                                 onClick={async () => {
                                   const { data: itens } = await (supabase as any)
                                     .from('relatorios_consumo_mp_itens')
-                                    .select('*')
+                                    .select('id, relatorio_id, materia_prima, cod_tid, total_kg, percentual, setor')
                                     .eq('relatorio_id', rel.id)
-                                    .order('total_kg', { ascending: false });
+                                    .order('total_kg', { ascending: false })
+                                    .limit(5000);
                                   exportarRelatorioSalvoCSV(rel, (itens ?? []) as RelatorioSalvoItem[]);
                                 }}
                                 title="Exportar CSV"

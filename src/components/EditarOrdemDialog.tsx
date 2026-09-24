@@ -44,9 +44,15 @@ interface FormulaItem {
   quantidade_kg: number;
 }
 
+const EMPTY_OBS_ITEMS: { qty: string; mp: string }[] = [
+  { qty: "", mp: "" },
+  { qty: "", mp: "" },
+  { qty: "", mp: "" },
+  { qty: "", mp: "" },
+];
+
 function parseObsItems(obs: string | null): { qty: string; mp: string }[] {
-  const vazio = Array.from({ length: 4 }, () => ({ qty: "", mp: "" }));
-  if (!obs) return vazio;
+  if (!obs) return EMPTY_OBS_ITEMS;
   try {
     const parsed = JSON.parse(obs);
     if (Array.isArray(parsed)) {
@@ -76,7 +82,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
   const [requerMistura, setRequerMistura] = useState(true);
   const [marca, setMarca] = useState("");
   const [formulaId, setFormulaId] = useState("");
-  const [obsItems, setObsItems] = useState(Array.from({ length: 4 }, () => ({ qty: "", mp: "" })));
+  const [obsItems, setObsItems] = useState(EMPTY_OBS_ITEMS);
   const [tipoOp, setTipoOp] = useState("");
 
   const [formulaItens, setFormulaItens] = useState<FormulaItem[]>([]);
@@ -109,38 +115,30 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
     let cancelled = false;
 
     const carregarFormula = async () => {
-      // 1. Tenta ordens_formula
-      const { data: custom } = await supabase
-        .from("ordens_formula")
-        .select("sequencia, materia_prima, quantidade_kg")
-        .eq("ordem_id", ordem.id)
-        .order("sequencia", { ascending: true });
+      const tb = ordem.tamanho_batelada;
+
+      // Dispara as duas queries em paralelo: ordens_formula e fórmula padrão (se houver tb)
+      const [{ data: custom }, { data: padrao }] = await Promise.all([
+        supabase
+          .from("ordens_formula")
+          .select("sequencia, materia_prima, quantidade_kg")
+          .eq("ordem_id", ordem.id)
+          .order("sequencia", { ascending: true }),
+        tb && tb > 0
+          ? supabase
+              .from("formulas")
+              .select("sequencia, materia_prima, unidade, percentual")
+              .eq("formula_id", ordem.formula_id!)
+              .order("sequencia", { ascending: true })
+          : Promise.resolve({ data: null }),
+      ]);
 
       if (cancelled) return;
 
       if (custom && custom.length > 0) {
         setFormulaItens(custom as FormulaItem[]);
         setFormulaFonte("ordens_formula");
-        setLoadingFormula(false);
-        return;
-      }
-
-      // 2. Fallback: fórmula padrão
-      const tb = ordem.tamanho_batelada;
-      if (!tb || tb <= 0) {
-        setLoadingFormula(false);
-        return;
-      }
-
-      const { data: padrao } = await supabase
-        .from("formulas")
-        .select("sequencia, materia_prima, unidade, percentual")
-        .eq("formula_id", ordem.formula_id)
-        .order("sequencia", { ascending: true });
-
-      if (cancelled) return;
-
-      if (padrao && padrao.length > 0) {
+      } else if (padrao && padrao.length > 0 && tb && tb > 0) {
         setFormulaItens(
           padrao.map((row: any) => ({
             sequencia: row.sequencia,

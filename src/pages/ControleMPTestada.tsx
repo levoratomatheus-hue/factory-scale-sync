@@ -433,10 +433,11 @@ export default function ControleMPTestada({ perfilNome, papel }: Props) {
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from("mp_testadas")
-      .select("*")
+      .select("id, pigmento_zc, codigo_cliente, fornecedor, data_teste, lote, situacao, motivo, criado_por, criado_em, tipo")
       .eq("tipo", abaAtiva)
       .order("data_teste", { ascending: false, nullsFirst: false })
-      .order("criado_em", { ascending: false });
+      .order("criado_em", { ascending: false })
+      .limit(2000);
     if (error) {
       toast({ title: "Erro ao carregar registros", description: error.message, variant: "destructive" });
     } else {

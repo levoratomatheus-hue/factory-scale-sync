@@ -300,7 +300,8 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
         "externa", "empresa_externa", "contato_externo", "prazo_retorno",
         "equipamentos(nome, tag, linha)",
       ].join(", "))
-      .order("aberta_em", { ascending: false });
+      .order("aberta_em", { ascending: false })
+      .limit(500);
     if (error) {
       console.error("[PainelManutencao] fetchOss error:", error);
       toast({ title: "Erro ao carregar OS", description: error.message, variant: "destructive" });
@@ -313,7 +314,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const fetchTecnicos = useCallback(async () => {
     const { data } = await (supabase as any)
       .from("tecnicos_manutencao")
-      .select("*")
+      .select("id, nome, ativo")
       .eq("ativo", true)
       .order("nome");
     setTecnicos(data ?? []);
@@ -322,7 +323,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
   const fetchTodosTecnicos = useCallback(async () => {
     const { data } = await (supabase as any)
       .from("tecnicos_manutencao")
-      .select("*")
+      .select("id, nome, ativo")
       .order("nome");
     setTodosOsTecnicos(data ?? []);
   }, []);

@@ -133,8 +133,9 @@ export default function ControleCor({ perfilNome }: Props) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from("cores_formulas")
-      .select("*")
-      .order("criado_em", { ascending: false });
+      .select("id, formula_id, produto, lab_l, lab_a, lab_b, observacao, aplicacao, criado_por, criado_em")
+      .order("criado_em", { ascending: false })
+      .limit(5000);
     setLoadingCores(false);
     if (error) {
       toast({ title: "Erro ao carregar cores", description: error.message, variant: "destructive" });
@@ -316,7 +317,7 @@ export default function ControleCor({ perfilNome }: Props) {
     setBuscando(true);
     setMostrarDistantes(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any).from("cores_formulas").select("*");
+    const { data, error } = await (supabase as any).from("cores_formulas").select("id, formula_id, produto, lab_l, lab_a, lab_b, observacao, aplicacao, criado_por, criado_em").limit(5000);
     setBuscando(false);
     if (error) { toast({ title: "Erro na busca", description: error.message, variant: "destructive" }); return; }
     const ref: Lab = { L, a, b };

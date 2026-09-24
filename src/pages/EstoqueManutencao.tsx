@@ -95,8 +95,9 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
   const fetchItems = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("estoque_manutencao")
-      .select("*")
-      .order("codigo", { ascending: true, nullsFirst: false });
+      .select("id, nome, codigo, unidade, quantidade, quantidade_minima, localizacao, criado_em")
+      .order("codigo", { ascending: true, nullsFirst: false })
+      .limit(2000);
     if (!error) setItems(data ?? []);
     setLoading(false);
   }, []);
@@ -212,9 +213,10 @@ export default function EstoqueManutencao({ papel, perfilNome }: Props) {
     setLoadingHist(true);
     const { data } = await (supabase as any)
       .from("movimentacoes_estoque")
-      .select("*")
+      .select("id, item_id, tipo, quantidade, motivo, os_id, criado_por, criado_em")
       .eq("item_id", item.id)
-      .order("criado_em", { ascending: false });
+      .order("criado_em", { ascending: false })
+      .limit(500);
     setHist(data ?? []);
     setLoadingHist(false);
   }

@@ -69,7 +69,8 @@ export const DetalheOrdemDialog = memo(function DetalheOrdemDialog({
       .eq("linha", ordem.linha)
       .in("data", datas)
       .order("data", { ascending: true })
-      .order("hora_inicio", { ascending: true });
+      .order("hora_inicio", { ascending: true })
+      .limit(500);
     setParadas(p ?? []);
   }, [ordem?.id, ordem?.linha]);
 

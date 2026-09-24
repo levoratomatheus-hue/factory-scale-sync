@@ -263,14 +263,8 @@ export default function Index() {
     // Pré-aquece chunks dos painéis mais acessados para eliminar spinner no primeiro clique
     const t = setTimeout(() => {
       import('./PainelGestor');
-      import('./PainelLinha');
-      import('./PainelBalanca');
       import('./PainelProgramacao');
-      import('./PainelLiberacao');
-      import('./PainelHistorico');
-      import('./ConsumoMP');
-      import('./EstoqueMP');
-      import('./PreProgramacao');
+      import('./PainelBalanca');
     }, 300);
     return () => clearTimeout(t);
   }, []);
