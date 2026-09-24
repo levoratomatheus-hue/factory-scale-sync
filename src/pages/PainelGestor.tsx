@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   CalendarClock,
   ListOrdered,
+  RefreshCw,
   Search,
   X,
 } from "lucide-react";
@@ -50,7 +51,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const fetchTodasPendentes = useCallback(async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, marca, data_programacao, data_emissao")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, marca, data_programacao, data_emissao, quantidade_pesada, pesagem_complementar_pendente")
       .neq("status", "concluido")
       .neq("status", "pre_programacao")
       .limit(500)
@@ -132,6 +133,22 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     };
     fetchLotesSemOP();
   }, []);
+
+  const reabrirPesagem = async (ordemId: string, statusAtual: string) => {
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "pendente" } as any)
+      .eq("id", ordemId);
+    if (error) { toast({ title: "Erro ao reabrir pesagem", description: error.message, variant: "destructive" }); return; }
+    supabase.from("historico").insert({
+      ordem_id: ordemId,
+      status_anterior: statusAtual,
+      status_novo: "pendente",
+      obs: "Pesagem complementar — quantidade aumentou após a pesagem original",
+    } as any);
+    toast({ title: "Pesagem reaberta — OP voltou para a fila da balança" });
+    fetchTodasPendentes();
+  };
 
   const reprogramarOrdem = async (ordemId: string, paraHoje: boolean) => {
     const data = paraHoje ? todayStr : (novaData[ordemId] ?? todayStr);
@@ -396,6 +413,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                   <th className="text-left px-4 py-2 font-medium">Balança</th>
                   <th className="text-left px-4 py-2 font-medium">Status</th>
                   <th className="text-left px-4 py-2 font-medium">Data Prog.</th>
+                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -406,11 +424,34 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                     <td className="px-4 py-2 text-right dark:text-gray-300">{op.quantidade?.toLocaleString("pt-BR") ?? "—"}</td>
                     <td className="px-4 py-2 dark:text-gray-300">{op.linha ?? "—"}</td>
                     <td className="px-4 py-2 dark:text-gray-300">{op.balanca ?? "—"}</td>
-                    <td className="px-4 py-2"><StatusBadge status={op.status} /></td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <StatusBadge status={op.status} />
+                        {op.pesagem_complementar_pendente && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 whitespace-nowrap">
+                            <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                            +{((op.quantidade ?? 0) - (op.quantidade_pesada ?? 0)).toLocaleString("pt-BR")} kg
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-2 font-mono text-muted-foreground">
                       {op.data_programacao
                         ? format(new Date(op.data_programacao + "T12:00:00"), "dd/MM/yyyy")
                         : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {op.pesagem_complementar_pendente && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                          onClick={() => reabrirPesagem(op.id, op.status)}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Reabrir pesagem
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

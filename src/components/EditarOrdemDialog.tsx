@@ -35,6 +35,7 @@ export interface OrdemEditavel {
   data_programacao: string;
   data_emissao: string | null;
   tipo_op: string | null;
+  quantidade_pesada?: number | null;
 }
 
 interface FormulaItem {
@@ -180,9 +181,16 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
       ? JSON.stringify(filledObs.map((r) => ({ qty: parseInt(r.qty) || 0, mp: r.mp.trim() })))
       : null;
 
+    const STATUS_POS_PESAGEM = ['aguardando_mistura', 'em_mistura', 'aguardando_linha', 'em_linha', 'aguardando_liberacao'];
+    const precisaComplemento =
+      ordem.quantidade_pesada !== null &&
+      ordem.quantidade_pesada !== undefined &&
+      qtd > ordem.quantidade_pesada &&
+      STATUS_POS_PESAGEM.includes(ordem.status);
+
     setSaving(true);
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       quantidade: qtd,
       tamanho_batelada: tamanhoBatelada ? parseFloat(tamanhoBatelada) : null,
       linha: parseInt(linha),
@@ -194,6 +202,7 @@ export const EditarOrdemDialog = memo(function EditarOrdemDialog({
       formula_id: formulaId.trim() || null,
       obs: obsJson,
       tipo_op: tipoOp || null,
+      ...(precisaComplemento ? { pesagem_complementar_pendente: true } : {}),
     };
 
     if (formulaItens.length > 0) {

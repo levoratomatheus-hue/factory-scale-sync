@@ -131,7 +131,7 @@ export default function ImportarProgramacao() {
         const loteNums = batch.map((r) => String(r.lote));
         const { data: ordensAtuais } = await supabase
           .from('ordens')
-          .select('id, lote, quantidade, formula_id')
+          .select('id, lote, quantidade, formula_id, quantidade_pesada, status')
           .in('lote', loteNums)
           .neq('status', 'concluido');
 
@@ -149,6 +149,25 @@ export default function ImportarProgramacao() {
               .neq('status', 'concluido')
           )
         );
+
+        // Marca pesagem complementar pendente para OPs já pesadas cuja quantidade aumentou
+        const STATUS_POS_PESAGEM = ['aguardando_mistura', 'em_mistura', 'aguardando_linha', 'em_linha', 'aguardando_liberacao'];
+        const idsComplementar: string[] = [];
+        for (const ordemAtual of (ordensAtuais ?? [])) {
+          const novaQtd = batch.find((b) => String(b.lote) === String(ordemAtual.lote))?.quantidade;
+          if (
+            ordemAtual.quantidade_pesada !== null &&
+            ordemAtual.quantidade_pesada !== undefined &&
+            novaQtd !== undefined &&
+            novaQtd > ordemAtual.quantidade_pesada &&
+            STATUS_POS_PESAGEM.includes(ordemAtual.status)
+          ) {
+            idsComplementar.push(ordemAtual.id);
+          }
+        }
+        if (idsComplementar.length > 0) {
+          await supabase.from('ordens').update({ pesagem_complementar_pendente: true } as any).in('id', idsComplementar);
+        }
 
         // Ajusta estoque ZC para OPs onde a quantidade realmente mudou
         for (const loteRow of batch) {

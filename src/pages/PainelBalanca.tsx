@@ -4,7 +4,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Minus, PauseCircle, Play, Plus, Printer, Scale } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Minus, PauseCircle, Play, Plus, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
@@ -110,6 +110,14 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
   const obsItemsPesagem = useMemo(() => parseObsItems(emPesagem?.obs ?? null), [emPesagem?.obs]);
 
+  // Para pesagem complementar: quantidade a pesar agora é apenas a diferença
+  const diferenca = useMemo(() => {
+    if (!emPesagem?.pesagem_complementar_pendente || emPesagem?.quantidade_pesada == null) return null;
+    return Math.max(0, emPesagem.quantidade - emPesagem.quantidade_pesada);
+  }, [emPesagem?.pesagem_complementar_pendente, emPesagem?.quantidade, emPesagem?.quantidade_pesada]);
+
+  const qtdExibida = diferenca ?? emPesagem?.quantidade ?? 0;
+
   const totalHoje = useMemo(() => ordens.filter((o) => o.balanca === balanca).length, [ordens, balanca]);
 
   const iniciarPesagem = async (ordem: { id: string }) => {
@@ -204,12 +212,24 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <MarcaBadge marca={emPesagem.marca} />
               <span className="text-sm text-muted-foreground ml-auto shrink-0">Lote {emPesagem.lote}</span>
             </div>
+          {diferenca !== null && (
+            <div className="rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Pesagem complementar</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Pesar <span className="font-bold">+{formatKg(diferenca)} kg</span> — os {formatKg(emPesagem.quantidade_pesada)} kg iniciais já foram pesados.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="text-4xl font-extrabold text-primary">
-            {formatKg(emPesagem.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
+            {formatKg(qtdExibida)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
 
           {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-            const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
+            const totalBateladas = Math.round(qtdExibida / tamanhoBatelada);
             return (
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium text-muted-foreground">
