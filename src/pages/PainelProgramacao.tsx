@@ -57,8 +57,6 @@ interface Ordem {
   motivo_reprovacao: string | null;
   data_reprovacao: string | null;
   tipo_op: string | null;
-  quantidade_pesada?: number | null;
-  pesagem_complementar_pendente?: boolean;
 }
 
 interface NotaProgramacao {
@@ -342,7 +340,6 @@ const SortableCard = memo(function SortableCard({
   onEditarEmissao,
   onAddParada,
   onToggleDestino,
-  onReabrirPesagem,
   isMobile,
 }: {
   ordem: Ordem;
@@ -363,7 +360,6 @@ const SortableCard = memo(function SortableCard({
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
   onToggleDestino: (ordem: Ordem) => void;
-  onReabrirPesagem: (ordem: Ordem) => void;
   isMobile?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -464,14 +460,6 @@ const SortableCard = memo(function SortableCard({
             {/* Status */}
             <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
 
-            {/* Pesagem complementar pendente */}
-            {ordem.pesagem_complementar_pendente && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5">
-                <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                Pesar +{formatKg((ordem.quantidade ?? 0) - (ordem.quantidade_pesada ?? 0))} kg
-              </span>
-            )}
-
             {/* Aguardando registro */}
             {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura") && (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5">
@@ -555,7 +543,6 @@ const SortableCard = memo(function SortableCard({
                 {ordem.formula_id && <button onClick={(e) => { e.stopPropagation(); onDblClick(ordem); }} className="text-muted-foreground/50 hover:text-primary" title="Ver fórmula"><BookOpen className="h-3.5 w-3.5" /></button>}
                 <button onClick={(e) => { e.stopPropagation(); onLab(ordem); }} className={ordem.obs_laboratorio ? "text-violet-500 hover:text-violet-600" : "text-muted-foreground/50 hover:text-violet-500"} title="Lab"><FlaskConical className="h-3.5 w-3.5" /></button>
                 <button onClick={(e) => { e.stopPropagation(); onAddParada(ordem); }} className="text-muted-foreground/50 hover:text-amber-600" title="Parada"><PauseCircle className="h-3.5 w-3.5" /></button>
-                {ordem.pesagem_complementar_pendente && <button onClick={(e) => { e.stopPropagation(); onReabrirPesagem(ordem); }} className="text-amber-500 hover:text-amber-700" title="Reabrir pesagem"><RefreshCw className="h-3.5 w-3.5" /></button>}
                 <button onClick={(e) => { e.stopPropagation(); onExcluir(ordem); }} className="text-muted-foreground/50 hover:text-destructive" title="Excluir"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             )}
@@ -581,9 +568,6 @@ const SortableCard = memo(function SortableCard({
                   { icon: FlaskConical,   label: 'Lab',         color: ordem.obs_laboratorio ? 'text-violet-600' : 'text-muted-foreground', action: () => { onLab(ordem);      setAcoesAbertas(false); } },
                   { icon: PauseCircle,    label: 'Parada',      color: 'text-amber-600',     action: () => { onAddParada(ordem);        setAcoesAbertas(false); } },
                   { icon: Trash2,         label: 'Excluir',     color: 'text-destructive',   action: () => { onExcluir(ordem);          setAcoesAbertas(false); } },
-                  ...(ordem.pesagem_complementar_pendente ? [
-                    { icon: RefreshCw, label: 'Reabrir pesagem', color: 'text-amber-600', action: () => { onReabrirPesagem(ordem); setAcoesAbertas(false); } },
-                  ] : []),
                 ].map(({ icon: Icon, label, color, action }) => (
                   <button key={label} onClick={action} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-muted active:bg-muted/70 text-xs font-medium min-h-[44px] ${color}`}>
                     <Icon className="h-3.5 w-3.5 shrink-0" />{label}
@@ -619,7 +603,6 @@ const LinhaColumn = memo(function LinhaColumn({
   onEditarEmissao,
   onAddParada,
   onToggleDestino,
-  onReabrirPesagem,
   isMobile,
 }: {
   linha: number;
@@ -641,7 +624,6 @@ const LinhaColumn = memo(function LinhaColumn({
   onEditarEmissao: (ordem: Ordem) => void;
   onAddParada: (ordem: Ordem) => void;
   onToggleDestino: (ordem: Ordem) => void;
-  onReabrirPesagem: (ordem: Ordem) => void;
   isMobile?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `linha-${linha}` });
@@ -683,7 +665,7 @@ const LinhaColumn = memo(function LinhaColumn({
             </div>
           ) : (
             ordens.map((ordem) => (
-              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} onReabrirPesagem={onReabrirPesagem} isMobile={isMobile} />
+              <SortableCard key={ordem.id} ordem={ordem} registros={registrosDoDia[ordem.id] ?? EMPTY_REGS} dataSelecionada={dataSelecionada} onReprogramarClick={onReprogramarClick} onDblClick={onDblClick} onEditar={onEditar} onExcluir={onExcluir} onVoltarFila={onVoltarFila} onForcarConclusao={onForcarConclusao} onRegistrarDia={onRegistrarDia} onVerDetalhes={onVerDetalhes} onLab={onLab} onToggleConfirmado={onToggleConfirmado} onEditarRegistro={onEditarRegistro} onDeletarRegistro={onDeletarRegistro} onEditarEmissao={onEditarEmissao} onAddParada={onAddParada} onToggleDestino={onToggleDestino} isMobile={isMobile} />
             ))
           )}
         </div>
@@ -787,7 +769,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = useCallback(async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
-    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, data_reprovacao, tipo_op, quantidade_pesada, pesagem_complementar_pendente";
+    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, data_reprovacao, tipo_op";
 
     // Round-trip 1: OPs programadas + IDs de ordens com registros nesta data + OPs reprovadas nesta data (paralelo)
     const [{ data: programadas }, { data: regsHoje }, { data: reprovadas }] = await Promise.all([
@@ -983,25 +965,6 @@ export default function PainelProgramacao() {
       setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, tipo_op: ordem.tipo_op } : o));
       toast({ title: "Erro ao alterar destino", description: error.message, variant: "destructive" });
     }
-  }, []);
-
-  const handleReabrirPesagem = useCallback(async (ordem: Ordem) => {
-    const { error } = await supabase
-      .from("ordens")
-      .update({ status: "pendente" } as any)
-      .eq("id", ordem.id);
-    if (error) {
-      toast({ title: "Erro ao reabrir pesagem", description: error.message, variant: "destructive" });
-      return;
-    }
-    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "pendente" } : o));
-    supabase.from("historico").insert({
-      ordem_id: ordem.id,
-      status_anterior: ordem.status,
-      status_novo: "pendente",
-      obs: "Pesagem complementar — quantidade aumentou após a pesagem original",
-    } as any);
-    toast({ title: "Pesagem reaberta — OP voltou para a fila da balança" });
   }, []);
 
   const handleReprogramar = async (id: string, novaData: string) => {
@@ -1798,7 +1761,6 @@ export default function PainelProgramacao() {
                     onEditarEmissao={handleEditarEmissaoClick}
                     onAddParada={setOrdemParaParada}
                     onToggleDestino={handleToggleDestino}
-                    onReabrirPesagem={handleReabrirPesagem}
                     isMobile={isMobile}
                   />
                 );

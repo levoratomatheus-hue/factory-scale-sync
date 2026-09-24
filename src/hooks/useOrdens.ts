@@ -11,7 +11,7 @@ export function useOrdens(date?: string) {
 
   const fetchOrdens = useCallback(async () => {
     lastFetchRef.current = Date.now();
-    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa, quantidade_pesada, pesagem_complementar_pendente").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
+    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -57,11 +57,7 @@ export function useOrdens(date?: string) {
 
     const { error } = await supabase
       .from("ordens")
-      .update({
-        status: proximoStatus,
-        quantidade_pesada: ordem.quantidade,
-        pesagem_complementar_pendente: false,
-      })
+      .update({ status: proximoStatus })
       .eq("id", ordemId);
 
     if (error) return error.message;
@@ -70,27 +66,6 @@ export function useOrdens(date?: string) {
       ordem_id: ordemId,
       status_anterior: ordem.status,
       status_novo: proximoStatus,
-    });
-
-    return null;
-  }, [ordens]);
-
-  const reabrirPesagem = useCallback(async (ordemId: string): Promise<string | null> => {
-    const ordem = ordens.find((o) => o.id === ordemId);
-    if (!ordem) return `Ordem ${ordemId} não encontrada no estado local`;
-
-    const { error } = await supabase
-      .from("ordens")
-      .update({ status: "pendente" })
-      .eq("id", ordemId);
-
-    if (error) return error.message;
-
-    supabase.from("historico").insert({
-      ordem_id: ordemId,
-      status_anterior: ordem.status,
-      status_novo: "pendente",
-      obs: "Pesagem complementar — quantidade aumentou após a pesagem original",
     });
 
     return null;
@@ -128,7 +103,7 @@ export function useOrdens(date?: string) {
     return null;
   }, []);
 
-  return { ordens, loading, concluirOrdem, initBalanca, fetchOrdens, reabrirPesagem };
+  return { ordens, loading, concluirOrdem, initBalanca, fetchOrdens };
 }
 
 export function useHistorico(dataInicio?: string, dataFim?: string) {
