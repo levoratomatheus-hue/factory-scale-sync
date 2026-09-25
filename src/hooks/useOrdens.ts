@@ -155,18 +155,25 @@ export function useAnalises(dataInicio: string, dataFim: string) {
 
   const fetchAnalises = useCallback(async () => {
     setLoading(true);
-
-    const { data, error } = await supabase
-      .from("ordens")
-      .select("id, quantidade, quantidade_real, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
-      .eq("status", "concluido")
-      .eq("conclusao_direta", false)
-      .gte("data_programacao", dataInicio)
-      .lte("data_programacao", dataFim)
-      .order("data_programacao", { ascending: true })
-      .limit(50000);
-
-    if (!error && data) setOrdens(data);
+    const PAGE = 1000;
+    const all: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("ordens")
+        .select("id, quantidade, quantidade_real, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
+        .eq("status", "concluido")
+        .eq("conclusao_direta", false)
+        .gte("data_programacao", dataInicio)
+        .lte("data_programacao", dataFim)
+        .order("data_programacao", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    setOrdens(all);
     setLoading(false);
   }, [dataInicio, dataFim]);
 
@@ -221,13 +228,22 @@ export function useParadasAnalises(dataInicio: string, dataFim: string) {
 
   const fetchParadas = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("paradas")
-      .select("linha, data, motivo, hora_inicio, hora_fim")
-      .gte("data", dataInicio)
-      .lte("data", dataFim)
-      .limit(5000);
-    if (!error && data) setParadas(data);
+    const PAGE = 1000;
+    const all: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("paradas")
+        .select("linha, data, motivo, hora_inicio, hora_fim")
+        .gte("data", dataInicio)
+        .lte("data", dataFim)
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    setParadas(all);
     setLoading(false);
   }, [dataInicio, dataFim]);
 
@@ -278,14 +294,23 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
   const [registros, setRegistros] = useState<any[]>([]);
 
   const fetchRegistros = useCallback(async () => {
-    const { data, error } = await (supabase as any)
-      .from("registros_diarios")
-      .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, reprovado, contou_volume, ordens(linha, quantidade, quantidade_real, formula_id, produto, lote)")
-      .gte("data", dataInicio)
-      .lte("data", dataFim)
-      .or("reprovado.eq.false,contou_volume.eq.true")
-      .limit(50000);
-    if (!error && data) setRegistros(data);
+    const PAGE = 1000;
+    const all: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await (supabase as any)
+        .from("registros_diarios")
+        .select("ordem_id, data, hora_inicio, hora_fim, registro_producao, reprovado, contou_volume, ordens(linha, quantidade, quantidade_real, formula_id, produto, lote)")
+        .gte("data", dataInicio)
+        .lte("data", dataFim)
+        .or("reprovado.eq.false,contou_volume.eq.true")
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    setRegistros(all);
   }, [dataInicio, dataFim]);
 
   useEffect(() => {
