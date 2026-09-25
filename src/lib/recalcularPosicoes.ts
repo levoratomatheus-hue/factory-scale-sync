@@ -12,6 +12,32 @@ export async function getNextPosicao(linha: number): Promise<number> {
   return (data?.posicao ?? 0) + 1;
 }
 
+/**
+ * Retorna max(posicao)+1 das OPs que estão na fila da balança/linha/data — sem tocar nas demais.
+ * Filtra por data_programacao + linha + balanca (se informada) e considera só OPs pendentes/aguardando.
+ */
+export async function getNextPosicaoFila(
+  linha: number,
+  dataProgramacao: string,
+  balanca: number | null,
+): Promise<number> {
+  let q = (supabase as any)
+    .from("ordens")
+    .select("posicao")
+    .eq("linha", linha)
+    .eq("data_programacao", dataProgramacao)
+    .in("status", ["pendente", "aguardando_linha"]);
+
+  if (balanca !== null) q = q.eq("balanca", balanca);
+
+  const { data } = await q
+    .order("posicao", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return (data?.posicao ?? 0) + 1;
+}
+
 export async function recalcularPosicoes(linha: number): Promise<void> {
   const { data } = await supabase
     .from("ordens")

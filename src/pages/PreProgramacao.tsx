@@ -26,7 +26,7 @@ import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown, Chec
 import { formatKg, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getNextPosicao } from '@/lib/recalcularPosicoes';
+import { getNextPosicaoFila } from '@/lib/recalcularPosicoes';
 
 interface OrdemPre {
   id: string;
@@ -113,14 +113,15 @@ export default function PreProgramacao() {
     if (!ordemProgramar || !dataProg || !linha) return;
     setSalvando(true);
     const linhaNum = parseInt(linha);
-    const posicao = await getNextPosicao(linhaNum);
+    const balancaNum = balanca ? parseInt(balanca) : null;
+    const posicao = await getNextPosicaoFila(linhaNum, dataProg, balancaNum);
     const { error } = await supabase
       .from('ordens')
       .update({
         status: 'pendente',
         data_programacao: dataProg,
         linha: linhaNum,
-        balanca: balanca ? parseInt(balanca) : null,
+        balanca: balancaNum,
         posicao,
       } as any)
       .eq('id', ordemProgramar.id);
