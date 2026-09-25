@@ -4,7 +4,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Loader2, Minus, PauseCircle, Play, Plus, Printer, Scale } from "lucide-react";
+import { CheckCircle2, FlaskConical, Loader2, Minus, PauseCircle, Play, Plus, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
@@ -440,17 +440,31 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
           )}
 
           {emPesagem.obs && (
-            <div className="rounded-lg border-2 border-blue-800 bg-blue-700 px-4 py-3 space-y-2 shadow-md">
-              <p className="text-sm font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
-              {obsItemsPesagem ? (
-                <ul className="space-y-1">
-                  {obsItemsPesagem.map((item, i) => (
-                    <li key={i} className="text-base font-bold text-white font-mono">{formatObsLine(item)}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-base font-bold text-white whitespace-pre-wrap">{emPesagem.obs}</p>
-              )}
+            <div className="flex overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              {/* faixa lateral âmbar */}
+              <div className="w-1.5 shrink-0 bg-amber-400 dark:bg-amber-500 rounded-l-xl" />
+              <div className="flex-1 px-4 py-3 space-y-2.5">
+                {/* rótulo */}
+                <p className="flex items-center gap-1.5 text-[13px] font-medium tracking-widest uppercase text-amber-600 dark:text-amber-400">
+                  <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                  Adições para Mistura
+                </p>
+                {/* itens */}
+                {obsItemsPesagem ? (
+                  <ul className="space-y-2">
+                    {obsItemsPesagem.map((item, i) => (
+                      <li key={i} className="flex items-baseline gap-3">
+                        <span className="text-2xl font-medium tabular-nums leading-none text-amber-500 dark:text-amber-400 shrink-0">
+                          {item.qty}×
+                        </span>
+                        <span className="text-lg font-medium leading-snug text-foreground">{item.mp}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-base text-foreground whitespace-pre-wrap">{emPesagem.obs}</p>
+                )}
+              </div>
             </div>
           )}
 
