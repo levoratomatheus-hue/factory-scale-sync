@@ -504,55 +504,23 @@ export default function PainelAnalises() {
       if ((materialFiltro || classeFiltro !== "todas") && !ordensAnuaisIds.has(r.ordem_id)) return false;
       return true;
     });
-    // Passo 1: detectar OPs tipo B (só horários, sem quantidade nos itens, mas com quantidade_real)
-    const kgItemsPorOrdemAnual: Record<string, number> = {};
-    const horasRawPorOrdemAnual: Record<string, number> = {};
-    regsAnuaisFiltrados.forEach((r: any) => {
-      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-      const kg = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-      kgItemsPorOrdemAnual[r.ordem_id] = (kgItemsPorOrdemAnual[r.ordem_id] || 0) + kg;
-      const h = parseHoras(r.hora_inicio, r.hora_fim);
-      if (h !== null) horasRawPorOrdemAnual[r.ordem_id] = (horasRawPorOrdemAnual[r.ordem_id] || 0) + h;
-    });
-    const qtdRealTipoBAnual = new Map<string, number>();
-    regsAnuaisFiltrados.forEach((r: any) => {
-      if ((kgItemsPorOrdemAnual[r.ordem_id] ?? 0) > 0) return;
-      const qr = Number(r.ordens?.quantidade_real);
-      if (qr > 0) qtdRealTipoBAnual.set(r.ordem_id, qr);
-    });
 
-    // Passo 2: iterar registros distribuindo kg corretamente por tipo
+    // Somar kg pela data de cada registro — cada linha conta no mês da sua própria data.
+    // A query já filtrou (reprovado=false OR contou_volume=true), então todo registro aqui é válido.
     const mapaKg: Record<string, number> = {};
     const mapaProd: Record<string, { kg: number; h: number }> = {};
     regsAnuaisFiltrados.forEach((r: any) => {
       const chave = String(r.data).slice(0, 7);
-      if (qtdRealTipoBAnual.has(r.ordem_id)) {
-        // Tipo B: distribuir quantidade_real proporcionalmente às horas de cada dia
-        const qr = qtdRealTipoBAnual.get(r.ordem_id)!;
-        const horasTotal = horasRawPorOrdemAnual[r.ordem_id] ?? 0;
-        const hDia = parseHoras(r.hora_inicio, r.hora_fim);
-        if (hDia === null || horasTotal === 0) return;
-        const kgDia = qr * (hDia / horasTotal);
-        mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
-        // Retrabalho (reprovado+contou_volume) conta no volume mensal mas não na produtividade
-        if (!r.reprovado) {
+      const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
+      const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
+      mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
+      // Retrabalho (reprovado+contou_volume) conta no volume mensal mas não na produtividade
+      if (!r.reprovado) {
+        const h = parseHoras(r.hora_inicio, r.hora_fim);
+        if (h !== null) {
           if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
           mapaProd[chave].kg += kgDia;
-          mapaProd[chave].h += hDia;
-        }
-      } else {
-        // Tipo A: soma de itens (comportamento atual intacto)
-        const items: any[] = Array.isArray(r.registro_producao) ? r.registro_producao : [];
-        const kgDia = items.reduce((s: number, it: any) => s + (it.qty || 0) * (it.peso || 0), 0);
-        mapaKg[chave] = (mapaKg[chave] || 0) + kgDia;
-        // Retrabalho não entra na produtividade mensal
-        if (!r.reprovado) {
-          const h = parseHoras(r.hora_inicio, r.hora_fim);
-          if (h !== null) {
-            if (!mapaProd[chave]) mapaProd[chave] = { kg: 0, h: 0 };
-            mapaProd[chave].kg += kgDia;
-            mapaProd[chave].h += h;
-          }
+          mapaProd[chave].h += h;
         }
       }
     });
