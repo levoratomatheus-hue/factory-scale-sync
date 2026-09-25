@@ -218,16 +218,26 @@ export default function PainelMistura() {
               </div>
 
               {emMistura.obs && (
-                <div className="flex-1 rounded-md border-2 border-blue-800 bg-blue-700 px-3 py-2 space-y-1 shadow-md">
-                  <p className="text-xs font-extrabold text-white uppercase tracking-widest">⚠️ ADIÇÕES PARA MISTURA</p>
+                <div className="flex-1 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-l-amber-400 dark:border-l-amber-500 px-3 py-2.5 space-y-2">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
+                    <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    </svg>
+                    Adições para Mistura
+                  </p>
                   {obsItemsMistura ? (
-                    <ul className="space-y-0.5">
+                    <ul className="space-y-1.5">
                       {obsItemsMistura.map((item, i) => (
-                        <li key={i} className="text-sm font-bold text-white font-mono">{formatObsLine(item)}</li>
+                        <li key={i} className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center rounded-full bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 text-xs font-bold px-2 py-0.5 min-w-[2rem] tabular-nums shrink-0">
+                            {item.qty}x
+                          </span>
+                          <span className="text-sm font-medium text-amber-950 dark:text-amber-100">{item.mp}</span>
+                        </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm font-bold text-white whitespace-pre-wrap">{emMistura.obs}</p>
+                    <p className="text-sm text-amber-950 dark:text-amber-100 whitespace-pre-wrap">{emMistura.obs}</p>
                   )}
                 </div>
               )}
