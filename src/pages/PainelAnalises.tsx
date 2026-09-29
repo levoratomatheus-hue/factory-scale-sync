@@ -996,7 +996,7 @@ export default function PainelAnalises() {
 
   return (
     <PaletteCtx.Provider value={D}>
-    <div style={{ background: D.page, minHeight: "calc(100vh - 3rem)", padding: "1.5rem", margin: "-1.5rem", width: "calc(100% + 3rem)", display: "flex", flexDirection: "column", gap: "2rem" }}>
+    <div style={{ background: D.page, minHeight: "calc(100vh - 3rem)", padding: "1.5rem", margin: "-1.5rem", width: "calc(100% + 3rem)", display: "flex", flexDirection: "column", gap: "2rem", overflowX: "hidden", boxSizing: "border-box" }}>
 
       {/* Cabeçalho */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -1605,7 +1605,7 @@ export default function PainelAnalises() {
           )}
 
           {/* Gráficos + Tabelas */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(360px, 100%), 1fr))", gap: "1.25rem", alignItems: "start" }}>
 
             {/* Coluna esquerda: gráficos */}
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
