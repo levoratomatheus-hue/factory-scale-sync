@@ -1086,7 +1086,7 @@ export default function PainelAnalises() {
               />
             </div>
           ))}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto", flexWrap: "wrap" }}>
             <Factory size={16} style={{ color: D.muted }} />
             <div style={{ display: "flex", border: `1px solid ${D.border}`, borderRadius: "0.375rem", overflow: "hidden", fontSize: 12 }}>
               {[{ v: 0, label: "Todas" }, ...[1,2,3,4,5].map((n) => ({ v: n, label: `L${n}` }))].map(({ v, label }) => (
