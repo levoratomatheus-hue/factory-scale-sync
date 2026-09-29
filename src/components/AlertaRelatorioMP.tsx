@@ -15,6 +15,7 @@ export function AlertaRelatorioMP({ isGestor, userId, onIrParaRelatorio }: Props
   );
 
   if (!visivel) return null;
+  if (window.matchMedia('(max-width: 767px)').matches) return null;
 
   return (
     <div className="w-full bg-amber-50 border-b-2 border-amber-400 px-4 py-2.5 flex items-center gap-3 shrink-0 z-20">
