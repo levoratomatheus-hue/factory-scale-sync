@@ -131,7 +131,7 @@ type MaterialForm = {
   percentual_reaproveitado: string;
 };
 
-type MpSug = { cod_tid: string; materia_prima: string };
+type MpSug = { cod_tid: string; materia_prima: string; origem?: 'PG' };
 type ProdutoSug = { formula_id: string; produto: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -374,6 +374,7 @@ function MpInput({
         ...((pg ?? []) as { cod_pg: string; materia_prima: string }[]).map((r) => ({
           cod_tid: r.cod_pg,
           materia_prima: r.materia_prima,
+          origem: 'PG' as const,
         })),
       ].slice(0, 15);
       setSugestoes(combined);
@@ -418,8 +419,8 @@ function MpInput({
               onMouseEnter={(e) => (e.currentTarget.style.background = D.cardAlt)}
               onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
             >
-              <span style={{ fontWeight: 500 }}>{s.materia_prima}</span>
-              <span style={{ fontSize: 10, color: D.muted, marginLeft: 6 }}>{s.cod_tid}</span>
+              <span style={{ fontWeight: 500, color: s.origem === 'PG' ? '#dc2626' : undefined }}>{s.materia_prima}</span>
+              <span style={{ fontSize: 10, color: s.origem === 'PG' ? '#dc2626' : D.muted, marginLeft: 6 }}>{s.cod_tid}</span>
             </button>
           ))}
         </div>
