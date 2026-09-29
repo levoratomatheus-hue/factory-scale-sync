@@ -386,6 +386,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
         requer_mistura: requerMistura,
         orientacoes: orientacoes.trim() || null,
         data_emissao: dataEmissao || null,
+        reaproveitamento_id: itensSdrId ?? null,
       } as any)
       .select()
       .single();
