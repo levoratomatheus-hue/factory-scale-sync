@@ -533,7 +533,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                   <label className="text-xs font-medium">Batelada (kg)</label>
                   <Input className="h-7 text-xs mt-0.5" type="number" inputMode="decimal" value={tamanhoBatelada ?? ''}
                     onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); setItensSdrId(null); }} />
+                    onChange={(e) => { setTamanhoBatelada(e.target.value ? Number(e.target.value) : null); }} />
                 </div>
               )}
               <div className="w-40 shrink-0">
