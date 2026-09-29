@@ -109,9 +109,15 @@ const FAIXAS = [
 
 // Extrai a classe do nome do produto: texto antes do primeiro hífen
 // Ex: "MBG-10-1869 AZUL-A" → "MBG", "PTA-01-2002 VERMELHO" → "PTA"
+// Mapeamento explícito: "BORRA GERAL PRODUÇÃO" é classificada como CPT
+const CLASSE_OVERRIDES: { match: RegExp; classe: string }[] = [
+  { match: /^borra\s+geral\s+produ[çc][aã]o$/i, classe: "CPT" },
+];
 function getClasse(produto: string | null | undefined): string {
   if (!produto) return "Sem classe";
-  return String(produto).split("-")[0].trim();
+  const base = String(produto).split("-")[0].trim();
+  const override = CLASSE_OVERRIDES.find(({ match }) => match.test(base));
+  return override ? override.classe : base;
 }
 
 // ── Tooltips ──────────────────────────────────────────────────────────────────
