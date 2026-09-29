@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -80,6 +80,7 @@ interface CriarOrdemProps {
 export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrdemProps = {}) {
   const { perfil } = useAuth();
   const [saving, setSaving] = useState(false);
+  const submittingRef = useRef(false); // guard síncrono contra double-submit
   const [buscando, setBuscando] = useState(false);
   const [loteEncontrado, setLoteEncontrado] = useState<boolean | null>(null);
   const [loteJaTemOP, setLoteJaTemOP] = useState(false);
@@ -364,8 +365,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
   }, [formulaId, loteEncontrado]);
 
   const criarOrdem = async (values: OrdemFormValues) => {
-    setSaving(true);
-
+    // saving já foi setado em onSubmit — não setar aqui para evitar duplicação
     const { data: novaOrdem, error } = await supabase
       .from('ordens')
       .insert({
@@ -448,31 +448,49 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     setTipoOp('venda');
     setOrientacoes('');
     setDataEmissao(new Date().toISOString().split("T")[0]);
+    setItensSdrId(null); // garante que itensSdrId não vaza para a próxima OP
     setAcertosEnriquecidos([]);
   };
 
   const onSubmit = async (values: OrdemFormValues) => {
-    if (formulaId) {
-      try {
-        const faltantes = await verificarEstoqueOP(formulaId, values.quantidade, itensSdrId);
-        if (faltantes.length > 0) {
-          setMpsFaltantes(faltantes);
-          setValuesParaForcar(values);
-          return; // não cria — abre o dialog
+    // Guard síncrono: state update é async, ref é imediato — evita double-submit
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSaving(true);
+
+    try {
+      if (formulaId) {
+        try {
+          const faltantes = await verificarEstoqueOP(formulaId, values.quantidade, itensSdrId);
+          if (faltantes.length > 0) {
+            setSaving(false);
+            submittingRef.current = false;
+            setMpsFaltantes(faltantes);
+            setValuesParaForcar(values);
+            return; // não cria — abre o dialog
+          }
+        } catch (e) {
+          console.error('Falha ao verificar estoque', e); // fail-open
         }
-      } catch (e) {
-        console.error('Falha ao verificar estoque', e); // fail-open
       }
+      await criarOrdem(values);
+    } finally {
+      submittingRef.current = false;
     }
-    await criarOrdem(values);
   };
 
   const forcarCriacao = async () => {
-    if (!valuesParaForcar) return;
+    if (!valuesParaForcar || submittingRef.current) return;
+    submittingRef.current = true;
+    setSaving(true);
     const v = valuesParaForcar;
     setMpsFaltantes(null);
     setValuesParaForcar(null);
-    await criarOrdem(v);
+    try {
+      await criarOrdem(v);
+    } finally {
+      submittingRef.current = false;
+    }
   };
 
   const lotesFiltrados = lotesDisponiveis.filter((l) =>
