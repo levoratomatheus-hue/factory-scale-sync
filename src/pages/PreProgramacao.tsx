@@ -146,8 +146,14 @@ export default function PreProgramacao() {
   const excluir = async () => {
     if (!ordemExcluir) return;
     setExcluindo(true);
-    // Estorna o estoque antes de excluir
-    try { await estornarEstoqueOP(ordemExcluir.id); } catch { /* falha silenciosa */ }
+    // Estorna PRIMEIRO — se falhar, aborta a exclusão para não furar o saldo
+    try {
+      await estornarEstoqueOP(ordemExcluir.id);
+    } catch (err: any) {
+      setExcluindo(false);
+      toast({ title: 'Erro ao estornar estoque', description: err?.message ?? 'Falha desconhecida', variant: 'destructive' });
+      return;
+    }
     const { error } = await supabase.from('ordens').delete().eq('id', ordemExcluir.id);
     setExcluindo(false);
     if (error) {

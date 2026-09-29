@@ -1098,8 +1098,15 @@ export default function PainelProgramacao() {
   const handleExcluirOP = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
-    // Estorna o estoque antes de excluir
-    try { await estornarEstoqueOP(ordemParaExcluir.id); } catch { /* falha silenciosa */ }
+    // Estorna PRIMEIRO — se falhar, aborta a exclusão para não furar o saldo
+    try {
+      await estornarEstoqueOP(ordemParaExcluir.id);
+    } catch (err: any) {
+      setExcluindo(false);
+      setOrdemParaExcluir(null);
+      toast({ title: 'Erro ao estornar estoque', description: err?.message ?? 'Falha desconhecida', variant: 'destructive' });
+      return;
+    }
     const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
     setExcluindo(false);
     setOrdemParaExcluir(null);

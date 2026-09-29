@@ -224,12 +224,14 @@ export async function estornarEstoqueOP(
   ordemId: string,
   criadoPor?: string,
 ): Promise<void> {
-  const { data: movimentos } = await (supabase as any)
+  // Bug A fix: inclui ordem_lote no select para que rep.ordem_lote tenha valor ao gravar o estorno
+  const { data: movimentos, error: errLeitura } = await (supabase as any)
     .from('estoque_movimentacoes')
-    .select('cod_tid, quantidade_kg, materia_prima')
+    .select('cod_tid, quantidade_kg, materia_prima, ordem_lote')
     .eq('ordem_id', ordemId)
     .in('tipo', ['saida', 'estorno']);
 
+  if (errLeitura) throw new Error(`Estorno: falha ao ler movimentações — ${errLeitura.message}`);
   if (!movimentos || movimentos.length === 0) return;
 
   // Efeito líquido por código
@@ -251,26 +253,40 @@ export async function estornarEstoqueOP(
 
   for (const [cod, { rep, net }] of entries) {
     const ref = refMap.get(cod);
-    if (!ref) continue; // MP sem registro -> nada a estornar
+    if (!ref) continue; // MP sem cadastro em nenhuma tabela -> nada a estornar
 
     const qtyRestaurar = -net;
     const novoSaldo = ref.saldo + qtyRestaurar;
+    // ordem_lote: usa o valor da movimentação original; fallback '' para não quebrar NOT NULL
+    const ordemLote: string = rep.ordem_lote ?? '';
     const row = { [ref.coluna]: cod, materia_prima: rep.materia_prima, saldo_kg: novoSaldo, atualizado_em: agora };
     if (ref.tabela === 'estoque_mp') updatesZC.push(row); else updatesPG.push(row);
     movimentacoes.push({
       cod_tid: cod, materia_prima: rep.materia_prima, tipo: 'estorno',
       quantidade_kg: qtyRestaurar, saldo_apos: novoSaldo,
-      ordem_id: ordemId, ordem_lote: rep.ordem_lote,
-      observacao: `Estorno — OP excluída (Lote ${rep.ordem_lote ?? ''})`,
+      ordem_id: ordemId, ordem_lote: ordemLote,
+      observacao: `Estorno — OP excluída (Lote ${ordemLote})`,
       criado_por: criadoPor ?? null,
     });
   }
 
-  const ops: Promise<any>[] = [];
-  if (updatesZC.length) ops.push((supabase as any).from('estoque_mp').upsert(updatesZC, { onConflict: 'cod_tid' }));
-  if (updatesPG.length) ops.push((supabase as any).from('estoque_mp_pg').upsert(updatesPG, { onConflict: 'cod_pg' }));
-  if (movimentacoes.length) ops.push((supabase as any).from('estoque_movimentacoes').insert(movimentacoes));
-  await Promise.all(ops);
+  // Bug B fix: verifica o erro de cada operação Supabase e lança se houver falha
+  // (Supabase nunca rejeita a Promise — sempre resolve { data, error })
+  const [resZC, resPG, resMov] = await Promise.all([
+    updatesZC.length
+      ? (supabase as any).from('estoque_mp').upsert(updatesZC, { onConflict: 'cod_tid' })
+      : Promise.resolve({ error: null }),
+    updatesPG.length
+      ? (supabase as any).from('estoque_mp_pg').upsert(updatesPG, { onConflict: 'cod_pg' })
+      : Promise.resolve({ error: null }),
+    movimentacoes.length
+      ? (supabase as any).from('estoque_movimentacoes').insert(movimentacoes)
+      : Promise.resolve({ error: null }),
+  ]);
+
+  if (resZC.error) throw new Error(`Estorno: falha ao atualizar saldo ZC — ${resZC.error.message}`);
+  if (resPG.error) throw new Error(`Estorno: falha ao atualizar saldo PG — ${resPG.error.message}`);
+  if (resMov.error) throw new Error(`Estorno: falha ao registrar movimentação — ${resMov.error.message}`);
 }
 
 // ── Verificar estoque ANTES de criar a OP (não baixa nada) ──────────────────
