@@ -61,7 +61,6 @@ export default defineConfig(({ mode }) => ({
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'supabase': ['@supabase/supabase-js'],
-          'charts': ['recharts'],
           'radix': [
             '@radix-ui/react-dialog',
             '@radix-ui/react-alert-dialog',
@@ -71,10 +70,13 @@ export default defineConfig(({ mode }) => ({
             '@radix-ui/react-tabs',
           ],
           'dnd-kit': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
-          // Bibliotecas pesadas carregadas sob demanda (dynamic import)
-          // — ficam em chunks separados e só baixam quando o usuário aciona a função
+          // xlsx permanece sob demanda — não remover daqui
           'xlsx': ['xlsx'],
-          'jspdf': ['jspdf'],
+          // jspdf e recharts foram removidos de manualChunks intencionalmente:
+          // quando estavam aqui, o Rollup movia helpers internos para dentro desses chunks
+          // e o Vite os adicionava ao modulepreload do index.html, baixando 520 kB
+          // desnecessários no cold start. Sem manualChunks, ficam nos lazy chunks das
+          // páginas que os usam e só carregam quando o usuário abre essas telas.
         },
       },
     },
