@@ -404,7 +404,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     await Promise.all([
       // Baixa automática de estoque
       formulaId
-        ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome).catch((err: any) => {
+        ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome, itensSdrId).catch((err: any) => {
             toast({ title: 'Aviso: falha ao baixar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
           })
         : Promise.resolve(),
@@ -454,7 +454,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
   const onSubmit = async (values: OrdemFormValues) => {
     if (formulaId) {
       try {
-        const faltantes = await verificarEstoqueOP(formulaId, values.quantidade);
+        const faltantes = await verificarEstoqueOP(formulaId, values.quantidade, itensSdrId);
         if (faltantes.length > 0) {
           setMpsFaltantes(faltantes);
           setValuesParaForcar(values);

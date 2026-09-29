@@ -32,6 +32,40 @@ async function fetchFormulaItens(formulaId: string): Promise<
 }
 
 /**
+ * Busca os itens novos de um reaproveitamento (eh_reaproveitado = false).
+ * Esses são as MPs que entram por cima e devem ser baixadas do estoque.
+ * Itens com eh_reaproveitado = true são a sobra reaproveitada — não mexe no estoque.
+ */
+async function fetchReaproveitamentoItens(reaproveitamentoId: string): Promise<
+  { cod_tid: string | null; materia_prima: string; percentual: number }[]
+> {
+  const { data } = await (supabase as any)
+    .from('reaproveitamentos_itens')
+    .select('cod_tid, materia_prima, percentual')
+    .eq('reaproveitamento_id', reaproveitamentoId)
+    .eq('eh_reaproveitado', false)
+    .limit(500);
+
+  return (data ?? []) as { cod_tid: string | null; materia_prima: string; percentual: number }[];
+}
+
+/** Normaliza itens de qualquer fonte para { cod, materia_prima, qty } prontos para baixa. */
+function buildMpList(
+  itens: { cod: string | null; materia_prima: string; percentual: number }[],
+  quantidade: number,
+): { validos: { cod: string; materia_prima: string; qty: number }[]; semCod: string[] } {
+  const validos: { cod: string; materia_prima: string; qty: number }[] = [];
+  const semCod: string[] = [];
+  for (const item of itens) {
+    if (!item.cod) { semCod.push(item.materia_prima || '(sem nome)'); continue; }
+    const qty = (item.percentual / 100) * quantidade;
+    if (qty <= 0) continue;
+    validos.push({ cod: item.cod, materia_prima: item.materia_prima, qty });
+  }
+  return { validos, semCod };
+}
+
+/**
  * Para uma lista de códigos, descobre em qual tabela cada um existe (ZC ou PG)
  * e devolve um mapa cod -> { tabela, coluna, saldo, materia_prima }.
  * Faz 2 queries (uma em cada tabela). Códigos não colidem entre as tabelas.
@@ -66,7 +100,9 @@ async function localizarEstoque(cods: string[]): Promise<Map<string, EstoqueRef>
 // ── Baixar estoque ────────────────────────────────────────────────────────────
 
 /**
- * Baixa o consumo teórico de cada MP da fórmula quando uma OP é criada.
+ * Baixa o consumo teórico de cada MP quando uma OP é criada.
+ * - reaproveitamentoId fornecido → usa reaproveitamentos_itens (eh_reaproveitado=false)
+ * - reaproveitamentoId ausente   → comportamento original (fórmula)
  * Cada MP baixa da tabela onde seu código existe (ZC ou PG).
  */
 export async function baixarEstoqueOP(
@@ -75,18 +111,23 @@ export async function baixarEstoqueOP(
   quantidade: number,
   lote: string,
   criadoPor?: string,
+  reaproveitamentoId?: string | null,
 ): Promise<void> {
-  const formulaItens = await fetchFormulaItens(formulaId);
-  if (formulaItens.length === 0) return;
+  let rawItens: { cod: string | null; materia_prima: string; percentual: number }[];
 
-  type MPBaixa = { cod: string; materia_prima: string; qty: number };
-  const mps: MPBaixa[] = [];
-  for (const item of formulaItens) {
-    const cod = item.cod_mp;
-    if (!cod) continue;
-    const qty = (item.percentual / 100) * quantidade;
-    if (qty <= 0) continue;
-    mps.push({ cod, materia_prima: item.materia_prima, qty });
+  if (reaproveitamentoId) {
+    const reapItens = await fetchReaproveitamentoItens(reaproveitamentoId);
+    rawItens = reapItens.map((i) => ({ cod: i.cod_tid, materia_prima: i.materia_prima, percentual: i.percentual }));
+  } else {
+    const formulaItens = await fetchFormulaItens(formulaId);
+    rawItens = formulaItens.map((i) => ({ cod: i.cod_mp, materia_prima: i.materia_prima, percentual: i.percentual }));
+  }
+
+  if (rawItens.length === 0) return;
+
+  const { validos: mps, semCod } = buildMpList(rawItens, quantidade);
+  if (semCod.length > 0) {
+    console.warn(`[baixarEstoqueOP] ${semCod.length} MP(s) sem cod_tid — não baixadas: ${semCod.join(', ')}`);
   }
   if (mps.length === 0) return;
 
@@ -244,31 +285,37 @@ export interface MpFaltante {
 
 /**
  * Verifica se criar uma OP deixaria alguma MP com saldo negativo.
- * Procura cada MP na tabela onde seu código existe (ZC ou PG).
+ * - reaproveitamentoId fornecido → verifica contra reaproveitamentos_itens (eh_reaproveitado=false)
+ * - reaproveitamentoId ausente   → comportamento original (fórmula)
  * MP sem cadastro em nenhuma tabela é ignorada (não bloqueia).
  */
 export async function verificarEstoqueOP(
   formulaId: string,
   quantidade: number,
+  reaproveitamentoId?: string | null,
 ): Promise<MpFaltante[]> {
-  const formulaItens = await fetchFormulaItens(formulaId);
-  if (formulaItens.length === 0) return [];
+  let rawItens: { cod: string | null; materia_prima: string; percentual: number }[];
 
-  type MP = { cod: string; materia_prima: string; consumo: number };
-  const mps: MP[] = [];
-  for (const item of formulaItens) {
-    const cod = item.cod_mp;
-    if (!cod) continue;
-    const consumo = (item.percentual / 100) * quantidade;
-    if (consumo <= 0) continue;
-    mps.push({ cod, materia_prima: item.materia_prima, consumo });
+  if (reaproveitamentoId) {
+    const reapItens = await fetchReaproveitamentoItens(reaproveitamentoId);
+    rawItens = reapItens.map((i) => ({ cod: i.cod_tid, materia_prima: i.materia_prima, percentual: i.percentual }));
+  } else {
+    const formulaItens = await fetchFormulaItens(formulaId);
+    rawItens = formulaItens.map((i) => ({ cod: i.cod_mp, materia_prima: i.materia_prima, percentual: i.percentual }));
+  }
+
+  if (rawItens.length === 0) return [];
+
+  const { validos: mps, semCod } = buildMpList(rawItens, quantidade);
+  if (semCod.length > 0) {
+    console.warn(`[verificarEstoqueOP] ${semCod.length} MP(s) sem cod_tid ignoradas na verificação: ${semCod.join(', ')}`);
   }
   if (mps.length === 0) return [];
 
   const refMap = await localizarEstoque(mps.map((m) => m.cod));
 
   const faltantes: MpFaltante[] = [];
-  for (const { cod, materia_prima, consumo } of mps) {
+  for (const { cod, materia_prima, qty: consumo } of mps) {
     const ref = refMap.get(cod);
     if (!ref) continue; // sem cadastro -> não bloqueia
     const saldoApos = ref.saldo - consumo;
