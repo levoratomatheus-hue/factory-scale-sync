@@ -792,7 +792,7 @@ export default function PainelAnalises() {
 
     // ── KPIs ───────────────────────────────────────────────────────────────────
     const kpiW = (cW - 9) / 4;
-    const kpiH = 22;
+    const kpiH = 28;
     const kpis = [
       { label: "Producao Total",    value: producaoTotal.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), unit: "kg",           color: C.cyan    },
       { label: "Media kg/hora",     value: mediaKgHora.toLocaleString("pt-BR",   { maximumFractionDigits: 1 }), unit: "kg/h",         color: C.cyan    },
@@ -804,19 +804,19 @@ export default function PainelAnalises() {
       doc.setDrawColor(C.border); doc.setLineWidth(0.3);
       doc.rect(kx, curY, kpiW, kpiH, "S");
       doc.setFillColor(color); doc.rect(kx, curY, kpiW, 1.5, "F");
-      reg(7); doc.setTextColor(C.muted);
-      doc.text(label, kx + kpiW / 2, curY + 7, { align: "center" });
-      bld(12); doc.setTextColor(color);
-      doc.text(value, kx + kpiW / 2, curY + 14, { align: "center" });
-      reg(6); doc.setTextColor(C.muted);
-      doc.text(unit, kx + kpiW / 2, curY + 19.5, { align: "center" });
+      reg(9); doc.setTextColor(C.muted);
+      doc.text(label, kx + kpiW / 2, curY + 9, { align: "center" });
+      bld(14); doc.setTextColor(color);
+      doc.text(value, kx + kpiW / 2, curY + 18, { align: "center" });
+      reg(8); doc.setTextColor(C.muted);
+      doc.text(unit, kx + kpiW / 2, curY + 25, { align: "center" });
     });
     curY += kpiH + 6;
 
     // ── Helpers de gráfico ─────────────────────────────────────────────────────
     function drawBars(title: string, data: { label: string; value: number }[], fillColor: string) {
-      bld(8.5); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 3;
-      const cH = 28, padB = 7, padT = 4, barsH = cH - padB - padT; // 17mm úteis
+      bld(11); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 5;
+      const cH = 36, padB = 10, padT = 6, barsH = cH - padB - padT; // 20mm úteis
       const n = data.length; if (!n) { curY += cH + 4; return; }
       const maxV = Math.max(...data.map((d) => d.value), 1);
       const slotW = cW / n, bW = Math.max(1.5, slotW * 0.62), bOff = (slotW - bW) / 2;
@@ -831,20 +831,22 @@ export default function PainelAnalises() {
         const bx = mL + i * slotW + bOff;
         const by = curY + padT + barsH - bh;
         doc.setFillColor(fillColor); doc.rect(bx, by, bW, bh, "F");
-        reg(5); doc.setTextColor(C.text);
-        doc.text(n2k(d.value), bx + bW / 2, Math.max(by - 0.3, curY + padT - 0.5), { align: "center" });
-        reg(5); doc.setTextColor(C.muted);
-        doc.text(d.label, bx + bW / 2, curY + padT + barsH + 4.5, { align: "center" });
+        reg(8); doc.setTextColor(C.text);
+        doc.text(n2k(d.value), bx + bW / 2, Math.max(by - 0.5, curY + padT - 0.5), { align: "center" });
+        reg(8); doc.setTextColor(C.muted);
+        doc.text(d.label, bx + bW / 2, curY + padT + barsH + 7, { align: "center" });
       });
       curY += cH + 5;
     }
 
     function drawLine(title: string, data: { label: string; value: number | null }[], lineColor: string, metaVal?: number) {
-      bld(8.5); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 3;
-      const cH = 28, padB = 7, padT = 4, plotH = cH - padB - padT; // 17mm úteis
+      bld(11); doc.setTextColor(C.text); doc.text(title, mL, curY); curY += 5;
+      const cH = 40, padB = 10, padT = 8, padL = 6, padR = 6;
+      const plotH = cH - padB - padT; // 22mm úteis
+      const plotW = cW - padL - padR;  // 168mm úteis (recuo lateral p/ rótulos das pontas)
       const valid = data.map((d) => d.value).filter((v): v is number => v !== null);
-      const maxV = Math.max(...valid, metaVal ?? 0, 1) * 1.15;
-      const slotW = data.length > 1 ? cW / (data.length - 1) : cW;
+      const maxV = Math.max(...valid, metaVal ?? 0, 1) * 1.35; // folga generosa acima da meta
+      const slotW = data.length > 1 ? plotW / (data.length - 1) : plotW;
 
       doc.setFillColor("#f8fafc"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
       doc.rect(mL, curY, cW, cH, "FD");
@@ -853,17 +855,17 @@ export default function PainelAnalises() {
 
       if (metaVal !== undefined) {
         const ry = curY + padT + plotH * (1 - metaVal / maxV);
-        doc.setDrawColor("#FACC15"); doc.setLineWidth(0.35);
-        doc.setLineDashPattern([1.5, 1.5], 0);
-        doc.line(mL, ry, mL + cW, ry);
+        doc.setDrawColor("#ef4444"); doc.setLineWidth(0.5);
+        doc.setLineDashPattern([2, 1.5], 0);
+        doc.line(mL + padL, ry, mL + cW - padR, ry);
         doc.setLineDashPattern([], 0);
-        reg(5); doc.setTextColor("#b45309");
-        doc.text(`Meta ${metaVal}`, mL + cW - 1, ry - 0.8, { align: "right" });
+        bld(8); doc.setTextColor("#ef4444");
+        doc.text(`Meta ${metaVal}`, mL + cW - padR - 1, ry - 1.5, { align: "right" });
       }
 
       const snapY = curY; // freeze current y for point calculations
       const pts = data
-        .map((d, i) => ({ x: mL + i * slotW, py: d.value !== null ? snapY + padT + plotH * (1 - d.value / maxV) : null }))
+        .map((d, i) => ({ x: mL + padL + i * slotW, py: d.value !== null ? snapY + padT + plotH * (1 - d.value / maxV) : null }))
         .filter((p): p is { x: number; py: number } => p.py !== null);
 
       if (pts.length >= 2) {
@@ -874,8 +876,10 @@ export default function PainelAnalises() {
       pts.forEach((p) => doc.circle(p.x, p.py, 0.7, "F"));
 
       data.forEach((d, i) => {
-        reg(5); doc.setTextColor(C.muted);
-        doc.text(d.label, mL + i * slotW, curY + padT + plotH + 4.5, { align: "center" });
+        reg(8); doc.setTextColor(C.muted);
+        const lx = mL + padL + i * slotW;
+        const align = i === 0 ? "left" : i === data.length - 1 ? "right" : "center";
+        doc.text(d.label, lx, curY + padT + plotH + 7, { align });
       });
       curY += cH + 5;
     }
@@ -896,9 +900,9 @@ export default function PainelAnalises() {
     );
 
     // ── Por Classe ─────────────────────────────────────────────────────────────
-    bld(8.5); doc.setTextColor(C.text);
+    bld(11); doc.setTextColor(C.text);
     doc.text("Producao do Periodo por Classe", mL, curY);
-    curY += 5;
+    curY += 7;
 
     const kgTotalClasses = dadosPorClasse.reduce((s, c) => s + c.kg, 0);
     const cols = [25, 44, 30, 44, 37] as const; // Classe | kg | % | kg/h | OPs = 180mm
@@ -910,7 +914,7 @@ export default function PainelAnalises() {
     doc.setFillColor("#f1f5f9"); doc.setDrawColor(C.border); doc.setLineWidth(0.2);
     doc.rect(mL, curY, cW, rowH, "FD");
     colHeaders.forEach((h, i) => {
-      bld(7.5); doc.setTextColor(C.muted);
+      bld(9.5); doc.setTextColor(C.muted);
       doc.text(h, colX(i) + cols[i] / 2, curY + 4.5, { align: "center" });
     });
     curY += rowH;
@@ -922,9 +926,9 @@ export default function PainelAnalises() {
       doc.setDrawColor(C.border); doc.setLineWidth(0.1);
       doc.line(mL, curY + rowH, mL + cW, curY + rowH);
 
-      bld(8); doc.setTextColor(C.cyan);
+      bld(10); doc.setTextColor(C.cyan);
       doc.text(classe, colX(0) + cols[0] / 2, curY + 4.5, { align: "center" });
-      reg(8); doc.setTextColor(C.text);
+      reg(10); doc.setTextColor(C.text);
       doc.text(kg.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), colX(1) + cols[1] - 2, curY + 4.5, { align: "right" });
       doc.setTextColor(C.muted);
       doc.text(`${pct.toFixed(1)}%`, colX(2) + cols[2] / 2, curY + 4.5, { align: "center" });
@@ -941,10 +945,10 @@ export default function PainelAnalises() {
       if (curY + rowH > 282) { doc.addPage(); curY = 15; }
       doc.setFillColor("#f1f5f9"); doc.setDrawColor(C.border); doc.setLineWidth(0.3);
       doc.rect(mL, curY, cW, rowH, "FD");
-      bld(8); doc.setTextColor(C.text);
+      bld(10); doc.setTextColor(C.text);
       doc.text("TOTAL", colX(0) + cols[0] / 2, curY + 4.5, { align: "center" });
       doc.text(kgTotalClasses.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), colX(1) + cols[1] - 2, curY + 4.5, { align: "right" });
-      reg(8); doc.setTextColor(C.muted);
+      reg(10); doc.setTextColor(C.muted);
       doc.text("100%", colX(2) + cols[2] / 2, curY + 4.5, { align: "center" });
       curY += rowH;
     }
@@ -955,7 +959,7 @@ export default function PainelAnalises() {
       doc.setDrawColor(C.border); doc.setLineWidth(0.2);
       doc.line(mL, curY, mL + cW, curY);
       curY += 4;
-      reg(7); doc.setTextColor(C.muted);
+      reg(9); doc.setTextColor(C.muted);
       doc.text("Gerado automaticamente pelo sistema de gestao de producao", mL, curY);
     }
 
