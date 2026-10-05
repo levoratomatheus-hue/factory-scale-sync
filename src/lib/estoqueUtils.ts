@@ -97,6 +97,38 @@ async function localizarEstoque(cods: string[]): Promise<Map<string, EstoqueRef>
   return mapa;
 }
 
+// ── Inferir marca pela fórmula ───────────────────────────────────────────────
+
+/**
+ * Analisa os cod_mp da fórmula e decide qual marca sugerir.
+ * - Todos ZC (estoque_mp)     → 'Zan Collor'
+ * - Todos PG (estoque_mp_pg)  → 'Pigma'
+ * - Mistura ou nenhum achado  → null (usuário decide manualmente)
+ * MPs sem cadastro em nenhum dos dois estoques são ignoradas na decisão.
+ */
+export async function inferirMarcaFormula(
+  formulaId: string,
+): Promise<'Pigma' | 'Zan Collor' | null> {
+  const itensFormula = await fetchFormulaItens(formulaId);
+  const cods = itensFormula.map((i) => i.cod_mp).filter(Boolean) as string[];
+  if (cods.length === 0) return null;
+
+  const mapa = await localizarEstoque(cods);
+
+  let temZC = false;
+  let temPG = false;
+  for (const cod of cods) {
+    const ref = mapa.get(cod);
+    if (!ref) continue; // não encontrado em nenhum estoque — ignora
+    if (ref.tabela === 'estoque_mp') temZC = true;
+    if (ref.tabela === 'estoque_mp_pg') temPG = true;
+  }
+
+  if (temZC && !temPG) return 'Zan Collor';
+  if (temPG && !temZC) return 'Pigma';
+  return null; // mista ou nenhuma MP encontrada nos estoques
+}
+
 // ── Baixar estoque ────────────────────────────────────────────────────────────
 
 /**

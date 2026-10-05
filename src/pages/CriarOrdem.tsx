@@ -13,7 +13,7 @@ import { useFormula } from '@/hooks/useFormula';
 import { formatKg } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
-import { baixarEstoqueOP, verificarEstoqueOP, type MpFaltante } from '@/lib/estoqueUtils';
+import { baixarEstoqueOP, verificarEstoqueOP, inferirMarcaFormula, type MpFaltante } from '@/lib/estoqueUtils';
 import { useAuth } from '@/hooks/useAuth';
 
 interface LoteDisponivel {
@@ -111,6 +111,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const { itens, loading: loadingFormula, error: erroFormula, setQuantidade, setItens } = useFormula(formulaId, tamanhoBatelada);
   const [itensSdrId, setItensSdrId] = useState<string | null>(null);
   const [copiandoSdr, setCopiandoSdr] = useState(false);
+  const marcaSugeridaRef = useRef(false);
 
   const form = useForm<OrdemFormValues>({
     resolver: zodResolver(ordemSchema),
@@ -151,6 +152,9 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
     const loteNum = Number(loteStr.replace(/\./g, ''));
     if (!loteStr || isNaN(loteNum) || loteNum <= 0) return;
     if (loteOverride !== undefined) form.setValue('lote', loteStr);
+
+    marcaSugeridaRef.current = false;
+    form.setValue('marca', '');
 
     setBuscando(true);
     setLoteEncontrado(null);
@@ -209,6 +213,19 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
       .single()
       .then(({ data }) => setOrientacoes((data as any)?.orientacoes ?? ''));
   }, [formulaId, loteEncontrado]);
+
+  // ── Sugestão automática de marca ─────────────────────────────────────────
+  useEffect(() => {
+    if (!formulaId || loteEncontrado !== true) return;
+    if (marcaSugeridaRef.current) return; // já sugeriu para este lote — não sobrescreve
+    inferirMarcaFormula(formulaId).then((marca) => {
+      if (!marca) return; // mista ou sem MPs no estoque — deixa em branco
+      if (marcaSugeridaRef.current) return; // usuário definiu durante a query
+      if (form.getValues('marca')) return; // usuário definiu durante a query (race condition)
+      form.setValue('marca', marca);
+      marcaSugeridaRef.current = true;
+    });
+  }, [formulaId, loteEncontrado, form]);
 
   // ── Comparador TID × Excel ────────────────────────────────────────────────
   const runComparison = useCallback(async (fid: string) => {
