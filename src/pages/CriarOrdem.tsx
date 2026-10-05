@@ -20,6 +20,7 @@ interface LoteDisponivel {
   lote: number;
   produto: string;
   quantidade: number;
+  formula_id: string | null;
 }
 
 interface SdrAlerta {
@@ -100,6 +101,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
   const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(false);
+  const [marcaPorFormula, setMarcaPorFormula] = useState<Map<string, 'Pigma' | 'Zan Collor' | null>>(new Map());
   const [buscaLote, setBuscaLote] = useState('');
   const [comparator, setComparator] = useState<ResultadoComparacao | null>(null);
   const [comparatorLoading, setComparatorLoading] = useState(false);
@@ -120,15 +122,16 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
 
   const fetchLotesDisponiveis = useCallback(async () => {
     setLoadingLotes(true);
-    // 1) Busca apenas os lotes em aberto
+    // 1) Busca apenas os lotes em aberto (inclui formula_id para inferir marca)
     const { data: lotes } = await (supabase as any)
       .from('cadastro_lotes')
-      .select('lote, produto, quantidade')
+      .select('lote, produto, quantidade, formula_id')
       .eq('status', 'Em Aberto')
       .order('lote', { ascending: true });
 
     if (!lotes || lotes.length === 0) {
       setLotesDisponiveis([]);
+      setMarcaPorFormula(new Map());
       setLoadingLotes(false);
       return;
     }
@@ -141,7 +144,66 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       .in('lote', loteStrs);
 
     const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
-    setLotesDisponiveis((lotes as any[]).filter((l) => !lotesComOP.has(String(l.lote))));
+    const lotesFinais = (lotes as any[]).filter((l) => !lotesComOP.has(String(l.lote)));
+    setLotesDisponiveis(lotesFinais);
+
+    // 3) Inferir marca de todos os lotes de uma vez (3 queries fixas, sem loop)
+    const formulaIds = [...new Set(
+      lotesFinais.map((l: any) => l.formula_id).filter(Boolean),
+    )] as string[];
+
+    if (formulaIds.length === 0) {
+      setMarcaPorFormula(new Map());
+      setLoadingLotes(false);
+      return;
+    }
+
+    // Query 3: todos os cod_mp das fórmulas envolvidas de uma vez
+    const { data: formulaItens } = await (supabase as any)
+      .from('formulas')
+      .select('formula_id, cod_mp')
+      .in('formula_id', formulaIds);
+
+    // Agrupa cod_mp por formula_id
+    const codsPorFormula = new Map<string, string[]>();
+    for (const row of (formulaItens ?? []) as any[]) {
+      if (!row.formula_id || !row.cod_mp) continue;
+      const arr = codsPorFormula.get(row.formula_id) ?? [];
+      arr.push(String(row.cod_mp));
+      codsPorFormula.set(row.formula_id, arr);
+    }
+
+    const todosCods = [...new Set([...codsPorFormula.values()].flat())];
+
+    if (todosCods.length === 0) {
+      setMarcaPorFormula(new Map());
+      setLoadingLotes(false);
+      return;
+    }
+
+    // Queries 4+5 em paralelo: descobre quais cods são ZC e quais são PG
+    const [{ data: zcData }, { data: pgData }] = await Promise.all([
+      (supabase as any).from('estoque_mp').select('cod_tid').in('cod_tid', todosCods),
+      (supabase as any).from('estoque_mp_pg').select('cod_pg').in('cod_pg', todosCods),
+    ]);
+
+    const codsZC = new Set((zcData ?? []).map((r: any) => String(r.cod_tid)));
+    const codsPG = new Set((pgData ?? []).map((r: any) => String(r.cod_pg)));
+
+    // Classifica cada formula_id em memória
+    const mapa = new Map<string, 'Pigma' | 'Zan Collor' | null>();
+    for (const [fid, cods] of codsPorFormula.entries()) {
+      let temZC = false;
+      let temPG = false;
+      for (const cod of cods) {
+        if (codsZC.has(cod)) temZC = true;
+        if (codsPG.has(cod)) temPG = true;
+      }
+      if (temZC && !temPG) mapa.set(fid, 'Zan Collor');
+      else if (temPG && !temZC) mapa.set(fid, 'Pigma');
+      else mapa.set(fid, null);
+    }
+    setMarcaPorFormula(mapa);
     setLoadingLotes(false);
   }, []);
 
@@ -889,20 +951,23 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                   </tr>
                 </thead>
                 <tbody>
-                  {lotesFiltrados.map((l) => (
+                  {lotesFiltrados.map((l) => {
+                    const marcaLote = l.formula_id ? marcaPorFormula.get(l.formula_id) : null;
+                    return (
                     <tr
                       key={l.lote}
                       onClick={() => {
                         form.setValue('lote', String(l.lote));
                         buscarLote(l.lote);
                       }}
-                      className="border-b last:border-0 hover:bg-primary/5 cursor-pointer transition-colors"
+                      className={`border-b last:border-0 hover:bg-primary/5 cursor-pointer transition-colors${marcaLote === 'Pigma' ? ' bg-red-50 dark:bg-red-950/20' : ''}`}
                     >
                       <td className="px-3 py-2 font-mono font-semibold">{l.lote}</td>
                       <td className="px-3 py-2 max-w-[140px] truncate text-muted-foreground">{l.produto}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">{l.quantidade.toLocaleString('pt-BR')} kg</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               </div>
