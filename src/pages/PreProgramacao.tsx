@@ -43,11 +43,16 @@ const FAMILIAS_COR = [
   { chave: 'lilas',    palavras: ['LILAS', 'ROXO', 'VIOLETA', 'PURPURA', 'MAGENTA'],                             cor: '#a855f7' },
   { chave: 'laranja',  palavras: ['LARANJA', 'CORAL', 'AMBER', 'AMBAR', 'TANGERINA'],                            cor: '#f97316' },
   { chave: 'rosa',     palavras: ['ROSA', 'PINK', 'SALMON', 'FLAMINGO'],                                         cor: '#ec4899' },
-  { chave: 'marrom',   palavras: ['MARROM', 'CAFE', 'TABACO', 'CHOCOLATE', 'CARAMELO', 'TERRA'],                 cor: '#92400e' },
-  { chave: 'bege',     palavras: ['BEGE', 'AREIA', 'NUDE', 'CHAMPAGNE', 'MARFIM', 'IVORY', 'CREME'],             cor: '#c4a882' },
+  // Tons terrosos — marrom, bege, palha, argila, cerejeira, avelã, creme e variantes.
+  // Fica ANTES de cinza para que "Cinza Avelã" case por AVELA (terroso) e não CINZA.
+  { chave: 'terroso',  palavras: ['MARROM', 'CAFE', 'TABACO', 'CHOCOLATE', 'CARAMELO', 'TERRA',
+                                   'BEGE', 'AREIA', 'NUDE', 'CHAMPAGNE', 'MARFIM', 'IVORY', 'CREME',
+                                   'AVELA', 'ARGILA', 'CEREJEIRA', 'PALHA'],                                     cor: '#a07040' },
   { chave: 'cinza',    palavras: ['CINZA', 'GELO', 'PRATA', 'SILVER', 'GRAFITE'],                                cor: '#6b7280' },
   { chave: 'preto',    palavras: ['PRETO', 'NEGRO', 'BLACK', 'EBANO'],                                           cor: '#1e293b' },
   { chave: 'branco',   palavras: ['BRANCO', 'WHITE', 'NEVE'],                                                    cor: '#94a3b8' },
+  // Aditivos — insumos/aditivos que não são cores. Adicione variações do nome aqui.
+  { chave: 'aditivo',  palavras: ['ADITIVO', 'ADITIV'],                                                          cor: '#0891b2' },
 ] as const;
 
 /** Remove acentos e converte para maiúsculas para comparação. */
