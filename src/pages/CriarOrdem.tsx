@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { toast } from '@/hooks/use-toast';
 import { Save, Loader2, Search, AlertTriangle, PackageSearch, Copy, Info } from 'lucide-react';
 import { useFormula } from '@/hooks/useFormula';
-import { formatKg } from '@/lib/utils';
+import { formatKg, cn } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 import { baixarEstoqueOP, verificarEstoqueOP, inferirMarcaFormula, type MpFaltante } from '@/lib/estoqueUtils';
@@ -960,7 +960,10 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                         form.setValue('lote', String(l.lote));
                         buscarLote(l.lote);
                       }}
-                      className={`border-b last:border-0 hover:bg-primary/5 cursor-pointer transition-colors${marcaLote === 'Pigma' ? ' bg-red-50 dark:bg-red-950/20' : ''}`}
+                      className={cn(
+                        'border-b last:border-0 hover:bg-primary/5 cursor-pointer transition-colors',
+                        marcaLote === 'Pigma' && 'bg-red-50 dark:bg-red-950/20',
+                      )}
                     >
                       <td className="px-3 py-2 font-mono font-semibold">{l.lote}</td>
                       <td className="px-3 py-2 max-w-[140px] truncate text-muted-foreground">{l.produto}</td>
