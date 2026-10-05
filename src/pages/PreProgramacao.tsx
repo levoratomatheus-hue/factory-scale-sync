@@ -28,6 +28,41 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getNextPosicaoFila } from '@/lib/recalcularPosicoes';
 
+// ── Famílias de cor — edite palavras e cores aqui ────────────────────────────
+//
+// palavras: substrings buscadas no nome do produto (sem acentos, maiúsculas).
+//           A PRIMEIRA família que casar é usada — ordem importa.
+// cor:      cor CSS da borda esquerda do card.
+// Produtos sem match ficam em "outros" (borda neutra) e aparecem no fim.
+//
+const FAMILIAS_COR = [
+  { chave: 'azul',     palavras: ['AZUL', 'NAVY', 'CELESTE', 'TURQUESA', 'CIANO', 'AQUA'],                       cor: '#3b82f6' },
+  { chave: 'vermelho', palavras: ['VERMELHO', 'RUBI', 'CARMIM', 'SCARLET', 'BORDEAUX', 'BORGONHA', 'BORDEAU'],   cor: '#ef4444' },
+  { chave: 'amarelo',  palavras: ['AMARELO', 'DOURADO', 'OURO', 'GOLDEN', 'GOLD'],                               cor: '#ca8a04' },
+  { chave: 'verde',    palavras: ['VERDE', 'ESMERALDA', 'MENTA', 'OLIVE', 'LIMA'],                               cor: '#16a34a' },
+  { chave: 'lilas',    palavras: ['LILAS', 'ROXO', 'VIOLETA', 'PURPURA', 'MAGENTA'],                             cor: '#a855f7' },
+  { chave: 'laranja',  palavras: ['LARANJA', 'CORAL', 'AMBER', 'AMBAR', 'TANGERINA'],                            cor: '#f97316' },
+  { chave: 'rosa',     palavras: ['ROSA', 'PINK', 'SALMON', 'FLAMINGO'],                                         cor: '#ec4899' },
+  { chave: 'marrom',   palavras: ['MARROM', 'CAFE', 'TABACO', 'CHOCOLATE', 'CARAMELO', 'TERRA'],                 cor: '#92400e' },
+  { chave: 'bege',     palavras: ['BEGE', 'AREIA', 'NUDE', 'CHAMPAGNE', 'MARFIM', 'IVORY', 'CREME'],             cor: '#c4a882' },
+  { chave: 'cinza',    palavras: ['CINZA', 'GELO', 'PRATA', 'SILVER', 'GRAFITE'],                                cor: '#6b7280' },
+  { chave: 'preto',    palavras: ['PRETO', 'NEGRO', 'BLACK', 'EBANO'],                                           cor: '#1e293b' },
+  { chave: 'branco',   palavras: ['BRANCO', 'WHITE', 'NEVE'],                                                    cor: '#94a3b8' },
+] as const;
+
+/** Remove acentos e converte para maiúsculas para comparação. */
+function normalizar(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+}
+
+/** Retorna a família de cor do produto, ou null se não houver match. */
+function inferirFamilia(produto: string) {
+  const norm = normalizar(produto);
+  return FAMILIAS_COR.find((f) => f.palavras.some((p) => norm.includes(p))) ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface OrdemPre {
   id: string;
   produto: string;
@@ -107,6 +142,16 @@ export default function PreProgramacao() {
     if (!busca.trim()) return true;
     const q = busca.trim().toLowerCase();
     return o.produto.toLowerCase().includes(q) || o.lote.toLowerCase().includes(q);
+  });
+
+  // Agrupa por família de cor (mesma ordem de FAMILIAS_COR); "outros" fica no fim.
+  // A ordem relativa dentro de cada família é preservada (sort estável).
+  const ordensOrdenadas = [...ordensFiltradas].sort((a, b) => {
+    const fa = inferirFamilia(a.produto);
+    const fb = inferirFamilia(b.produto);
+    const ia = fa ? FAMILIAS_COR.findIndex((f) => f.chave === fa.chave) : FAMILIAS_COR.length;
+    const ib = fb ? FAMILIAS_COR.findIndex((f) => f.chave === fb.chave) : FAMILIAS_COR.length;
+    return ia - ib;
   });
 
   const programar = async () => {
@@ -257,7 +302,7 @@ export default function PreProgramacao() {
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      ) : ordensFiltradas.length === 0 ? (
+      ) : ordensOrdenadas.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
           <Inbox className="h-12 w-12 opacity-20" />
           <p className="text-sm">
@@ -266,10 +311,15 @@ export default function PreProgramacao() {
         </div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {ordensFiltradas.map((ordem) => {
+          {ordensOrdenadas.map((ordem) => {
             const isOpen = expandedIds.has(ordem.id);
+            const familia = inferirFamilia(ordem.produto);
             return (
-              <div key={ordem.id} className="rounded-xl border bg-card select-none">
+              <div
+                key={ordem.id}
+                className="rounded-xl border bg-card select-none"
+                style={familia ? { borderLeftColor: familia.cor, borderLeftWidth: '3px' } : undefined}
+              >
 
                 {/* ── Cabeçalho — sempre visível ─────────────────── */}
                 <div className="flex items-start gap-1.5 px-3 py-2.5">
