@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight, Search } from 'lucide-react';
 import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
@@ -36,6 +36,7 @@ const EstoqueMP                     = lazy(() => import('./EstoqueMP'));
 const EstoqueMPPG                   = lazy(() => import('./EstoqueMPPG'));
 const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoesMP'));
 const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'));
+const ConsultaProducaoProduto       = lazy(() => import('./ConsultaProducaoProduto'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { AlertaRelatorioMP } from '@/components/AlertaRelatorioMP';
@@ -64,6 +65,7 @@ type TabGestorId =
   | 'liberacao'
   | 'analises'
   | 'consulta_formula'
+  | 'consulta_producao_produto'
   | 'comercial'
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
   | 'historico_paradas'
@@ -136,8 +138,9 @@ const gruposGestor = [
       { id: 'programacao_balanca' as TabGestorId, label: 'Programação Balanças',  icon: CalendarDays },
       { id: 'criar'               as TabGestorId, label: 'Nova Ordem',            icon: PlusCircle },
       { id: 'historico'   as TabGestorId, label: 'Histórico',        icon: History },
-      { id: 'consulta_formula' as TabGestorId, label: 'Consulta por Fórmula', icon: ClipboardList },
-      { id: 'importar'       as TabGestorId, label: 'Importar',          icon: FileUp },
+      { id: 'consulta_formula'          as TabGestorId, label: 'Consulta por Fórmula',  icon: ClipboardList },
+      { id: 'consulta_producao_produto' as TabGestorId, label: 'Consulta por Produto',   icon: Search },
+      { id: 'importar'                  as TabGestorId, label: 'Importar',               icon: FileUp },
       { id: 'importar_excel' as TabGestorId, label: 'Importar Excel Lab', icon: Sheet  },
     ],
   },
@@ -1334,6 +1337,9 @@ export default function Index() {
               )}
               {activeTab === 'consulta_formula' && (
                 <Suspense fallback={TAB_LOADING}><PainelConsultaFormula /></Suspense>
+              )}
+              {activeTab === 'consulta_producao_produto' && (
+                <Suspense fallback={TAB_LOADING}><ConsultaProducaoProduto /></Suspense>
               )}
               {mountedTabs.has('analises') && (
                 <KeepAlive active={activeTab === 'analises'}>
