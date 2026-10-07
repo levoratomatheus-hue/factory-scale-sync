@@ -330,22 +330,29 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     const batelada = tamanhoBatelada ?? 0;
     const novosItens: import('@/hooks/useFormula').FormulaItem[] = [];
 
-    // Linha do material reaproveitado (campos legados do cabeçalho do SDR)
-    if (sdr.percentual_reaproveitado && sdr.percentual_reaproveitado > 0) {
+    // Origens reaproveitadas — fonte da verdade: reaproveitamentos_materiais (suporta múltiplas origens)
+    const { data: materiaisData } = await (supabase as any)
+      .from('reaproveitamentos_materiais')
+      .select('produto_origem, percentual_reaproveitado, sequencia')
+      .eq('reaproveitamento_id', sdr.id)
+      .order('sequencia', { ascending: true });
+
+    for (const mat of (materiaisData ?? [])) {
+      if (!mat.percentual_reaproveitado || mat.percentual_reaproveitado <= 0) continue;
       novosItens.push({
-        id: `sdr-reapr-${sdr.id}`,
+        id: `sdr-mat-${sdr.id}-${mat.sequencia}`,
         sequencia: 0,
-        materia_prima: sdr.produto_origem?.trim() || 'Material reaproveitado',
+        materia_prima: mat.produto_origem?.trim() || 'Material reaproveitado',
         fornecedor: null,
         unidade: null,
-        percentual: sdr.percentual_reaproveitado,
-        quantidade_kg: parseFloat(((sdr.percentual_reaproveitado / 100) * batelada).toFixed(3)),
+        percentual: mat.percentual_reaproveitado,
+        quantidade_kg: parseFloat(((mat.percentual_reaproveitado / 100) * batelada).toFixed(3)),
       });
     }
 
-    // Itens adicionais (eh_reaproveitado=true indica material de origem; já tratado acima via cabeçalho)
+    // Itens de MP nova (eh_reaproveitado=false)
     for (const item of (itensData ?? [])) {
-      if (item.eh_reaproveitado) continue; // evita duplicata com a linha de material reaproveitado
+      if (item.eh_reaproveitado) continue;
       novosItens.push({
         id: `sdr-item-${item.id}`,
         sequencia: item.sequencia,
@@ -358,7 +365,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     }
 
     if (novosItens.length === 0) {
-      toast({ title: 'SDR sem itens de fórmula cadastrados', description: `${sdr.codigo} não possui itens em reaproveitamentos_itens.`, variant: 'destructive' });
+      toast({ title: 'SDR sem fórmula cadastrada', description: `${sdr.codigo} não possui origens nem itens de MP.`, variant: 'destructive' });
       return;
     }
 
