@@ -213,11 +213,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             return (
               <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700 px-4 py-3">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="font-extrabold leading-tight text-amber-900 dark:text-amber-100">
+                <div className="font-extrabold leading-tight text-amber-900 dark:text-amber-100 uppercase">
                   <span className="text-4xl text-amber-600 dark:text-amber-400 tabular-nums">{totalBateladas}</span>
                   <span className="text-3xl"> batelada{totalBateladas !== 1 ? 's' : ''} de </span>
                   <span className="text-4xl text-amber-600 dark:text-amber-400 tabular-nums">{formatKg(tamanhoBatelada)} kg</span>
-                  <span className="text-3xl"> cada</span>
                 </div>
                 <div className="flex items-center gap-3 bg-muted/60 border rounded-lg px-4 py-2">
                   <button
