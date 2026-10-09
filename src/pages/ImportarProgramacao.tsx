@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, Loader2, AlertCircle, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { ajustarEstoqueOP } from '@/lib/estoqueUtils';
+import { isLoteBloqueado, LOTES_BLOQUEADOS } from '@/lib/lotesBloqueados';
 
 interface LoteRow {
   lote: number;
@@ -97,7 +98,7 @@ export default function ImportarProgramacao() {
             classe:       limpar(p[12] ?? ''),
           };
         })
-        .filter((r) => !isNaN(r.lote) && r.lote > 0 && r.produto);
+        .filter((r) => !isNaN(r.lote) && r.lote > 0 && r.produto && !isLoteBloqueado(r.lote));
 
       if (lotes.length === 0) {
         setErro('Nenhuma linha válida. Verifique o separador (;) e o formato do arquivo.');
@@ -166,6 +167,10 @@ export default function ImportarProgramacao() {
           } catch { /* silencioso */ }
         }
       }
+
+      // Remove lotes bloqueados do banco caso tenham entrado por importações anteriores
+      const bloqueadosArr = Array.from(LOTES_BLOQUEADOS);
+      await (supabase as any).from('cadastro_lotes').delete().in('lote', bloqueadosArr);
 
       setResultado({
         total: lotesUnicos.length,

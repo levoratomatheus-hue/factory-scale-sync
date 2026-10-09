@@ -14,6 +14,7 @@ import { formatKg, cn } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
 import { baixarEstoqueOP, verificarEstoqueOP, inferirMarcaFormula, type MpFaltante } from '@/lib/estoqueUtils';
+import { isLoteBloqueado } from '@/lib/lotesBloqueados';
 import { useAuth } from '@/hooks/useAuth';
 
 interface LoteDisponivel {
@@ -144,7 +145,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
       .in('lote', loteStrs);
 
     const lotesComOP = new Set((ordensExistentes ?? []).map((o: any) => String(o.lote)));
-    const lotesFinais = (lotes as any[]).filter((l) => !lotesComOP.has(String(l.lote)));
+    const lotesFinais = (lotes as any[]).filter((l) => !lotesComOP.has(String(l.lote)) && !isLoteBloqueado(Number(l.lote)));
     setLotesDisponiveis(lotesFinais);
 
     // 3) Inferir marca de todos os lotes de uma vez (3 queries fixas, sem loop)
