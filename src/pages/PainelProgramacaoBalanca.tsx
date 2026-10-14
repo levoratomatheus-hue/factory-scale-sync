@@ -35,6 +35,7 @@ interface Ordem {
   quantidade: number;
   status: string;
   posicao: number | null;
+  posicao_balanca: number | null;
   linha: number;
   balanca: number | null;
   formula_id: string | null;
@@ -365,7 +366,7 @@ function BalancaColumn({
 }
 
 const FIELDS =
-  "id, produto, lote, quantidade, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
+  "id, produto, lote, quantidade, status, posicao, posicao_balanca, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
 
 export default function PainelProgramacaoBalanca() {
   const [ordens, setOrdens] = useState<Ordem[]>([]);
@@ -389,7 +390,7 @@ export default function PainelProgramacaoBalanca() {
       .select(FIELDS)
       .in("status", ["pendente", "em_pesagem"])
       .not("balanca", "is", null)
-      .order("posicao", { ascending: true, nullsFirst: false });
+      .order("posicao_balanca", { ascending: true, nullsFirst: false });
     setOrdens((data as Ordem[]) ?? []);
     setLoading(false);
   };
@@ -399,20 +400,28 @@ export default function PainelProgramacaoBalanca() {
   }, []);
 
   const ordensParaBalanca = useCallback(
-    (b: number) => sortOrdens(ordens.filter((o) => o.balanca === b)),
+    (b: number) =>
+      ordens
+        .filter((o) => o.balanca === b)
+        .sort((a, b) => {
+          if (a.posicao_balanca == null && b.posicao_balanca == null) return 0;
+          if (a.posicao_balanca == null) return 1;
+          if (b.posicao_balanca == null) return -1;
+          return a.posicao_balanca - b.posicao_balanca;
+        }),
     [ordens]
   );
 
   const handleReorder = async (balanca: number, reordered: Ordem[]) => {
     const anterior = ordens;
-    const comPosicao = reordered.map((o, i) => ({ ...o, posicao: i + 1 }));
+    const comPosicao = reordered.map((o, i) => ({ ...o, posicao_balanca: i + 1 }));
     setOrdens((prev) => [
       ...prev.filter((o) => o.balanca !== balanca),
       ...comPosicao,
     ]);
     const results = await Promise.all(
       comPosicao.map((o) =>
-        supabase.from("ordens").update({ posicao: o.posicao }).eq("id", o.id)
+        supabase.from("ordens").update({ posicao_balanca: o.posicao_balanca }).eq("id", o.id)
       )
     );
     if (results.some((r) => r.error)) {
@@ -433,7 +442,7 @@ export default function PainelProgramacaoBalanca() {
 
     const { error } = await supabase
       .from("ordens")
-      .update({ balanca: novaBalanca, posicao: novaPosicao } as any)
+      .update({ balanca: novaBalanca, posicao_balanca: novaPosicao } as any)
       .eq("id", id);
 
     if (error) {
@@ -441,7 +450,7 @@ export default function PainelProgramacaoBalanca() {
       return;
     }
     setOrdens((prev) =>
-      prev.map((o) => o.id === id ? { ...o, balanca: novaBalanca, posicao: novaPosicao } : o)
+      prev.map((o) => o.id === id ? { ...o, balanca: novaBalanca, posicao_balanca: novaPosicao } : o)
     );
     toast({ title: `Ordem movida para Balança ${novaBalanca}` });
   };
