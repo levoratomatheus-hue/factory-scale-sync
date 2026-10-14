@@ -11,7 +11,7 @@ export function useOrdens(date?: string) {
 
   const fetchOrdens = useCallback(async () => {
     lastFetchRef.current = Date.now();
-    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
+    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, posicao_balanca, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -74,10 +74,10 @@ export function useOrdens(date?: string) {
   const initBalanca = useCallback(async (balanca: number): Promise<string | null> => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, status, balanca, posicao, requer_mistura")
+      .select("id, status, balanca, posicao_balanca, requer_mistura")
       .eq("balanca", balanca)
       .in("status", ["pendente", "em_pesagem"])
-      .order("posicao", { ascending: true, nullsFirst: false });
+      .order("posicao_balanca", { ascending: true, nullsFirst: false });
 
     if (!data || data.length === 0) return null;
 

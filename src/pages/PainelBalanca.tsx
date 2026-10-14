@@ -51,7 +51,15 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [pausando, setPausando] = useState(false);
 
   const balancaOrdens = useMemo(
-    () => sortOrdens(ordens.filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))),
+    () =>
+      ordens
+        .filter((o) => o.balanca === balanca && ["pendente", "em_pesagem", "aguardando_liberacao", "concluido"].includes(o.status))
+        .sort((a, b) => {
+          if (a.posicao_balanca == null && b.posicao_balanca == null) return 0;
+          if (a.posicao_balanca == null) return 1;
+          if (b.posicao_balanca == null) return -1;
+          return a.posicao_balanca - b.posicao_balanca;
+        }),
     [ordens, balanca]
   );
 
