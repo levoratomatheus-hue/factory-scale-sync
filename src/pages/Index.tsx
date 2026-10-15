@@ -5,6 +5,8 @@ import Login from './Login';
 
 const PainelGestor            = lazy(() => import('./PainelGestor'));
 const PainelBalanca           = lazy(() => import('./PainelBalanca'));
+const CadastroOperadores      = lazy(() => import('./CadastroOperadores'));
+const HistoricoBalancas       = lazy(() => import('./HistoricoBalancas'));
 const PainelMistura           = lazy(() => import('./PainelMistura'));
 const PainelLinha             = lazy(() => import('./PainelLinha'));
 const CriarOrdem              = lazy(() => import('./CriarOrdem'));
@@ -59,7 +61,7 @@ import {
 
 type TabGestorId =
   | 'gestor' | 'programacao' | 'programacao_balanca' | 'pre_programacao' | 'criar' | 'historico' | 'importar' | 'importar_excel'
-  | 'balanca1' | 'balanca2'
+  | 'balanca1' | 'balanca2' | 'cadastro_operadores' | 'historico_balancas'
   | 'mistura'
   | 'linha1' | 'linha2' | 'linha3' | 'linha4' | 'linha5'
   | 'liberacao'
@@ -86,8 +88,10 @@ const gruposGestor = [
     label: 'Pesagem',
     icon: Scale,
     items: [
-      { id: 'balanca1' as TabGestorId, label: 'Balança 1', icon: Scale },
-      { id: 'balanca2' as TabGestorId, label: 'Balança 2', icon: Scale },
+      { id: 'balanca1'            as TabGestorId, label: 'Balança 1',         icon: Scale },
+      { id: 'balanca2'            as TabGestorId, label: 'Balança 2',         icon: Scale },
+      { id: 'cadastro_operadores' as TabGestorId, label: 'Operadores',         icon: Scale },
+      { id: 'historico_balancas'  as TabGestorId, label: 'Histórico',          icon: Scale },
     ],
   },
   {
@@ -159,6 +163,8 @@ const manutencaoItems = [
 const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ...gruposGestor.flatMap((g) => g.items).map((i) => [i.id, i.label] as const),
   ...manutencaoItems.map((i) => [i.id, i.label] as const),
+  ['cadastro_operadores'  as TabGestorId, 'Operadores'],
+  ['historico_balancas'   as TabGestorId, 'Histórico de Balanças'],
   ['comercial' as TabGestorId, 'Painel Comercial'],
   ['consumo_mp' as TabGestorId, 'Consumo de MP'],
   ['compras_consumo' as TabGestorId, 'Consumo de MP'],
@@ -1294,6 +1300,12 @@ export default function Index() {
                 <KeepAlive active={activeTab === 'balanca2'}>
                   <Suspense fallback={TAB_LOADING}><PainelBalanca balanca={2} /></Suspense>
                 </KeepAlive>
+              )}
+              {activeTab === 'cadastro_operadores' && (
+                <Suspense fallback={TAB_LOADING}><CadastroOperadores /></Suspense>
+              )}
+              {activeTab === 'historico_balancas' && (
+                <Suspense fallback={TAB_LOADING}><HistoricoBalancas /></Suspense>
               )}
               {mountedTabs.has('mistura') && (
                 <KeepAlive active={activeTab === 'mistura'}>

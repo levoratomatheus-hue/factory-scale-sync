@@ -1,12 +1,14 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, FlaskConical, Loader2, Minus, PauseCircle, Play, Plus, Printer, Scale } from "lucide-react";
+import { CheckCircle2, FlaskConical, Loader2, PauseCircle, Play, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatKg, sortOrdens } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { toast } from "@/hooks/use-toast";
@@ -42,13 +44,26 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [loadingOrdem, setLoadingOrdem] = useState(false);
   const [checkedItens, setCheckedItens] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [bateladaAtual, setBateladaAtual] = useState(1);
-  const lastBateladaPress = useRef<{ type: '+' | '-'; time: number } | null>(null);
-  const [bateladaConfirm, setBateladaConfirm] = useState<{ type: '+' | '-' } | null>(null);
+  const [bateladasFeitasAntes, setBateladasFeitasAntes] = useState(0);
+  const [bateladasSessaoPausa, setBateladasSessaoPausa] = useState('');
   const [obsPausaInicial, setObsPausaInicial] = useState<string | null>(null);
   const [pausarOpen, setPausarOpen] = useState(false);
   const [pausaObs, setPausaObs] = useState('');
   const [pausando, setPausando] = useState(false);
+
+  const [operadores, setOperadores] = useState<{ id: string; nome: string }[]>([]);
+  const [ordemParaIniciar, setOrdemParaIniciar] = useState<any>(null);
+  const [operadorSelecionadoId, setOperadorSelecionadoId] = useState("");
+  const [iniciandoPesagem, setIniciandoPesagem] = useState(false);
+
+  useEffect(() => {
+    (supabase as any)
+      .from("operadores")
+      .select("id, nome")
+      .eq("ativo", true)
+      .order("nome")
+      .then(({ data }: any) => setOperadores(data ?? []));
+  }, []);
 
   const balancaOrdens = useMemo(
     () =>
@@ -96,7 +111,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       const hasC = !!(formulaRes.data && formulaRes.data.length > 0);
       setFormulaId(row?.formula_id ?? null);
       setTamanhoBatelada(row?.tamanho_batelada ?? null);
-      setBateladaAtual((row?.bateladas_feitas ?? 0) > 0 ? row.bateladas_feitas : 1);
+      setBateladasFeitasAntes(row?.bateladas_feitas ?? 0);
       setObsPausaInicial(row?.obs_pausa ?? null);
       if (hasC) {
         setCustomItens(formulaRes.data as FormulaRow[]);
@@ -114,13 +129,14 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   );
 
   const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
+  const somaFormula = useMemo(() => displayItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0), [displayItens]);
   const isLoadingFormula = loadingOrdem || (!hasCustom && loadingFormula);
   const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
   const obsItemsPesagem = useMemo(() => parseObsItems(emPesagem?.obs ?? null), [emPesagem?.obs]);
 
   const totalHoje = useMemo(() => ordens.filter((o) => o.balanca === balanca).length, [ordens, balanca]);
 
-  const iniciarPesagem = async (ordem: { id: string }) => {
+  const iniciarPesagem = async (ordem: any, operadorId: string, operadorNome: string) => {
     const { error } = await supabase.from("ordens").update({ status: "em_pesagem" }).eq("id", ordem.id);
     if (error) {
       toast({ title: "Erro ao iniciar pesagem", description: error.message, variant: "destructive" });
@@ -131,15 +147,62 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       status_anterior: "pendente",
       status_novo: "em_pesagem",
     });
+    const { data: ordemData } = await (supabase as any)
+      .from("ordens")
+      .select("bateladas_feitas")
+      .eq("id", ordem.id)
+      .single();
+    const { error: errPesagem } = await (supabase as any)
+      .from("pesagens")
+      .insert({
+        ordem_id:        ordem.id,
+        operador_id:     operadorId,
+        operador_nome:   operadorNome,
+        balanca,
+        lote:            ordem.lote,
+        produto:         ordem.produto,
+        bateladas_inicio: ordemData?.bateladas_feitas ?? 0,
+      });
+    if (errPesagem) {
+      toast({ title: "Aviso: sessão não registrada", description: errPesagem.message, variant: "destructive" });
+    }
     await fetchOrdens();
   };
+
+  async function fecharSessaoPesagem(
+    ordemId: string,
+    bateladas: number,
+    kgPesado: number,
+    kgNominal: number,
+    motivo: string
+  ) {
+    const { data } = await (supabase as any)
+      .from("pesagens")
+      .select("id")
+      .eq("ordem_id", ordemId)
+      .is("fim", null)
+      .order("inicio", { ascending: false })
+      .limit(1)
+      .single();
+    if (!data) return;
+    const { error } = await (supabase as any)
+      .from("pesagens")
+      .update({ fim: new Date().toISOString(), bateladas, kg_pesado: kgPesado, kg_nominal: kgNominal, motivo_fim: motivo })
+      .eq("id", data.id);
+    if (error) {
+      toast({ title: "Aviso: fim de sessão não registrado", description: error.message, variant: "destructive" });
+    }
+  }
 
   const pausarOrdem = async () => {
     if (!emPesagem) return;
     setPausando(true);
+    const temBatelada = !!(tamanhoBatelada && tamanhoBatelada > 0);
+    const bateladasSessao = temBatelada ? Math.max(0, parseInt(bateladasSessaoPausa) || 0) : 0;
+    const novasBateladasFeitas = bateladasFeitasAntes + bateladasSessao;
     const { error } = await (supabase as any).from("ordens").update({
       status: 'pendente',
-      bateladas_feitas: bateladaAtual,
+      bateladas_feitas: novasBateladasFeitas,
       obs_pausa: pausaObs.trim() || null,
     }).eq("id", emPesagem.id);
     if (error) {
@@ -151,10 +214,16 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       ordem_id: emPesagem.id,
       status_anterior: "em_pesagem",
       status_novo: "pendente",
-      obs: pausaObs.trim() ? `Pausado na batelada ${bateladaAtual}: ${pausaObs.trim()}` : `Pausado na batelada ${bateladaAtual}`,
+      obs: pausaObs.trim()
+        ? `Pausado (${bateladasSessao} bat.): ${pausaObs.trim()}`
+        : `Pausado (${bateladasSessao} bat.)`,
     });
+    const kgPesado  = temBatelada ? bateladasSessao * somaFormula       : 0;
+    const kgNominal = temBatelada ? bateladasSessao * tamanhoBatelada!  : 0;
+    await fecharSessaoPesagem(emPesagem.id, bateladasSessao, kgPesado, kgNominal, "pausa");
     setPausarOpen(false);
     setPausaObs('');
+    setBateladasSessaoPausa('');
     setPausando(false);
     await fetchOrdens();
   };
@@ -220,48 +289,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
             return (
               <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700 px-4 py-3">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="font-extrabold leading-tight text-amber-900 dark:text-amber-100 uppercase">
                   <span className="text-2xl text-amber-600 dark:text-amber-400 tabular-nums">{totalBateladas}</span>
                   <span className="text-xl"> batelada{totalBateladas !== 1 ? 's' : ''} de </span>
                   <span className="text-2xl text-amber-600 dark:text-amber-400 tabular-nums">{formatKg(tamanhoBatelada)} kg</span>
-                </div>
-                <div className="flex items-center gap-3 bg-muted/60 border rounded-lg px-4 py-2">
-                  <button
-                    className="flex items-center justify-center h-11 w-11 sm:h-7 sm:w-7 rounded-full border border-primary/40 hover:bg-background active:bg-background transition-colors disabled:opacity-30"
-                    disabled={bateladaAtual <= 1}
-                    onClick={() => {
-                      const now = Date.now();
-                      const last = lastBateladaPress.current;
-                      if (last?.type === '-' && now - last.time < 30000) {
-                        setBateladaConfirm({ type: '-' });
-                      } else {
-                        lastBateladaPress.current = { type: '-', time: now };
-                        setBateladaAtual((b) => Math.max(1, b - 1));
-                      }
-                    }}
-                  >
-                    <Minus className="h-5 w-5 sm:h-4 sm:w-4 text-primary" />
-                  </button>
-                  <span className="text-2xl sm:text-lg font-extrabold text-primary tabular-nums w-8 sm:w-7 text-center">
-                    {bateladaAtual}
-                  </span>
-                  <button
-                    className="flex items-center justify-center h-11 w-11 sm:h-7 sm:w-7 rounded-full border border-primary/40 hover:bg-background active:bg-background transition-colors"
-                    onClick={() => {
-                      const now = Date.now();
-                      const last = lastBateladaPress.current;
-                      if (last?.type === '+' && now - last.time < 30000) {
-                        setBateladaConfirm({ type: '+' });
-                      } else {
-                        lastBateladaPress.current = { type: '+', time: now };
-                        setBateladaAtual((b) => b + 1);
-                      }
-                    }}
-                  >
-                    <Plus className="h-5 w-5 sm:h-4 sm:w-4 text-primary" />
-                  </button>
-                </div>
                 </div>
               </div>
             );
@@ -348,46 +379,20 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <Button
                 variant="outline"
                 className="min-h-[44px] sm:min-h-0 text-base sm:text-sm"
-                onClick={() => { setPausaObs(''); setPausarOpen(true); }}
+                onClick={() => { setPausaObs(''); setBateladasSessaoPausa(''); setPausarOpen(true); }}
               >
                 <PauseCircle className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />
                 Pausar
               </Button>
               <Button
                 className="bg-status-done hover:bg-status-done/90 text-primary-foreground w-full sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm"
-                onClick={() => setConfirmOpen(true)}
+                onClick={() => { setConfirmOpen(true); }}
               >
                 <CheckCircle2 className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />
                 Concluir pesagem
               </Button>
             </div>
           )}
-
-          <AlertDialog open={!!bateladaConfirm} onOpenChange={(open) => { if (!open) setBateladaConfirm(null); }}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {bateladaConfirm?.type === '+' ? 'Confirmar incremento' : 'Confirmar decremento'}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {bateladaConfirm?.type === '+'
-                    ? 'Você está adicionando uma 2ª batelada em menos de 30 segundos. Tem certeza?'
-                    : 'Você está diminuindo uma 2ª vez em menos de 30 segundos. Tem certeza?'}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setBateladaConfirm(null)}>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => {
-                  const type = bateladaConfirm!.type;
-                  lastBateladaPress.current = { type, time: Date.now() };
-                  setBateladaAtual((b) => type === '+' ? b + 1 : Math.max(1, b - 1));
-                  setBateladaConfirm(null);
-                }}>
-                  Sim, confirmar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
@@ -397,17 +402,38 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   Deseja finalizar a pesagem desta ordem?
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
+                const totalBateladas  = Math.round(emPesagem.quantidade / tamanhoBatelada);
+                const bateladasSessao = Math.max(0, totalBateladas - bateladasFeitasAntes);
+                return (
+                  <div className="rounded-lg bg-muted/50 border px-4 py-3 text-sm space-y-0.5">
+                    <p className="font-medium">
+                      {bateladasSessao} batelada{bateladasSessao !== 1 ? 's' : ''} serão registradas nesta conclusão
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {bateladasFeitasAntes} de {totalBateladas} já feitas em etapas anteriores
+                    </p>
+                  </div>
+                );
+              })()}
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => {
-                  setConfirmOpen(false);
-                  (supabase as any).from("ordens").update({ bateladas_feitas: 0, obs_pausa: null }).eq("id", emPesagem.id).then(() => {
-                    concluirOrdem(emPesagem.id).then(async (err) => {
-                      if (err) toast({ title: "Erro ao concluir pesagem", description: err, variant: "destructive" });
-                      await fetchOrdens();
-                    });
-                  });
-                }}>
+                <AlertDialogAction
+                  onClick={async () => {
+                    setConfirmOpen(false);
+                    const temBatelada = !!(tamanhoBatelada && tamanhoBatelada > 0);
+                    const bateladasSessao = temBatelada
+                      ? Math.max(0, Math.round(emPesagem.quantidade / tamanhoBatelada!) - bateladasFeitasAntes)
+                      : 0;
+                    const kgPesado  = temBatelada ? bateladasSessao * somaFormula      : somaFormula;
+                    const kgNominal = temBatelada ? bateladasSessao * tamanhoBatelada! : emPesagem.quantidade;
+                    await fecharSessaoPesagem(emPesagem.id, bateladasSessao, kgPesado, kgNominal, "conclusao");
+                    await (supabase as any).from("ordens").update({ bateladas_feitas: 0, obs_pausa: null }).eq("id", emPesagem.id);
+                    const err = await concluirOrdem(emPesagem.id);
+                    if (err) toast({ title: "Erro ao concluir pesagem", description: err, variant: "destructive" });
+                    await fetchOrdens();
+                  }}
+                >
                   Confirmar
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -419,19 +445,35 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <AlertDialogHeader>
                 <AlertDialogTitle>Pausar pesagem</AlertDialogTitle>
                 <AlertDialogDescription>
-                  A OP voltará para a fila com o progresso salvo (batelada {bateladaAtual}).
+                  A OP voltará para a fila com o progresso salvo.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <Textarea
-                placeholder="Motivo da pausa (opcional)"
-                value={pausaObs}
-                onChange={(e) => setPausaObs(e.target.value)}
-                className="mt-1"
-                rows={3}
-              />
+              <div className="space-y-3">
+                {tamanhoBatelada && tamanhoBatelada > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Quantas bateladas você pesou nesta vez?</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={bateladasSessaoPausa}
+                      onChange={(e) => setBateladasSessaoPausa(e.target.value)}
+                      className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                )}
+                <Textarea
+                  placeholder="Motivo da pausa (opcional)"
+                  value={pausaObs}
+                  onChange={(e) => setPausaObs(e.target.value)}
+                  rows={3}
+                />
+              </div>
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={pausando}>Cancelar</AlertDialogCancel>
-                <AlertDialogAction disabled={pausando} onClick={(e) => { e.preventDefault(); pausarOrdem(); }}>
+                <AlertDialogAction
+                  disabled={pausando || !!(tamanhoBatelada && tamanhoBatelada > 0 && bateladasSessaoPausa === '')}
+                  onClick={(e) => { e.preventDefault(); pausarOrdem(); }}
+                >
                   {pausando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                   Pausar
                 </AlertDialogAction>
@@ -530,7 +572,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   {!emPesagem && (
                     <Button
                       variant="outline"
-                      onClick={() => iniciarPesagem(ordem)}
+                      onClick={() => { setOrdemParaIniciar(ordem); setOperadorSelecionadoId(""); }}
                       className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
                     >
                       {pausada ? (
@@ -552,6 +594,51 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
           </div>
         </div>
       )}
+      {/* Dialog: selecionar operador para iniciar/retomar */}
+      <Dialog open={!!ordemParaIniciar} onOpenChange={(o) => { if (!o) { setOrdemParaIniciar(null); setOperadorSelecionadoId(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Selecionar operador</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            {ordemParaIniciar && (
+              <p className="text-sm text-muted-foreground">
+                OP {ordemParaIniciar.lote} — {ordemParaIniciar.produto}
+              </p>
+            )}
+            <Select value={operadorSelecionadoId} onValueChange={setOperadorSelecionadoId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o operador" />
+              </SelectTrigger>
+              <SelectContent>
+                {operadores.map((op) => (
+                  <SelectItem key={op.id} value={op.id}>{op.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setOrdemParaIniciar(null); setOperadorSelecionadoId(""); }}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!operadorSelecionadoId || iniciandoPesagem}
+              onClick={async () => {
+                const op = operadores.find((o) => o.id === operadorSelecionadoId);
+                if (!ordemParaIniciar || !op) return;
+                setIniciandoPesagem(true);
+                await iniciarPesagem(ordemParaIniciar, op.id, op.nome);
+                setIniciandoPesagem(false);
+                setOrdemParaIniciar(null);
+                setOperadorSelecionadoId("");
+              }}
+            >
+              {iniciandoPesagem ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Iniciar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
