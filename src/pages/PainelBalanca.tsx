@@ -449,18 +449,34 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="space-y-3">
-                {tamanhoBatelada && tamanhoBatelada > 0 && (
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Quantas bateladas você pesou nesta vez?</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={bateladasSessaoPausa}
-                      onChange={(e) => setBateladasSessaoPausa(e.target.value)}
-                      className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-                )}
+                {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
+                  const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
+                  const maxPermitido   = Math.max(0, totalBateladas - bateladasFeitasAntes);
+                  const valorNum       = parseInt(bateladasSessaoPausa);
+                  const excedeu        = bateladasSessaoPausa !== '' && (!Number.isInteger(valorNum) || valorNum > maxPermitido);
+                  return (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Quantas bateladas você pesou nesta vez?</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={maxPermitido}
+                        value={bateladasSessaoPausa}
+                        onChange={(e) => setBateladasSessaoPausa(e.target.value)}
+                        className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${excedeu ? 'border-destructive focus:ring-destructive' : ''}`}
+                      />
+                      {excedeu ? (
+                        <p className="text-xs text-destructive font-medium">
+                          Máximo de {maxPermitido} batelada{maxPermitido !== 1 ? 's' : ''} restante{maxPermitido !== 1 ? 's' : ''} nesta OP.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Faltam {maxPermitido} batelada{maxPermitido !== 1 ? 's' : ''} ({bateladasFeitasAntes} de {totalBateladas} já feitas)
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
                 <Textarea
                   placeholder="Motivo da pausa (opcional)"
                   value={pausaObs}
@@ -471,7 +487,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={pausando}>Cancelar</AlertDialogCancel>
                 <AlertDialogAction
-                  disabled={pausando || !!(tamanhoBatelada && tamanhoBatelada > 0 && bateladasSessaoPausa === '')}
+                  disabled={pausando || !!(tamanhoBatelada && tamanhoBatelada > 0 && (
+                    bateladasSessaoPausa === '' ||
+                    parseInt(bateladasSessaoPausa) > Math.max(0, Math.round(emPesagem.quantidade / tamanhoBatelada) - bateladasFeitasAntes)
+                  ))}
                   onClick={(e) => { e.preventDefault(); pausarOrdem(); }}
                 >
                   {pausando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
