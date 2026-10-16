@@ -328,6 +328,7 @@ export default function PainelManutencao({ papel, perfilId, perfilNome }: Painel
     setTodosOsTecnicos(data ?? []);
   }, []);
 
+
   useEffect(() => {
     fetchOss();
     fetchTecnicos();

@@ -15,10 +15,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LabelList, Cell,
-} from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -225,8 +221,6 @@ function CardOP({ grupo, onApagar }: { grupo: GrupoOP; onApagar: (id: string) =>
 
 // ── Seção de análise ──────────────────────────────────────────────────────────
 
-const CORES = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#ec4899'];
-
 interface RowAnalise {
   label: string;
   kg: number;
@@ -234,82 +228,6 @@ interface RowAnalise {
   tempoMs: number;
   nOps: number;
   kgH: number;
-}
-
-function TabelaAnalise({ rows }: { rows: RowAnalise[] }) {
-  return (
-    <div className="rounded-xl border overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
-          <tr>
-            <th className="text-left px-3 py-2.5 font-medium">Nome</th>
-            <th className="text-right px-3 py-2.5 font-medium">Real pesado</th>
-            <th className="text-right px-3 py-2.5 font-medium">Produção</th>
-            <th className="text-right px-3 py-2.5 font-medium hidden sm:table-cell">Tempo</th>
-            <th className="text-right px-3 py-2.5 font-medium">Nº OPs</th>
-            <th className="text-right px-3 py-2.5 font-medium hidden sm:table-cell">Kg/h</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.label} className="border-t hover:bg-muted/30 transition-colors">
-              <td className="px-3 py-2.5 font-medium">{r.label}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{formatKg(r.kg)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatKg(r.kgNominal)}</td>
-              <td className="px-3 py-2.5 text-right text-muted-foreground hidden sm:table-cell">{fmtDuracao(r.tempoMs)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{r.nOps}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground hidden sm:table-cell">
-                {r.kgH > 0 ? formatKg(r.kgH) : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function GraficoBarras({ rows, cor }: { rows: RowAnalise[]; cor: string }) {
-  const data = rows.map((r) => ({ name: r.label, kg: Math.round(r.kg * 1000) / 1000 }));
-  return (
-    <div className="w-full" style={{ minHeight: 0 }}>
-      <ResponsiveContainer width="100%" height={Math.max(160, Math.min(280, data.length * 44))}>
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 48, left: 4, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="currentColor" className="opacity-10" />
-          <XAxis
-            type="number"
-            tick={{ fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
-          />
-          <YAxis
-            type="category"
-            dataKey="name"
-            tick={{ fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-            width={90}
-          />
-          <Tooltip
-            formatter={(v: number) => [`${formatKg(v)} kg`, 'Real pesado']}
-            cursor={{ fill: 'currentColor', className: 'opacity-5' }}
-          />
-          <Bar dataKey="kg" radius={[0, 4, 4, 0]} maxBarSize={28}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={CORES[i % CORES.length]} />
-            ))}
-            <LabelList
-              dataKey="kg"
-              position="right"
-              formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v))}
-              style={{ fontSize: 10, fontWeight: 600 }}
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
 }
 
 function toRows(map: Map<string, MetricaGrupo>, labelPrefix = ''): RowAnalise[] {
@@ -325,26 +243,189 @@ function toRows(map: Map<string, MetricaGrupo>, labelPrefix = ''): RowAnalise[] 
     .sort((a, b) => b.kg - a.kg);
 }
 
-function SecaoAnalise({
-  icon: Icon,
-  titulo,
-  rows,
-  cor,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  titulo: string;
-  rows: RowAnalise[];
-  cor: string;
-}) {
+// ── KPI Card ──────────────────────────────────────────────────────────────────
+
+interface KpiCardProps {
+  label: string;
+  value: string;
+  unit?: string;
+  legend?: string;
+  accent?: boolean;
+}
+
+function KpiCard({ label, value, unit, legend, accent }: KpiCardProps) {
+  return (
+    <div className={cn(
+      'rounded-xl border bg-card p-4 flex flex-col gap-0.5 shadow-sm',
+      accent && 'border-primary/40',
+    )}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn('text-2xl font-bold tabular-nums leading-tight', accent && 'text-primary')}>
+        {value}
+        {unit && <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>}
+      </p>
+      {legend && <p className="text-[11px] text-muted-foreground mt-0.5">{legend}</p>}
+    </div>
+  );
+}
+
+// ── Cards por Balança ─────────────────────────────────────────────────────────
+
+function CardsBalanca({ rows }: { rows: RowAnalise[] }) {
   if (rows.length === 0) return null;
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-4">
+    <div className="rounded-xl border bg-card p-4 space-y-4 shadow-sm">
       <h3 className="text-sm font-semibold flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        {titulo}
+        <Scale className="h-4 w-4 text-muted-foreground" />
+        Por balança
       </h3>
-      <TabelaAnalise rows={rows} />
-      <GraficoBarras rows={rows} cor={cor} />
+      <div className="flex flex-wrap gap-3">
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            className="rounded-lg border bg-muted/20 dark:bg-muted/10 p-4 flex-1 min-w-[180px] space-y-3"
+          >
+            {/* Nome + ritmo chip */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="font-bold text-base">{r.label}</span>
+              <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap">
+                {r.kgH > 0 ? `${formatKg(r.kgH)} kg/h` : '—'}
+              </span>
+            </div>
+
+            {/* Métricas */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Real pesado</p>
+                <p className="text-xl font-bold tabular-nums text-primary leading-none">{formatKg(r.kg)}</p>
+                <p className="text-[10px] text-muted-foreground">kg</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">Produção</p>
+                <p className="text-xl font-bold tabular-nums leading-none">{formatKg(r.kgNominal)}</p>
+                <p className="text-[10px] text-muted-foreground">kg</p>
+              </div>
+            </div>
+
+            {/* Tempo + OPs */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <span className="text-xs text-muted-foreground tabular-nums">{fmtDuracao(r.tempoMs)} pesando</span>
+              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold">
+                {r.nOps} OP{r.nOps !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Barras horizontais por Operador ───────────────────────────────────────────
+
+function BarrasOperadores({ rows, titulo }: { rows: RowAnalise[]; titulo: string }) {
+  if (rows.length === 0) return null;
+  const maxKg = Math.max(...rows.map((r) => r.kg), 1);
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4 shadow-sm">
+      {/* Cabeçalho + legenda */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          {titulo}
+        </h3>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <span className="inline-block w-3 h-2 rounded-sm bg-primary shrink-0" />
+            real pesado
+          </span>
+          <span className="text-[10px] text-muted-foreground">· produção (nominal)</span>
+          <span className="text-[10px] text-muted-foreground">· kg/h</span>
+        </div>
+      </div>
+
+      {/* Linhas de operador */}
+      <div className="space-y-4">
+        {rows.map((r, i) => {
+          const pct = (r.kg / maxKg) * 100;
+          const showInside = pct > 28;
+
+          return (
+            <div key={r.label}>
+              {/* Desktop: posição+nome | barra | kg/h */}
+              <div className="hidden sm:grid sm:grid-cols-[160px_1fr_96px] items-center gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-semibold text-muted-foreground w-5 text-right shrink-0">{i + 1}</span>
+                  <span className="text-sm font-medium truncate">{r.label}</span>
+                </div>
+                <div className="relative h-7">
+                  <div className="absolute inset-0 bg-muted/40 rounded-full" />
+                  <div
+                    className="absolute left-0 top-0 h-full bg-primary rounded-full flex items-center justify-end overflow-hidden transition-[width] duration-500"
+                    style={{ width: `${pct}%` }}
+                  >
+                    {showInside && (
+                      <span className="mr-2 text-[10px] font-bold text-primary-foreground tabular-nums whitespace-nowrap">
+                        {formatKg(r.kg)} kg
+                      </span>
+                    )}
+                  </div>
+                  {!showInside && (
+                    <span
+                      className="absolute top-1/2 -translate-y-1/2 text-[10px] font-bold tabular-nums text-foreground whitespace-nowrap"
+                      style={{ left: `calc(${pct}% + 6px)` }}
+                    >
+                      {formatKg(r.kg)} kg
+                    </span>
+                  )}
+                </div>
+                <span className="text-right text-xs tabular-nums font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                  {r.kgH > 0 ? `${formatKg(r.kgH)} kg/h` : '—'}
+                </span>
+              </div>
+              <p className="hidden sm:block text-[10px] text-muted-foreground mt-0.5 pl-[172px]">
+                Produção {formatKg(r.kgNominal)} kg
+              </p>
+
+              {/* Mobile: nome+kg/h em cima, barra embaixo */}
+              <div className="sm:hidden space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground w-5 text-right shrink-0">{i + 1}</span>
+                    <span className="text-sm font-medium">{r.label}</span>
+                  </div>
+                  <span className="text-xs tabular-nums font-semibold text-amber-600 dark:text-amber-400 shrink-0">
+                    {r.kgH > 0 ? `${formatKg(r.kgH)} kg/h` : '—'}
+                  </span>
+                </div>
+                <div className="relative h-7 w-full">
+                  <div className="absolute inset-0 bg-muted/40 rounded-full" />
+                  <div
+                    className="absolute left-0 top-0 h-full bg-primary rounded-full flex items-center justify-end overflow-hidden transition-[width] duration-500"
+                    style={{ width: `${pct}%` }}
+                  >
+                    {showInside && (
+                      <span className="mr-2 text-[10px] font-bold text-primary-foreground tabular-nums whitespace-nowrap">
+                        {formatKg(r.kg)} kg
+                      </span>
+                    )}
+                  </div>
+                  {!showInside && (
+                    <span
+                      className="absolute top-1/2 -translate-y-1/2 text-[10px] font-bold tabular-nums text-foreground whitespace-nowrap"
+                      style={{ left: `calc(${pct}% + 6px)` }}
+                    >
+                      {formatKg(r.kg)} kg
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground">Produção {formatKg(r.kgNominal)} kg</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -476,6 +557,17 @@ export default function HistoricoBalancas() {
     return toRows(map);
   }, [sessoes, filtroBalanca]);
 
+  const kpiAnalises = useMemo(() => {
+    const fechadas = sessoes.filter((s) => s.fim);
+    const totalKg      = fechadas.reduce((a, s) => a + (s.kg_pesado  ?? 0), 0);
+    const totalNominal = fechadas.reduce((a, s) => a + (s.kg_nominal ?? 0), 0);
+    const totalMs      = fechadas.reduce((a, s) => a + Math.max(0, parseUtc(s.fim!).getTime() - parseUtc(s.inicio).getTime()), 0);
+    const ops          = new Set(fechadas.map((s) => s.ordem_id).filter(Boolean));
+    const totalHoras   = totalMs / 3600000;
+    const kgH          = totalHoras > 0 ? totalKg / totalHoras : 0;
+    return { totalKg, totalNominal, nOps: ops.size, kgH, totalHoras };
+  }, [sessoes]);
+
   // ── Render ──
   return (
     <div className="space-y-4 w-full pb-16">
@@ -582,18 +674,40 @@ export default function HistoricoBalancas() {
       ) : (
         /* ── Visão Análises ── */
         <div className="space-y-4">
-          <SecaoAnalise
-            icon={Scale}
-            titulo="Por Balança"
-            rows={rowsBalanca}
-            cor="#3b82f6"
-          />
-          <SecaoAnalise
-            icon={Users}
-            titulo={filtroBalanca !== 'todas' ? `Por Operador — Balança ${filtroBalanca}` : 'Por Operador'}
+          {/* KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <KpiCard
+              label="Real pesado"
+              value={formatKg(kpiAnalises.totalKg)}
+              unit="kg"
+              legend="soma das pesagens fechadas"
+              accent
+            />
+            <KpiCard
+              label="Produção"
+              value={formatKg(kpiAnalises.totalNominal)}
+              unit="kg"
+              legend="soma nominal das OPs"
+            />
+            <KpiCard
+              label="OPs pesadas"
+              value={String(kpiAnalises.nOps)}
+              legend="ordens distintas no período"
+            />
+            <KpiCard
+              label="Kg/h médio"
+              value={kpiAnalises.kgH > 0 ? formatKg(kpiAnalises.kgH) : '—'}
+              unit={kpiAnalises.kgH > 0 ? 'kg/h' : undefined}
+              legend={`${kpiAnalises.totalHoras.toFixed(1)}h pesando total`}
+            />
+          </div>
+
+          <CardsBalanca rows={rowsBalanca} />
+          <BarrasOperadores
             rows={rowsOperador}
-            cor="#10b981"
+            titulo={filtroBalanca !== 'todas' ? `Por operador — Balança ${filtroBalanca}` : 'Por operador'}
           />
+
           {rowsBalanca.length === 0 && rowsOperador.length === 0 && (
             <div className="text-center py-16 text-sm text-muted-foreground">
               Nenhuma sessão fechada encontrada no período.
