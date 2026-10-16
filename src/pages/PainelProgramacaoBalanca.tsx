@@ -379,6 +379,11 @@ export default function PainelProgramacaoBalanca() {
   const [novaDataReprogramar, setNovaDataReprogramar] = useState("");
   const [salvandoReprogramar, setSalvandoReprogramar] = useState(false);
 
+  const [devolverOrdem, setDevolverOrdem] = useState<Ordem | null>(null);
+  const [devolverDados, setDevolverDados] = useState<{ jaProduzidoKg: number; faltaKg: number } | null>(null);
+  const [devolverBatelada, setDevolverBatelada] = useState('');
+  const [salvandoDevolver, setSalvandoDevolver] = useState(false);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
@@ -520,8 +525,10 @@ export default function PainelProgramacaoBalanca() {
     }
   };
 
-  const devolverParaFila = async (ordem: Ordem) => {
-    const { error } = await supabase.from("ordens").update({ status: "pendente" } as any).eq("id", ordem.id);
+  const executarDevolucao = async (ordem: Ordem, novaBatelada: number | null) => {
+    const update: any = { status: "pendente" };
+    if (novaBatelada !== null) update.tamanho_batelada = novaBatelada;
+    const { error } = await supabase.from("ordens").update(update).eq("id", ordem.id);
     if (error) {
       toast({ title: "Erro ao devolver ordem", description: error.message, variant: "destructive" });
       return;
@@ -530,9 +537,29 @@ export default function PainelProgramacaoBalanca() {
       ordem_id: ordem.id,
       status_anterior: "em_pesagem",
       status_novo: "pendente",
+      obs: novaBatelada !== null ? `Devolvida — nova batelada ${formatKg(novaBatelada)} kg` : undefined,
     });
-    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "pendente" } : o));
+    setOrdens((prev) => prev.map((o) =>
+      o.id === ordem.id ? { ...o, status: "pendente", ...(novaBatelada !== null ? { tamanho_batelada: novaBatelada } : {}) } : o
+    ));
     toast({ title: "Ordem devolvida para a fila" });
+  };
+
+  const devolverParaFila = async (ordem: Ordem) => {
+    const { data: pesagensData } = await (supabase as any)
+      .from("pesagens")
+      .select("kg_nominal")
+      .eq("ordem_id", ordem.id)
+      .not("fim", "is", null);
+    const jaProduzidoKg = (pesagensData ?? []).reduce((s: number, p: any) => s + (p.kg_nominal ?? 0), 0);
+    const faltaKg = ordem.quantidade - jaProduzidoKg;
+    if (jaProduzidoKg > 0 && faltaKg > 0) {
+      setDevolverOrdem(ordem);
+      setDevolverDados({ jaProduzidoKg, faltaKg });
+      setDevolverBatelada('');
+      return;
+    }
+    await executarDevolucao(ordem, null);
   };
 
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
@@ -706,6 +733,92 @@ export default function PainelProgramacaoBalanca() {
         onClose={() => setOrdemEditando(null)}
         onSalvar={handleEditar}
       />
+
+      {/* Dialog: Devolver com nova batelada */}
+      <Dialog
+        open={!!devolverOrdem}
+        onOpenChange={(open) => { if (!open) { setDevolverOrdem(null); setDevolverDados(null); setDevolverBatelada(''); } }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Devolver para fila</DialogTitle>
+            <DialogDescription>Esta OP já tem pesagens registradas. Defina a batelada do restante.</DialogDescription>
+          </DialogHeader>
+          {devolverOrdem && devolverDados && (() => {
+            const batelada = parseFloat(devolverBatelada.replace(',', '.'));
+            const valida = !isNaN(batelada) && batelada > 0 && batelada <= devolverDados.faltaKg;
+            const nBat = valida ? Math.round(devolverDados.faltaKg / batelada) : 0;
+            const naoDivide = valida && Math.abs((nBat * batelada) - devolverDados.faltaKg) > 0.01;
+            return (
+              <div className="space-y-4 py-1">
+                <div className="rounded-lg bg-muted/50 border px-4 py-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total da OP</span>
+                    <span className="font-semibold tabular-nums">{formatKg(devolverOrdem.quantidade)} kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Já pesado</span>
+                    <span className="font-semibold tabular-nums text-green-600 dark:text-green-400">{formatKg(devolverDados.jaProduzidoKg)} kg</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1 mt-1">
+                    <span className="font-medium">Falta pesar</span>
+                    <span className="font-bold tabular-nums text-primary">{formatKg(devolverDados.faltaKg)} kg</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Batelada (kg) do restante</label>
+                  <input
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={devolverBatelada}
+                    onChange={(e) => setDevolverBatelada(e.target.value)}
+                    placeholder={`Máx. ${formatKg(devolverDados.faltaKg)} kg`}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    autoFocus
+                  />
+                  {valida && (
+                    <p className={`text-xs font-medium ${naoDivide ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                      = {nBat} batelada{nBat !== 1 ? 's' : ''} de {formatKg(batelada)} kg
+                      {naoDivide && ' — não fecha certinho'}
+                    </p>
+                  )}
+                  {devolverBatelada !== '' && !valida && (
+                    <p className="text-xs text-destructive font-medium">
+                      Deve ser entre 0 e {formatKg(devolverDados.faltaKg)} kg.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" disabled={salvandoDevolver} onClick={() => { setDevolverOrdem(null); setDevolverDados(null); setDevolverBatelada(''); }}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={salvandoDevolver || (() => {
+                if (!devolverDados) return true;
+                const b = parseFloat(devolverBatelada.replace(',', '.'));
+                return isNaN(b) || b <= 0 || b > devolverDados.faltaKg;
+              })()}
+              onClick={async () => {
+                if (!devolverOrdem || !devolverDados) return;
+                const batelada = parseFloat(devolverBatelada.replace(',', '.'));
+                setSalvandoDevolver(true);
+                await executarDevolucao(devolverOrdem, batelada);
+                setSalvandoDevolver(false);
+                setDevolverOrdem(null);
+                setDevolverDados(null);
+                setDevolverBatelada('');
+              }}
+            >
+              {salvandoDevolver ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
