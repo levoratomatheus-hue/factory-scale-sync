@@ -716,6 +716,9 @@ export default function PainelProgramacao() {
   const [voltando, setVoltando] = useState(false);
   const [ordemParaVoltarPesagem, setOrdemParaVoltarPesagem] = useState<Ordem | null>(null);
   const [voltandoPesagem, setVoltandoPesagem] = useState(false);
+  const [voltarPesagemDados, setVoltarPesagemDados] = useState<{ jaProduzidoKg: number; faltaKg: number } | null>(null);
+  const [voltarPesagemBatelada, setVoltarPesagemBatelada] = useState('');
+  const [voltarPesagemCarregando, setVoltarPesagemCarregando] = useState(false);
   const [ordemParaForcar, setOrdemParaForcar] = useState<Ordem | null>(null);
   const [forcarHoraInicio, setForcarHoraInicio] = useState("");
   const [forcarHoraFim, setForcarHoraFim] = useState("");
@@ -1140,27 +1143,54 @@ export default function PainelProgramacao() {
     setOrdemParaVoltar(null);
   };
 
+  const abrirVoltarParaPesagem = async (ordem: Ordem) => {
+    setOrdemParaVoltarPesagem(ordem);
+    setVoltarPesagemDados(null);
+    setVoltarPesagemBatelada('');
+    setVoltarPesagemCarregando(true);
+    const { data } = await (supabase as any)
+      .from('pesagens')
+      .select('kg_nominal')
+      .eq('ordem_id', ordem.id)
+      .not('fim', 'is', null);
+    const jaProduzidoKg = (data ?? []).reduce((s: number, p: any) => s + (p.kg_nominal ?? 0), 0);
+    const faltaKg = ordem.quantidade - jaProduzidoKg;
+    setVoltarPesagemDados({ jaProduzidoKg, faltaKg });
+    setVoltarPesagemCarregando(false);
+  };
+
   const handleVoltarParaPesagem = async () => {
     if (!ordemParaVoltarPesagem) return;
     setVoltandoPesagem(true);
+    const jaProduzidoKg = voltarPesagemDados?.jaProduzidoKg ?? 0;
+    const novaBatelada = voltarPesagemBatelada ? parseFloat(voltarPesagemBatelada.replace(',', '.')) : null;
+    const update: any = { status: "pendente", bateladas_feitas: 0, obs_pausa: null };
+    if (novaBatelada && novaBatelada > 0) update.tamanho_batelada = novaBatelada;
     const { error } = await supabase
       .from("ordens")
-      .update({ status: "pendente", bateladas_feitas: 0, obs_pausa: null } as any)
+      .update(update)
       .eq("id", ordemParaVoltarPesagem.id);
     if (!error) {
       supabase.from("historico").insert({
         ordem_id: ordemParaVoltarPesagem.id,
         status_anterior: ordemParaVoltarPesagem.status,
         status_novo: "pendente",
-        obs: "Retorno para pesagem solicitado pelo gestor — pesagem anterior cancelada",
+        obs: jaProduzidoKg > 0
+          ? `Retorno para pesagem — ${formatKg(jaProduzidoKg)} kg já pesados, faltam ${formatKg(voltarPesagemDados?.faltaKg ?? 0)} kg`
+          : "Retorno para pesagem solicitado pelo gestor — pesagem anterior cancelada",
       } as any);
-      setOrdens((prev) => prev.map((o) => o.id === ordemParaVoltarPesagem!.id ? { ...o, status: "pendente", bateladas_feitas: 0, obs_pausa: null } : o));
+      setOrdens((prev) => prev.map((o) => o.id === ordemParaVoltarPesagem!.id
+        ? { ...o, status: "pendente", bateladas_feitas: 0, obs_pausa: null, ...(novaBatelada ? { tamanho_batelada: novaBatelada } : {}) }
+        : o
+      ));
       toast({ title: "OP voltou para a pesagem" });
     } else {
       toast({ title: "Erro ao voltar para pesagem", description: error.message, variant: "destructive" });
     }
     setVoltandoPesagem(false);
     setOrdemParaVoltarPesagem(null);
+    setVoltarPesagemDados(null);
+    setVoltarPesagemBatelada('');
   };
 
   const handleForcarConclusao = async () => {
@@ -1801,7 +1831,7 @@ export default function PainelProgramacao() {
                     onEditar={setOrdemEditando}
                     onExcluir={setOrdemParaExcluir}
                     onVoltarFila={setOrdemParaVoltar}
-                    onVoltarParaPesagem={setOrdemParaVoltarPesagem}
+                    onVoltarParaPesagem={abrirVoltarParaPesagem}
                     onForcarConclusao={setOrdemParaForcar}
                     onRegistrarDia={handleRegistrarDiaClick}
                     onVerDetalhes={setOrdemDetalhe}
@@ -2030,21 +2060,86 @@ export default function PainelProgramacao() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => !open && setOrdemParaVoltarPesagem(null)}>
+      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => { if (!open) { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Voltar para pesagem?</DialogTitle>
-            <DialogDescription>
-              <span className="font-medium text-foreground">{ordemParaVoltarPesagem?.produto}</span>
-              <br />
-              A pesagem anterior será desfeita. O operador terá que pesar a OP inteira novamente. O estoque não será alterado.
+            <DialogDescription asChild>
+              <div>
+                <span className="font-medium text-foreground">{ordemParaVoltarPesagem?.produto}</span>
+                {!voltarPesagemCarregando && voltarPesagemDados && voltarPesagemDados.jaProduzidoKg > 0 && voltarPesagemDados.faltaKg > 0 ? (
+                  <p className="mt-1">A OP já tem <strong>{formatKg(voltarPesagemDados.jaProduzidoKg)} kg</strong> pesados. O operador vai pesar só o restante ({formatKg(voltarPesagemDados.faltaKg)} kg). O estoque não será alterado.</p>
+                ) : (
+                  <p className="mt-1">A pesagem anterior será desfeita. O operador terá que pesar a OP inteira novamente. O estoque não será alterado.</p>
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
+
+          {voltarPesagemCarregando && (
+            <div className="flex justify-center py-2">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {!voltarPesagemCarregando && voltarPesagemDados && voltarPesagemDados.jaProduzidoKg > 0 && voltarPesagemDados.faltaKg > 0 && (() => {
+            const batelada = parseFloat(voltarPesagemBatelada.replace(',', '.'));
+            const valida = !isNaN(batelada) && batelada > 0 && batelada <= voltarPesagemDados.faltaKg;
+            const nBat = valida ? Math.round(voltarPesagemDados.faltaKg / batelada) : 0;
+            const naoDivide = valida && Math.abs((nBat * batelada) - voltarPesagemDados.faltaKg) > 0.01;
+            return (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-muted/50 border px-4 py-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total da OP</span>
+                    <span className="font-semibold tabular-nums">{formatKg(ordemParaVoltarPesagem!.quantidade)} kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Já pesado</span>
+                    <span className="font-semibold tabular-nums text-green-600 dark:text-green-400">{formatKg(voltarPesagemDados.jaProduzidoKg)} kg</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1 mt-1">
+                    <span className="font-medium">Falta pesar</span>
+                    <span className="font-bold tabular-nums text-primary">{formatKg(voltarPesagemDados.faltaKg)} kg</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Batelada (kg) do restante</label>
+                  <input
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={voltarPesagemBatelada}
+                    onChange={(e) => setVoltarPesagemBatelada(e.target.value)}
+                    placeholder={`Máx. ${formatKg(voltarPesagemDados.faltaKg)} kg`}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    autoFocus
+                  />
+                  {valida && (
+                    <p className={`text-xs font-medium ${naoDivide ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                      = {nBat} batelada{nBat !== 1 ? 's' : ''} de {formatKg(batelada)} kg
+                      {naoDivide && ' — não fecha certinho'}
+                    </p>
+                  )}
+                  {voltarPesagemBatelada !== '' && !valida && (
+                    <p className="text-xs text-destructive font-medium">Deve ser entre 0 e {formatKg(voltarPesagemDados.faltaKg)} kg.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOrdemParaVoltarPesagem(null)} disabled={voltandoPesagem}>
+            <Button variant="outline" onClick={() => { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); }} disabled={voltandoPesagem}>
               Cancelar
             </Button>
-            <Button onClick={handleVoltarParaPesagem} disabled={voltandoPesagem}>
+            <Button
+              onClick={handleVoltarParaPesagem}
+              disabled={voltandoPesagem || voltarPesagemCarregando || (
+                !!(voltarPesagemDados && voltarPesagemDados.jaProduzidoKg > 0 && voltarPesagemDados.faltaKg > 0) &&
+                (() => { const b = parseFloat(voltarPesagemBatelada.replace(',', '.')); return isNaN(b) || b <= 0 || b > (voltarPesagemDados?.faltaKg ?? 0); })()
+              )}
+            >
               {voltandoPesagem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar
             </Button>

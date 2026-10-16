@@ -46,6 +46,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [bateladasJaPesadas, setBateladasJaPesadas] = useState(0);
   const [jaConcluida, setJaConcluida] = useState(false);
+  const [jaProduzidoKg, setJaProduzidoKg] = useState(0);
   const [bateladasSessaoPausa, setBateladasSessaoPausa] = useState('');
   const [obsPausaInicial, setObsPausaInicial] = useState<string | null>(null);
   const [pausarOpen, setPausarOpen] = useState(false);
@@ -91,6 +92,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       setLoadingOrdem(false);
       setBateladasJaPesadas(0);
       setJaConcluida(false);
+      setJaProduzidoKg(0);
       return;
     }
 
@@ -108,16 +110,17 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     Promise.all([
       supabase.from("ordens").select("formula_id, tamanho_batelada, obs_pausa").eq("id", emPesagem.id).single(),
       supabase.from("ordens_formula").select("sequencia, materia_prima, quantidade_kg").eq("ordem_id", emPesagem.id).order("sequencia", { ascending: true }),
-      (supabase as any).from("pesagens").select("bateladas, motivo_fim").eq("ordem_id", emPesagem.id).not("fim", "is", null),
+      (supabase as any).from("pesagens").select("bateladas, motivo_fim, kg_nominal").eq("ordem_id", emPesagem.id).not("fim", "is", null),
     ]).then(([ordemRes, formulaRes, pesagensRes]) => {
       if (cancelled) return;
       const row = ordemRes.data as any;
       const hasC = !!(formulaRes.data && formulaRes.data.length > 0);
-      const sessoesFechadas = (pesagensRes.data ?? []) as { bateladas: number | null; motivo_fim: string | null }[];
+      const sessoesFechadas = (pesagensRes.data ?? []) as { bateladas: number | null; motivo_fim: string | null; kg_nominal: number | null }[];
       setFormulaId(row?.formula_id ?? null);
       setTamanhoBatelada(row?.tamanho_batelada ?? null);
       setBateladasJaPesadas(sessoesFechadas.reduce((s, p) => s + (p.bateladas ?? 0), 0));
       setJaConcluida(sessoesFechadas.some((p) => p.motivo_fim === 'conclusao'));
+      setJaProduzidoKg(sessoesFechadas.reduce((s, p) => s + (p.kg_nominal ?? 0), 0));
       setObsPausaInicial(row?.obs_pausa ?? null);
       if (hasC) {
         setCustomItens(formulaRes.data as FormulaRow[]);
@@ -304,16 +307,15 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             );
           })()}
 
-          {jaConcluida && tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-            const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
-            const faltam = Math.max(0, totalBateladas - bateladasJaPesadas);
-            if (faltam === 0) return null;
+          {jaProduzidoKg > 0 && tamanhoBatelada && tamanhoBatelada > 0 && (() => {
+            const faltaKg = Math.max(0, emPesagem.quantidade - jaProduzidoKg);
+            const bateladasRestantes = Math.round(faltaKg / tamanhoBatelada);
+            if (faltaKg <= 0) return null;
             return (
               <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-400 dark:border-orange-600 px-4 py-3 flex items-start gap-3">
                 <span className="text-orange-500 text-xl shrink-0 mt-0.5">⚠️</span>
                 <p className="text-sm font-bold text-orange-900 dark:text-orange-200 leading-snug">
-                  Esta OP já foi pesada antes ({bateladasJaPesadas} batelada{bateladasJaPesadas !== 1 ? 's' : ''}).
-                  {' '}A quantidade aumentou — pese mais {faltam} batelada{faltam !== 1 ? 's' : ''} (novo total: {totalBateladas}).
+                  OP já tem {formatKg(jaProduzidoKg)} kg pesados — pese {bateladasRestantes} batelada{bateladasRestantes !== 1 ? 's' : ''} de {formatKg(tamanhoBatelada)} kg (faltam {formatKg(faltaKg)} kg).
                 </p>
               </div>
             );
@@ -424,16 +426,18 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-                const totalBateladas  = Math.round(emPesagem.quantidade / tamanhoBatelada);
-                const bateladasSessao = Math.max(0, totalBateladas - bateladasJaPesadas);
+                const faltaKg = Math.max(0, emPesagem.quantidade - jaProduzidoKg);
+                const bateladasSessao = Math.round(faltaKg / tamanhoBatelada);
                 return (
                   <div className="rounded-lg bg-muted/50 border px-4 py-3 text-sm space-y-0.5">
                     <p className="font-medium">
                       {bateladasSessao} batelada{bateladasSessao !== 1 ? 's' : ''} serão registradas nesta conclusão
                     </p>
-                    <p className="text-muted-foreground text-xs">
-                      {bateladasJaPesadas} de {totalBateladas} já feitas em etapas anteriores
-                    </p>
+                    {jaProduzidoKg > 0 && (
+                      <p className="text-muted-foreground text-xs">
+                        {formatKg(jaProduzidoKg)} kg já pesados em etapas anteriores — faltam {formatKg(faltaKg)} kg
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -443,11 +447,10 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   onClick={async () => {
                     setConfirmOpen(false);
                     const temBatelada = !!(tamanhoBatelada && tamanhoBatelada > 0);
-                    const bateladasSessao = temBatelada
-                      ? Math.max(0, Math.round(emPesagem.quantidade / tamanhoBatelada!) - bateladasJaPesadas)
-                      : 0;
+                    const faltaKgConc = temBatelada ? Math.max(0, emPesagem.quantidade - jaProduzidoKg) : 0;
+                    const bateladasSessao = temBatelada ? Math.round(faltaKgConc / tamanhoBatelada!) : 0;
                     const kgPesado  = temBatelada ? bateladasSessao * somaFormula      : somaFormula;
-                    const kgNominal = temBatelada ? bateladasSessao * tamanhoBatelada! : emPesagem.quantidade;
+                    const kgNominal = temBatelada ? bateladasSessao * tamanhoBatelada! : faltaKgConc || emPesagem.quantidade;
                     await fecharSessaoPesagem(emPesagem.id, bateladasSessao, kgPesado, kgNominal, "conclusao");
                     await (supabase as any).from("ordens").update({ bateladas_feitas: 0, obs_pausa: null }).eq("id", emPesagem.id);
                     const err = await concluirOrdem(emPesagem.id);
@@ -471,8 +474,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </AlertDialogHeader>
               <div className="space-y-3">
                 {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-                  const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
-                  const maxPermitido   = Math.max(0, totalBateladas - bateladasJaPesadas);
+                  const faltaKgPausa   = Math.max(0, emPesagem.quantidade - jaProduzidoKg);
+                  const maxPermitido   = Math.round(faltaKgPausa / tamanhoBatelada);
                   const valorNum       = parseInt(bateladasSessaoPausa);
                   const excedeu        = bateladasSessaoPausa !== '' && (!Number.isInteger(valorNum) || valorNum > maxPermitido);
                   return (
@@ -492,7 +495,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Faltam {maxPermitido} batelada{maxPermitido !== 1 ? 's' : ''} ({bateladasJaPesadas} de {totalBateladas} já feitas)
+                          Faltam {maxPermitido} batelada{maxPermitido !== 1 ? 's' : ''} ({formatKg(faltaKgPausa)} kg restantes)
                         </p>
                       )}
                     </div>
@@ -510,7 +513,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 <AlertDialogAction
                   disabled={pausando || !!(tamanhoBatelada && tamanhoBatelada > 0 && (
                     bateladasSessaoPausa === '' ||
-                    parseInt(bateladasSessaoPausa) > Math.max(0, Math.round(emPesagem.quantidade / tamanhoBatelada) - bateladasJaPesadas)
+                    parseInt(bateladasSessaoPausa) > Math.round(Math.max(0, emPesagem.quantidade - jaProduzidoKg) / tamanhoBatelada)
                   ))}
                   onClick={(e) => { e.preventDefault(); pausarOrdem(); }}
                 >
