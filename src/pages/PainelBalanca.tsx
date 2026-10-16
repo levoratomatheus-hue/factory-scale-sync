@@ -137,7 +137,18 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     hasCustom ? null : tamanhoBatelada
   );
 
-  const displayItens: FormulaRow[] = hasCustom ? customItens : formulaItens;
+  const displayItens: FormulaRow[] = useMemo(() => {
+    if (!hasCustom) return formulaItens;
+    // Fórmula custom: se a OP voltou com nova batelada, escalar proporcionalmente
+    if (jaProduzidoKg > 0 && tamanhoBatelada && tamanhoBatelada > 0 && customItens.length > 0) {
+      const originalSum = customItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0);
+      if (originalSum > 0) {
+        const fator = tamanhoBatelada / originalSum;
+        return customItens.map((i) => ({ ...i, quantidade_kg: Math.round(i.quantidade_kg * fator * 1000) / 1000 }));
+      }
+    }
+    return customItens;
+  }, [hasCustom, customItens, formulaItens, jaProduzidoKg, tamanhoBatelada]);
   const somaFormula = useMemo(() => displayItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0), [displayItens]);
   const isLoadingFormula = loadingOrdem || (!hasCustom && loadingFormula);
   const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
@@ -294,7 +305,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             {formatKg(emPesagem.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
 
-          {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
+          {tamanhoBatelada && tamanhoBatelada > 0 && !(jaProduzidoKg > 0 && emPesagem.quantidade - jaProduzidoKg > 0) && (() => {
             const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
             return (
               <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700 px-4 py-3">
