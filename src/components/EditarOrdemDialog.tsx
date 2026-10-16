@@ -61,7 +61,7 @@ function parseObsItems(obs: string | null): { qty: string; mp: string }[] {
       return filled.slice(0, 4);
     }
   } catch { /* não é JSON */ }
-  return vazio;
+  return EMPTY_OBS_ITEMS;
 }
 
 export const EditarOrdemDialog = memo(function EditarOrdemDialog({

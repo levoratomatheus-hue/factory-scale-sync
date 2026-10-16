@@ -704,7 +704,7 @@ export default function PainelProgramacaoBalanca() {
       <EditarOrdemDialog
         ordem={ordemEditando}
         onClose={() => setOrdemEditando(null)}
-        onSave={handleEditar}
+        onSalvar={handleEditar}
       />
     </div>
   );
