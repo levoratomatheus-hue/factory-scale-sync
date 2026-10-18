@@ -936,14 +936,11 @@ export default function PainelProgramacao() {
       ...comPosicao,
     ]);
 
-    const results = await Promise.all(
-      comPosicao.map((o) =>
-        supabase.from("ordens").update({ posicao: o.posicao }).eq("id", o.id)
-      )
-    );
+    const ids = comPosicao.map((o) => o.id);
+    const posicoes = comPosicao.map((_, i) => i + 1);
+    const { error } = await supabase.rpc('reordenar_posicoes', { p_ids: ids, p_posicoes: posicoes });
 
-    const falhou = results.some((r) => r.error);
-    if (falhou) {
+    if (error) {
       setOrdens(anterior);
       toast({ title: "Erro ao salvar sequência", description: "Tente novamente.", variant: "destructive" });
     }

@@ -419,12 +419,11 @@ export default function PainelProgramacaoBalanca() {
       ...prev.filter((o) => o.balanca !== balanca),
       ...comPosicao,
     ]);
-    const results = await Promise.all(
-      comPosicao.map((o) =>
-        supabase.from("ordens").update({ posicao_balanca: o.posicao_balanca }).eq("id", o.id)
-      )
-    );
-    if (results.some((r) => r.error)) {
+    const ids = comPosicao.map((o) => o.id);
+    const posicoes = comPosicao.map((_, i) => i + 1);
+    const { error } = await supabase.rpc('reordenar_posicoes_balanca', { p_ids: ids, p_posicoes: posicoes });
+
+    if (error) {
       setOrdens(anterior);
       toast({ title: "Erro ao salvar sequência", description: "Tente novamente.", variant: "destructive" });
     }
