@@ -3,20 +3,28 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight, Search } from 'lucide-react';
 import Login from './Login';
 
-const PainelGestor            = lazy(() => import('./PainelGestor'));
-const PainelBalanca           = lazy(() => import('./PainelBalanca'));
-const CadastroOperadores      = lazy(() => import('./CadastroOperadores'));
-const HistoricoBalancas       = lazy(() => import('./HistoricoBalancas'));
-const PainelMistura           = lazy(() => import('./PainelMistura'));
-const PainelLinha             = lazy(() => import('./PainelLinha'));
-const CriarOrdem              = lazy(() => import('./CriarOrdem'));
-const PainelHistorico         = lazy(() => import('./PainelHistorico'));
-const PainelAnalises          = lazy(() => import('./PainelAnalises'));
-const PainelLiberacao         = lazy(() => import('./PainelLiberacao'));
-const ImportarProgramacao     = lazy(() => import('./ImportarProgramacao'));
-const ImportarExcelLab        = lazy(() => import('./ImportarExcelLab'));
-const PainelProgramacao       = lazy(() => import('./PainelProgramacao'));
-const PainelProgramacaoBalanca = lazy(() => import('./PainelProgramacaoBalanca'));
+const importPainelGestor             = () => import('./PainelGestor');
+const importPainelProgramacao        = () => import('./PainelProgramacao');
+const importPainelProgramacaoBalanca = () => import('./PainelProgramacaoBalanca');
+const importPainelLinha              = () => import('./PainelLinha');
+const importPainelAnalises           = () => import('./PainelAnalises');
+const importPainelLiberacao          = () => import('./PainelLiberacao');
+const importHistoricoBalancas        = () => import('./HistoricoBalancas');
+
+const PainelGestor             = lazy(importPainelGestor);
+const PainelBalanca            = lazy(() => import('./PainelBalanca'));
+const CadastroOperadores       = lazy(() => import('./CadastroOperadores'));
+const HistoricoBalancas        = lazy(importHistoricoBalancas);
+const PainelMistura            = lazy(() => import('./PainelMistura'));
+const PainelLinha              = lazy(importPainelLinha);
+const CriarOrdem               = lazy(() => import('./CriarOrdem'));
+const PainelHistorico          = lazy(() => import('./PainelHistorico'));
+const PainelAnalises           = lazy(importPainelAnalises);
+const PainelLiberacao          = lazy(importPainelLiberacao);
+const ImportarProgramacao      = lazy(() => import('./ImportarProgramacao'));
+const ImportarExcelLab         = lazy(() => import('./ImportarExcelLab'));
+const PainelProgramacao        = lazy(importPainelProgramacao);
+const PainelProgramacaoBalanca = lazy(importPainelProgramacaoBalanca);
 const PainelConsultaFormula   = lazy(() => import('./PainelConsultaFormula'));
 const PainelComercial         = lazy(() => import('./PainelComercial'));
 const CadastroEquipamentos    = lazy(() => import('./CadastroEquipamentos'));
@@ -269,13 +277,25 @@ export default function Index() {
   const [prefillLote, setPrefillLote] = useState<number | undefined>(undefined);
 
   useEffect(() => {
-    // Pré-aquece chunks dos painéis mais acessados para eliminar spinner no primeiro clique
-    const t = setTimeout(() => {
-      import('./PainelGestor');
-      import('./PainelProgramacao');
-      import('./PainelBalanca');
-    }, 300);
-    return () => clearTimeout(t);
+    // Pré-carrega chunks prioritários em idle para eliminar spinner no primeiro clique
+    const priorityImports = [
+      importPainelGestor,
+      importPainelProgramacao,
+      importPainelProgramacaoBalanca,
+      importPainelLinha,
+      importPainelAnalises,
+      importPainelLiberacao,
+      importHistoricoBalancas,
+    ];
+    let handle: number | ReturnType<typeof setTimeout>;
+    const prefetch = () => priorityImports.forEach(fn => fn().catch(() => {}));
+    if ('requestIdleCallback' in window) {
+      handle = requestIdleCallback(prefetch);
+      return () => cancelIdleCallback(handle as number);
+    } else {
+      handle = setTimeout(prefetch, 2000);
+      return () => clearTimeout(handle as ReturnType<typeof setTimeout>);
+    }
   }, []);
 
   // Pré-aquece caches em background para evitar espera na primeira abertura das telas
