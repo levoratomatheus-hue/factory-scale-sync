@@ -472,10 +472,12 @@ export default function HistoricoBalancas() {
     const ini = dataInicio ? `${dataInicio}T00:00:00` : undefined;
     const fim  = dataFim   ? `${dataFim}T23:59:59`    : undefined;
 
+    const LIMIT = 2000;
     let query = (supabase as any)
       .from('pesagens')
       .select('id, ordem_id, operador_nome, balanca, lote, produto, inicio, fim, bateladas, kg_pesado, kg_nominal, motivo_fim')
-      .order('inicio', { ascending: false });
+      .order('inicio', { ascending: false })
+      .limit(LIMIT);
 
     if (ini) query = query.gte('inicio', ini);
     if (fim) query = query.lte('inicio', fim);
@@ -686,9 +688,16 @@ export default function HistoricoBalancas() {
             </div>
           )}
           {grupos.length > 0 && (
-            <div className="flex items-center justify-between gap-4 px-1 text-sm text-muted-foreground">
-              <span>{grupos.length} OP{grupos.length !== 1 ? 's' : ''}</span>
-              <span className="font-medium text-foreground">{formatKg(totalKgHist)} kg pesados (real)</span>
+            <div className="flex flex-col gap-1.5 px-1">
+              <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
+                <span>{grupos.length} OP{grupos.length !== 1 ? 's' : ''}</span>
+                <span className="font-medium text-foreground">{formatKg(totalKgHist)} kg pesados (real)</span>
+              </div>
+              {sessoes.length === 2000 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 text-center">
+                  Mostrando os 2.000 registros mais recentes — refine o período para ver dados anteriores.
+                </p>
+              )}
             </div>
           )}
         </>
