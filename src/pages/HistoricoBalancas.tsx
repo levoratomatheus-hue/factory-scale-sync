@@ -103,40 +103,61 @@ function CardOP({ grupo, onApagar }: { grupo: GrupoOP; onApagar: (id: string) =>
   const [apagando, setApagando] = useState(false);
   return (
     <>
-    <div className="rounded-xl border bg-card overflow-hidden">
+    <div>
       <button
-        className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-muted/40 transition-colors"
+        className="w-full text-left grid grid-cols-[1fr_110px_110px_24px] sm:grid-cols-[1fr_90px_110px_110px_90px_24px] items-center gap-x-3 px-3 py-2 hover:bg-muted/40 transition-colors"
         onClick={() => setOpen((v) => !v)}
       >
-        <ChevronDown
-          className={cn('h-4 w-4 shrink-0 mt-0.5 text-muted-foreground transition-transform duration-200', open && 'rotate-180')}
-        />
-        <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-x-4 gap-y-0.5">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-sm truncate">{grupo.produto ?? '—'}</span>
-            {grupo.lote && <span className="text-xs text-muted-foreground">· Lote {grupo.lote}</span>}
+        {/* Produto + Lote + Operador */}
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-sm font-semibold truncate leading-tight">{grupo.produto ?? '—'}</span>
+            {grupo.lote && (
+              <span className="text-xs text-muted-foreground shrink-0 truncate">· {grupo.lote}</span>
+            )}
           </div>
-          <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground sm:justify-end">
-            <span>Balança {grupo.balanca ?? '—'}</span>
-            <span>
-              <span className="font-semibold text-foreground tabular-nums">{formatKg(grupo.totalKgReal)} kg</span>
-              <span className="text-muted-foreground/60"> real</span>
-            </span>
-            <span>
-              <span className="font-semibold text-foreground tabular-nums">{formatKg(grupo.totalKgNominal)} kg</span>
-              <span className="text-muted-foreground/60"> prod.</span>
-            </span>
-            <span className="hidden sm:inline">{fmtData(grupo.dataInicio)}</span>
-          </div>
-          <div className="text-xs text-muted-foreground truncate col-span-full">
+          <div className="text-xs text-muted-foreground truncate leading-tight">
             {grupo.operadores.join(', ')}
           </div>
+        </div>
+
+        {/* Balança (oculto no mobile) */}
+        <div className="hidden sm:block text-xs text-muted-foreground text-right">
+          Bal. {grupo.balanca ?? '—'}
+        </div>
+
+        {/* Real pesado */}
+        <div className="text-right">
+          <div className="text-sm font-semibold tabular-nums leading-tight">
+            {formatKg(grupo.totalKgReal)}
+          </div>
+          <div className="text-[10px] text-muted-foreground leading-tight">real</div>
+        </div>
+
+        {/* Produção */}
+        <div className="text-right">
+          <div className="text-sm font-semibold tabular-nums leading-tight">
+            {formatKg(grupo.totalKgNominal)}
+          </div>
+          <div className="text-[10px] text-muted-foreground leading-tight">prod.</div>
+        </div>
+
+        {/* Data (oculto no mobile) */}
+        <div className="hidden sm:block text-xs text-muted-foreground text-right">
+          {fmtData(grupo.dataInicio)}
+        </div>
+
+        {/* Chevron */}
+        <div className="flex justify-center">
+          <ChevronDown
+            className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180')}
+          />
         </div>
       </button>
 
       <div className={cn('grid transition-[grid-template-rows] duration-200', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
         <div className="overflow-hidden">
-          <div className="border-t border-black/5 dark:border-white/10 overflow-x-auto">
+          <div className="border-t border-border/40 overflow-x-auto bg-muted/10">
             <table className="w-full text-xs">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
@@ -660,7 +681,7 @@ export default function HistoricoBalancas() {
               Nenhuma OP encontrada para os filtros selecionados.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="max-w-5xl mx-auto rounded-xl border bg-card overflow-hidden divide-y divide-border">
               {grupos.map((g) => <CardOP key={g.chave} grupo={g} onApagar={apagarSessao} />)}
             </div>
           )}
