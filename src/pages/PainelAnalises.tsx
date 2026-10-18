@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, memo, createContext, useCont
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
 import { parseHoras } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X, XCircle as XCircleIcon, FileDown } from "lucide-react";
+import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X, XCircle as XCircleIcon, FileDown, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -353,13 +353,23 @@ export default function PainelAnalises() {
     return () => clearTimeout(timer);
   }, [materialInput, materialFiltro]);
 
+  const [comparacaoAnualAberta, setComparacaoAnualAberta] = useState(false);
+
   const { ordens: ordensRaw, loading } = useAnalises(dataInicio, dataFim);
   const { paradas: paradasRaw } = useParadasAnalises(dataInicio, dataFim);
   const { registros: registrosDiariosRaw } = useRegistrosDiariosAnalises(dataInicio, dataFim);
 
+  // Dados anuais: useAnalises carrega sempre (necessário para filtro por material/classe)
+  // registros_diarios e paradas anuais são pesados — carregam apenas ao abrir a seção
   const { ordens: ordensAnuaisRaw } = useAnalises(inicioAnual, hojeStr);
-  const { registros: registrosDiariosAnuaisRaw } = useRegistrosDiariosAnalises(inicioAnual, hojeStr);
-  const { paradas: paradasAnuaisRaw } = useParadasAnalises(inicioAnual, hojeStr);
+  const { registros: registrosDiariosAnuaisRaw, loading: loadingAnualRegs } = useRegistrosDiariosAnalises(
+    comparacaoAnualAberta ? inicioAnual : null,
+    comparacaoAnualAberta ? hojeStr : null,
+  );
+  const { paradas: paradasAnuaisRaw } = useParadasAnalises(
+    comparacaoAnualAberta ? inicioAnual : null,
+    comparacaoAnualAberta ? hojeStr : null,
+  );
 
   // Subconjunto para cálculo de kg/h: apenas registros não-reprovados.
   // Registros com reprovado=true, contou_volume=true (retrabalho) contam no volume
@@ -1673,81 +1683,131 @@ export default function PainelAnalises() {
                 </div>
               </div>
 
-              {/* Produção Mensal */}
+              {/* Evolução Mensal — lazy: só carrega ao abrir */}
               <div>
-                <SectionTitle icon={BarChart2}>Produção Mensal (kg)</SectionTitle>
-                <div style={{ ...cardStyle }}>
-                  <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Últimos 12 meses</p>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <BarChart data={dadosMensais} margin={{ top: 20, right: 8, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
-                      <XAxis dataKey="mes" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: D.muted }}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
-                      />
-                      <Tooltip content={<TooltipMensal />} cursor={{ fill: "#ffffff08" }} />
-                      <Bar dataKey="kg" fill={D.cyan} radius={[4, 4, 0, 0]} maxBarSize={36}>
-                        <LabelList
-                          dataKey="kg"
-                          position="top"
-                          formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
-                          style={{ fontSize: 9, fill: D.text, fontWeight: 600 }}
-                        />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                <button
+                  onClick={() => setComparacaoAnualAberta((v) => !v)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: comparacaoAnualAberta ? "1rem" : 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    width: "100%",
+                    textAlign: "left",
+                  }}
+                >
+                  <h3 style={{ fontSize: "0.9375rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem", color: D.text, margin: 0, flex: 1 }}>
+                    <BarChart2 size={16} style={{ color: D.muted }} />
+                    Evolução Mensal (últimos 12 meses)
+                  </h3>
+                  <ChevronDown
+                    size={16}
+                    style={{
+                      color: D.muted,
+                      transition: "transform 0.2s",
+                      transform: comparacaoAnualAberta ? "rotate(180deg)" : "rotate(0deg)",
+                      flexShrink: 0,
+                    }}
+                  />
+                </button>
 
-              {/* Produtividade kg/h por Mês */}
-              <div>
-                <SectionTitle icon={TrendingUp}>Produtividade kg/h por Mês</SectionTitle>
-                <div style={{ ...cardStyle }}>
-                  <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>
-                    Últimos 12 meses · média kg/h das OPs concluídas
-                    {linhaFiltro !== 0 && <span style={{ color: D.cyan }}> · Linha {linhaFiltro}</span>}
-                  </p>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <AreaChart data={dadosProdutividadeMensal} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
-                      <defs>
-                        <linearGradient id="gradCiano" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor={D.cyan} stopOpacity={0.35} />
-                          <stop offset="95%" stopColor={D.cyan} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
-                      <XAxis dataKey="mes" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: D.muted }}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(v) => `${v}`}
-                        label={{ value: "kg/h", angle: -90, position: "insideLeft", fontSize: 10, fill: D.muted, dy: 20 }}
-                      />
-                      <Tooltip content={<TooltipProdutividade />} cursor={{ stroke: D.border, strokeWidth: 1 }} />
-                      <ReferenceLine
-                        y={115}
-                        stroke="#FACC15"
-                        strokeDasharray="5 4"
-                        strokeWidth={1.5}
-                        label={{ value: "Meta 115", position: "right", fontSize: 10, fill: "#FACC15" }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="kgH"
-                        stroke={D.cyan}
-                        strokeWidth={2}
-                        fill="url(#gradCiano)"
-                        dot={{ r: 4, fill: D.cyan, strokeWidth: 0 }}
-                        activeDot={{ r: 6, fill: D.cyan, stroke: D.card, strokeWidth: 2 }}
-                        connectNulls={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {comparacaoAnualAberta && (
+                  loadingAnualRegs ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "3rem 0", gap: "0.5rem", color: D.muted }}>
+                      <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} className="animate-spin" />
+                      <span style={{ fontSize: 13 }}>Carregando dados anuais…</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                      {/* Produção Mensal */}
+                      <div>
+                        <h3 style={{ marginBottom: "0.5rem", fontSize: "0.875rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem", color: D.text }}>
+                          <BarChart2 size={14} style={{ color: D.muted }} />
+                          Produção Mensal (kg)
+                        </h3>
+                        <div style={{ ...cardStyle }}>
+                          <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>Últimos 12 meses</p>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <BarChart data={dadosMensais} margin={{ top: 20, right: 8, left: 0, bottom: 4 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
+                              <XAxis dataKey="mes" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
+                              <YAxis
+                                tick={{ fontSize: 10, fill: D.muted }}
+                                tickLine={false}
+                                axisLine={false}
+                                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                              />
+                              <Tooltip content={<TooltipMensal />} cursor={{ fill: "#ffffff08" }} />
+                              <Bar dataKey="kg" fill={D.cyan} radius={[4, 4, 0, 0]} maxBarSize={36}>
+                                <LabelList
+                                  dataKey="kg"
+                                  position="top"
+                                  formatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                                  style={{ fontSize: 9, fill: D.text, fontWeight: 600 }}
+                                />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Produtividade kg/h por Mês */}
+                      <div>
+                        <h3 style={{ marginBottom: "0.5rem", fontSize: "0.875rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem", color: D.text }}>
+                          <TrendingUp size={14} style={{ color: D.muted }} />
+                          Produtividade kg/h por Mês
+                        </h3>
+                        <div style={{ ...cardStyle }}>
+                          <p style={{ fontSize: 11, color: D.muted, marginBottom: "0.75rem" }}>
+                            Últimos 12 meses · média kg/h das OPs concluídas
+                            {linhaFiltro !== 0 && <span style={{ color: D.cyan }}> · Linha {linhaFiltro}</span>}
+                          </p>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <AreaChart data={dadosProdutividadeMensal} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+                              <defs>
+                                <linearGradient id="gradCiano" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%"  stopColor={D.cyan} stopOpacity={0.35} />
+                                  <stop offset="95%" stopColor={D.cyan} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={D.grid} />
+                              <XAxis dataKey="mes" tick={{ fontSize: 10, fill: D.muted }} tickLine={false} axisLine={false} />
+                              <YAxis
+                                tick={{ fontSize: 10, fill: D.muted }}
+                                tickLine={false}
+                                axisLine={false}
+                                tickFormatter={(v) => `${v}`}
+                                label={{ value: "kg/h", angle: -90, position: "insideLeft", fontSize: 10, fill: D.muted, dy: 20 }}
+                              />
+                              <Tooltip content={<TooltipProdutividade />} cursor={{ stroke: D.border, strokeWidth: 1 }} />
+                              <ReferenceLine
+                                y={115}
+                                stroke="#FACC15"
+                                strokeDasharray="5 4"
+                                strokeWidth={1.5}
+                                label={{ value: "Meta 115", position: "right", fontSize: 10, fill: "#FACC15" }}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="kgH"
+                                stroke={D.cyan}
+                                strokeWidth={2}
+                                fill="url(#gradCiano)"
+                                dot={{ r: 4, fill: D.cyan, strokeWidth: 0 }}
+                                activeDot={{ r: 6, fill: D.cyan, stroke: D.card, strokeWidth: 2 }}
+                                connectNulls={false}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
             </div>
 

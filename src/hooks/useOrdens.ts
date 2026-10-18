@@ -218,11 +218,12 @@ export function useParadasLinha(linha: number, data: string) {
   return { paradas, loading, fetchParadas };
 }
 
-export function useParadasAnalises(dataInicio: string, dataFim: string) {
+export function useParadasAnalises(dataInicio: string | null, dataFim: string | null) {
   const [paradas, setParadas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const fetchParadas = useCallback(async () => {
+    if (!dataInicio || !dataFim) { setParadas([]); setLoading(false); return; }
     setLoading(true);
     const PAGE = 1000;
     const all: any[] = [];
@@ -286,10 +287,13 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
   return { registros, fetchRegistros };
 }
 
-export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string) {
+export function useRegistrosDiariosAnalises(dataInicio: string | null, dataFim: string | null) {
   const [registros, setRegistros] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const fetchRegistros = useCallback(async () => {
+    if (!dataInicio || !dataFim) { setRegistros([]); setLoading(false); return; }
+    setLoading(true);
     const PAGE = 1000;
     const all: any[] = [];
     let from = 0;
@@ -307,11 +311,12 @@ export function useRegistrosDiariosAnalises(dataInicio: string, dataFim: string)
       from += PAGE;
     }
     setRegistros(all);
+    setLoading(false);
   }, [dataInicio, dataFim]);
 
   useEffect(() => {
     fetchRegistros();
   }, [fetchRegistros]);
 
-  return { registros };
+  return { registros, loading };
 }
