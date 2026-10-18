@@ -508,24 +508,22 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     if (importPreview.length === 0) return;
     setImportando(true);
 
-    let ok = 0;
+    const agora = new Date().toISOString();
+    const allRows: object[] = [];
+    const allMovs: object[] = [];
+
     for (const row of importPreview) {
       if (!row.cod_tid) continue;
 
-      // Upsert estoque_mp
-      await (supabase as any).from('estoque_mp').upsert(
-        {
-          cod_tid: row.cod_tid,
-          materia_prima: row.materia_prima || row.cod_tid,
-          saldo_kg: row.saldo_kg,
-          minimo_kg: row.minimo_kg,
-          atualizado_em: new Date().toISOString(),
-        },
-        { onConflict: 'cod_tid' },
-      );
+      allRows.push({
+        cod_tid: row.cod_tid,
+        materia_prima: row.materia_prima || row.cod_tid,
+        saldo_kg: row.saldo_kg,
+        minimo_kg: row.minimo_kg,
+        atualizado_em: agora,
+      });
 
-      // Movimentação saldo_inicial
-      await (supabase as any).from('estoque_movimentacoes').insert({
+      allMovs.push({
         cod_tid: row.cod_tid,
         materia_prima: row.materia_prima || row.cod_tid,
         tipo: 'saldo_inicial',
@@ -534,11 +532,29 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
         observacao: 'Importação de saldo inicial',
         criado_por: perfilNome,
       });
-
-      ok++;
     }
 
-    toast({ title: `${ok} MP(s) importada(s) com sucesso` });
+    const { error: errUpsert } = await (supabase as any)
+      .from('estoque_mp')
+      .upsert(allRows, { onConflict: 'cod_tid' });
+
+    if (errUpsert) {
+      toast({ title: 'Erro ao importar estoque', description: errUpsert.message, variant: 'destructive' });
+      setImportando(false);
+      return;
+    }
+
+    const { error: errMovs } = await (supabase as any)
+      .from('estoque_movimentacoes')
+      .insert(allMovs);
+
+    if (errMovs) {
+      toast({ title: 'Erro ao registrar movimentações', description: errMovs.message, variant: 'destructive' });
+      setImportando(false);
+      return;
+    }
+
+    toast({ title: `${allRows.length} MP(s) importada(s) com sucesso` });
     setImportando(false);
     setImportarOpen(false);
     setImportFile(null);
