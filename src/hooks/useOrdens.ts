@@ -6,11 +6,9 @@ export function useOrdens(date?: string) {
   const [ordens, setOrdens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const today = useMemo(() => date || format(new Date(), 'yyyy-MM-dd'), [date]);
-  const lastFetchRef = useRef(0);
   const instanceId = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const fetchOrdens = useCallback(async () => {
-    lastFetchRef.current = Date.now();
     let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, posicao_balanca, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
@@ -35,9 +33,7 @@ export function useOrdens(date?: string) {
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          if (Date.now() - lastFetchRef.current > 1500) fetchOrdensRef.current();
-        }, 800);
+        debounceTimer = setTimeout(() => fetchOrdensRef.current(), 600);
       })
       .subscribe();
     return () => {

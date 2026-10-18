@@ -211,7 +211,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`linha-${linha}-realtime`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens", filter: `linha=eq.${linha}` }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => fetchOrdens(), 600);
       })
