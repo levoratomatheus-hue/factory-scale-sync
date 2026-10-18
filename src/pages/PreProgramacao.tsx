@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from '@/lib/estoqueUtils';
 import { MarcaBadge } from '@/components/MarcaBadge';
@@ -143,21 +143,21 @@ export default function PreProgramacao() {
     };
   }, [fetchOrdens]);
 
-  const ordensFiltradas = ordens.filter((o) => {
+  const ordensFiltradas = useMemo(() => ordens.filter((o) => {
     if (!busca.trim()) return true;
     const q = busca.trim().toLowerCase();
     return o.produto.toLowerCase().includes(q) || o.lote.toLowerCase().includes(q);
-  });
+  }), [ordens, busca]);
 
   // Agrupa por família de cor (mesma ordem de FAMILIAS_COR); "outros" fica no fim.
   // A ordem relativa dentro de cada família é preservada (sort estável).
-  const ordensOrdenadas = [...ordensFiltradas].sort((a, b) => {
+  const ordensOrdenadas = useMemo(() => [...ordensFiltradas].sort((a, b) => {
     const fa = inferirFamilia(a.produto);
     const fb = inferirFamilia(b.produto);
     const ia = fa ? FAMILIAS_COR.findIndex((f) => f.chave === fa.chave) : FAMILIAS_COR.length;
     const ib = fb ? FAMILIAS_COR.findIndex((f) => f.chave === fb.chave) : FAMILIAS_COR.length;
     return ia - ib;
-  });
+  }), [ordensFiltradas]);
 
   const programar = async () => {
     if (!ordemProgramar || !dataProg || !linha) return;

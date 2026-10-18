@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { parseObsLinhaItems, formatObsLinha, parseObsItems, formatObsLine } from "@/lib/obsUtils";
@@ -61,6 +61,7 @@ function calcQtdFromRegistros(regs: any[]): number | null {
 
 export default function PainelLiberacao() {
   const [ordens, setOrdens] = useState<any[]>([]);
+  const ordensRef = useRef<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [registrosPorOrdem, setRegistrosPorOrdem] = useState<Record<string, any[]>>({});
   const [paradasPorOrdem, setParadasPorOrdem] = useState<Record<string, any[]>>({});
@@ -95,6 +96,7 @@ export default function PainelLiberacao() {
       .order("posicao", { ascending: true, nullsFirst: false });
 
     if (!data) { setLoading(false); return; }
+    ordensRef.current = data;
     setOrdens(data);
 
     const ids = data.map((o: any) => o.id);
@@ -186,7 +188,13 @@ export default function PainelLiberacao() {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel("liberacao-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, (payload: any) => {
+        // Pular UPDATE de OPs que não estão (e não entrarão) nesta lista
+        if (payload.eventType === 'UPDATE') {
+          const newStatus = payload.new?.status;
+          const isInList = ordensRef.current.some((o: any) => o.id === payload.new?.id);
+          if (!isInList && newStatus !== 'aguardando_liberacao') return;
+        }
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => fetchOrdens(), 1500);
       })

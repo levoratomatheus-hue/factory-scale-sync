@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -317,6 +317,7 @@ function BalancaColumn({
   onDevolverParaFila: (ordem: Ordem) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `balanca-${balanca}` });
+  const totalKg = useMemo(() => ordens.reduce((acc, o) => acc + (Number(o.quantidade) || 0), 0), [ordens]);
 
   return (
     <div className="flex flex-col flex-1 min-w-0">
@@ -357,7 +358,7 @@ function BalancaColumn({
         <p className="text-xs font-semibold text-muted-foreground text-right">
           Total:{" "}
           <span className="text-foreground">
-            {formatKg(ordens.reduce((acc, o) => acc + (Number(o.quantidade) || 0), 0))} kg
+            {formatKg(totalKg)} kg
           </span>
         </p>
       </div>

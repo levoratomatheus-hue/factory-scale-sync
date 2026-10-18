@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   Loader2,
@@ -68,16 +68,17 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [lotesSemOP, setLotesSemOP] = useState<LoteSemOP[]>([]);
   const [ordens, setOrdens] = useState<OrdemProgramada[]>([]);
   const [loading, setLoading] = useState(true);
+  const ordensRef = useRef<OrdemProgramada[]>([]);
 
   const fetchAll = useCallback(async () => {
-    // Step 1: busca lotes Em Aberto (mesma query do CriarOrdem)
+    // Step 1: busca lotes Em Aberto
     const { data: cadastro } = await (supabase as any)
       .from("cadastro_lotes")
       .select("lote, produto, quantidade, classe, formula_id")
       .eq("status", "Em Aberto")
       .order("lote", { ascending: true });
 
-    // Step 2: busca ordens ativas para a seção "Lotes Programados"
+    // Step 2: busca ordens ativas
     const { data: ordensData } = await supabase
       .from("ordens")
       .select("id, lote, produto, quantidade, status, data_programacao, data_emissao, linha, balanca, posicao, marca")
@@ -85,21 +86,17 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       .order("data_programacao", { ascending: true })
       .order("posicao", { ascending: true, nullsFirst: false });
 
-    // Step 3: filtra lotes sem OP — mesma lógica do CriarOrdem (String(bigint) dos dois lados)
+    // Filtra lotes sem OP usando ordensData já em memória — sem Step 3 extra
     if (cadastro?.length) {
-      const loteStrs = (cadastro as any[]).map((l) => String(l.lote));
-      const { data: ordensDosCadastros } = await (supabase as any)
-        .from("ordens")
-        .select("lote")
-        .in("lote", loteStrs);
-
-      const lotesComOP = new Set((ordensDosCadastros ?? []).map((o: any) => String(o.lote)));
+      const lotesComOP = new Set((ordensData ?? []).map((o: any) => String(o.lote)));
       setLotesSemOP((cadastro as any[]).filter((l) => !lotesComOP.has(String(l.lote)) && !isLoteBloqueado(Number(l.lote))));
     } else {
       setLotesSemOP([]);
     }
 
-    setOrdens(ordensData ?? []);
+    const next = ordensData ?? [];
+    ordensRef.current = next;
+    setOrdens(next);
     setLoading(false);
   }, []);
 
@@ -108,7 +105,15 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel("painel-gestor-v2")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, (payload: any) => {
+        // Pular eventos de UPDATE em OPs já concluídas que não estão na lista atual
+        if (payload.eventType === 'UPDATE') {
+          const newStatus = payload.new?.status;
+          const isInList = ordensRef.current.some((o) => o.id === payload.new?.id);
+          if (!isInList && newStatus === 'concluido') return;
+        } else if (payload.eventType === 'INSERT' && payload.new?.status === 'concluido') {
+          return;
+        }
         if (timer) clearTimeout(timer);
         timer = setTimeout(fetchAll, 800);
       })

@@ -462,7 +462,7 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
     setLoadingHistorico(true);
     const { data, error } = await (supabase as any)
       .from('estoque_movimentacoes')
-      .select('*')
+      .select('id, cod_tid, materia_prima, tipo, quantidade_kg, saldo_apos, ordem_id, ordem_lote, observacao, criado_por, criado_em')
       .eq('cod_tid', item.cod_tid)
       .order('criado_em', { ascending: false })
       .limit(200);

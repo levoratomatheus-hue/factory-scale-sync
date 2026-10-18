@@ -446,7 +446,7 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
     const [resPg, resGeral] = await Promise.all([
       (supabase as any)
         .from('estoque_movimentacoes_pg')
-        .select('*')
+        .select('id, cod_pg, materia_prima, tipo, quantidade_kg, saldo_apos, ordem_id, ordem_lote, observacao, criado_por, criado_em')
         .eq('cod_pg', codPg)
         .order('criado_em', { ascending: false })
         .limit(200),
