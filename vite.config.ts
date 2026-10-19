@@ -35,14 +35,21 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        // Nunca interceptar requisições à API do Supabase — dados devem ser sempre frescos
+        // Forçar o novo SW a assumir imediatamente em todos os clientes
+        skipWaiting: true,
+        clientsClaim: true,
+        // Remover caches de versões antigas para não servir dados stale
+        cleanupOutdatedCaches: true,
         navigateFallbackDenylist: [/^\/api/],
         runtimeCaching: [
           {
-            // Bloqueia cache de qualquer URL do Supabase
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/,
+            // Supabase: NUNCA cachear — toda requisição vai direto à rede
+            // (usando função em vez de regex para cobrir URLs sem trailing slash)
+            urlPattern: ({ url }: { url: URL }) => url.hostname.endsWith('.supabase.co'),
             handler: 'NetworkOnly',
           },
+          // Todos os outros runtimeCaching são só assets estáticos (JS/CSS/fontes)
+          // já cobertos pelo precache gerado pelo globPatterns abaixo.
         ],
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
       },
