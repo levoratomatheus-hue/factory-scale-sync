@@ -86,7 +86,7 @@ const STATUS_FILTROS: { value: StatusFerramenta | "todos"; label: string }[] = [
 const FORM_VAZIO = { nome: "", codigo: "", localizacao: "", status: "disponivel" as StatusFerramenta };
 
 // perfis que podem emprestar / devolver
-const PODE_EMPRESTAR = ["gestor", "tecnico", "diretoria"];
+const PODE_EMPRESTAR = ["gestor", "tecnico", "diretoria", "manutencao"];
 
 // ── props ─────────────────────────────────────────────────────────────────────
 
