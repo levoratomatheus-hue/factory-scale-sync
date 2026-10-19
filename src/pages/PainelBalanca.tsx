@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { useOrdens } from "@/hooks/useOrdens";
+import { useAuth } from "@/hooks/useAuth";
 import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, FlaskConical, Loader2, PauseCircle, Play, Printer, Scale } from "lucide-react";
+import { CheckCircle2, Eye, FlaskConical, Loader2, PauseCircle, Play, Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -58,6 +59,14 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [operadorSelecionadoId, setOperadorSelecionadoId] = useState("");
   const [iniciandoPesagem, setIniciandoPesagem] = useState(false);
 
+  // ── "Ver" (gestor) ──
+  const { perfil: perfilAuth } = useAuth();
+  const isGestor = perfilAuth?.papel === 'gestor';
+  const [ordemParaVer, setOrdemParaVer] = useState<any | null>(null);
+  const [verItens, setVerItens] = useState<FormulaRow[]>([]);
+  const [verLoading, setVerLoading] = useState(false);
+  const [verHasCustom, setVerHasCustom] = useState(false);
+
   useEffect(() => {
     (supabase as any)
       .from("operadores")
@@ -66,6 +75,48 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       .order("nome")
       .then(({ data }: any) => setOperadores(data ?? []));
   }, []);
+
+  useEffect(() => {
+    if (!ordemParaVer) { setVerItens([]); setVerHasCustom(false); return; }
+    setVerLoading(true);
+    setVerItens([]);
+    const tb: number | null = ordemParaVer.tamanho_batelada ?? null;
+    const fid: string | null = ordemParaVer.formula_id ?? null;
+
+    (supabase as any)
+      .from("ordens_formula")
+      .select("sequencia, materia_prima, quantidade_kg")
+      .eq("ordem_id", ordemParaVer.id)
+      .order("sequencia", { ascending: true })
+      .then(({ data: customData }: any) => {
+        if (customData && customData.length > 0) {
+          setVerHasCustom(true);
+          setVerItens(customData as FormulaRow[]);
+          setVerLoading(false);
+        } else if (fid && tb && tb > 0) {
+          setVerHasCustom(false);
+          (supabase as any)
+            .from("formulas")
+            .select("sequencia, materia_prima, unidade, percentual")
+            .eq("formula_id", fid)
+            .order("sequencia", { ascending: true })
+            .then(({ data: fData }: any) => {
+              setVerItens(
+                (fData ?? []).map((f: any) => ({
+                  sequencia: f.sequencia,
+                  materia_prima: f.materia_prima,
+                  unidade: f.unidade ?? null,
+                  quantidade_kg: parseFloat(((f.percentual / 100) * tb).toFixed(3)),
+                }))
+              );
+              setVerLoading(false);
+            });
+        } else {
+          setVerHasCustom(false);
+          setVerLoading(false);
+        }
+      });
+  }, [ordemParaVer]);
 
   const balancaOrdens = useMemo(
     () =>
@@ -268,31 +319,43 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               <span className="text-muted-foreground/40 shrink-0">·</span>
               <StatusBadge status="em_pesagem" />
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const { imprimirEtiqueta } = await import("@/lib/printEtiqueta");
-                  await imprimirEtiqueta({
-                    ordemId: emPesagem.id,
-                    produto: emPesagem.produto,
-                    marca: emPesagem.marca,
-                    lote: emPesagem.lote,
-                    quantidade: emPesagem.quantidade,
-                    formulaId,
-                    tamanhoBatelada,
-                    itens: displayItens,
-                    obs: emPesagem.obs,
-                  });
-                } catch {
-                  toast({ title: "Erro ao gerar etiqueta", variant: "destructive" });
-                }
-              }}
-            >
-              <Printer className="h-3.5 w-3.5 mr-1" />
-              Etiqueta
-            </Button>
+            <div className="flex items-center gap-2">
+              {isGestor && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOrdemParaVer(emPesagem)}
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1" />
+                  Ver
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const { imprimirEtiqueta } = await import("@/lib/printEtiqueta");
+                    await imprimirEtiqueta({
+                      ordemId: emPesagem.id,
+                      produto: emPesagem.produto,
+                      marca: emPesagem.marca,
+                      lote: emPesagem.lote,
+                      quantidade: emPesagem.quantidade,
+                      formulaId,
+                      tamanhoBatelada,
+                      itens: displayItens,
+                      obs: emPesagem.obs,
+                    });
+                  } catch {
+                    toast({ title: "Erro ao gerar etiqueta", variant: "destructive" });
+                  }
+                }}
+              >
+                <Printer className="h-3.5 w-3.5 mr-1" />
+                Etiqueta
+              </Button>
+            </div>
           </div>
 
           <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-weighing/40 p-3 sm:p-6 space-y-4">
@@ -623,31 +686,157 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 truncate" title={obsPausa}>{obsPausa}</p>
                     )}
                   </div>
-                  {!emPesagem && (
-                    <Button
-                      variant="outline"
-                      onClick={() => { setOrdemParaIniciar(ordem); setOperadorSelecionadoId(""); }}
-                      className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
-                    >
-                      {pausada ? (
-                        <>
-                          <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
-                          Retomar
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
-                          Iniciar Pesagem
-                        </>
-                      )}
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isGestor && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setOrdemParaVer(ordem)}
+                        title="Ver detalhes da OP"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {!emPesagem && (
+                      <Button
+                        variant="outline"
+                        onClick={() => { setOrdemParaIniciar(ordem); setOperadorSelecionadoId(""); }}
+                        className="min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm"
+                      >
+                        {pausada ? (
+                          <>
+                            <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
+                            Retomar
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
+                            Iniciar Pesagem
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
       )}
+      {/* Dialog: Ver detalhes da OP (gestor) */}
+      <Dialog open={!!ordemParaVer} onOpenChange={(o) => { if (!o) setOrdemParaVer(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              <span>{ordemParaVer?.produto ?? '—'}</span>
+              {ordemParaVer?.marca && <MarcaBadge marca={ordemParaVer.marca} />}
+            </DialogTitle>
+          </DialogHeader>
+
+          {ordemParaVer && (() => {
+            const tb: number | null = ordemParaVer.tamanho_batelada ?? null;
+            const totalBateladas = tb && tb > 0 ? Math.round(ordemParaVer.quantidade / tb) : null;
+            const obsItems = parseObsItems(ordemParaVer.obs ?? null);
+            const somaVer = verItens.reduce((s: number, i) => s + (i.quantidade_kg || 0), 0);
+
+            return (
+              <div className="space-y-4 py-1">
+                {/* Dados básicos */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div className="text-muted-foreground">Lote</div>
+                  <div className="font-medium">{ordemParaVer.lote ?? '—'}</div>
+                  <div className="text-muted-foreground">Quantidade</div>
+                  <div className="font-medium">{formatKg(ordemParaVer.quantidade)} kg</div>
+                  {totalBateladas != null && (
+                    <>
+                      <div className="text-muted-foreground">Bateladas</div>
+                      <div className="font-medium">
+                        {totalBateladas}× de {formatKg(tb!)} kg
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Fórmula */}
+                {verLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando fórmula…
+                  </div>
+                ) : verItens.length > 0 ? (
+                  <div className="rounded-md border overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted text-muted-foreground">
+                        <tr>
+                          <th className="text-left px-3 py-2">Seq</th>
+                          <th className="text-left px-3 py-2">Matéria-Prima</th>
+                          {!verHasCustom && <th className="text-left px-3 py-2">Un</th>}
+                          <th className="text-right px-3 py-2">Qtd (kg)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {verItens.map((item, idx) => (
+                          <tr key={idx} className="border-t">
+                            <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? '–'}</td>
+                            <td className="px-3 py-2 font-medium">{item.materia_prima}</td>
+                            {!verHasCustom && <td className="px-3 py-2 text-muted-foreground">{(item as any).unidade ?? '–'}</td>}
+                            <td className="px-3 py-2 text-right font-bold">{formatKg(item.quantidade_kg)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t">
+                          <td colSpan={verHasCustom ? 2 : 3} className="px-3 py-1.5 text-xs text-muted-foreground/60 text-right">total fórmula</td>
+                          <td className="px-3 py-1.5 text-right text-xs text-muted-foreground/60">{formatKg(somaVer)} kg</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : null}
+
+                {/* Adições para Mistura */}
+                {ordemParaVer.obs && (
+                  <div className="flex overflow-hidden rounded-xl border border-border bg-card">
+                    <div className="w-1.5 shrink-0 bg-amber-400 dark:bg-amber-500 rounded-l-xl" />
+                    <div className="flex-1 px-4 py-3 space-y-2">
+                      <p className="flex items-center gap-1.5 text-[13px] font-medium tracking-widest uppercase text-amber-600 dark:text-amber-400">
+                        <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                        Adições para Mistura
+                      </p>
+                      {obsItems ? (
+                        <ul className="space-y-1.5">
+                          {obsItems.map((item, i) => (
+                            <li key={i} className="flex items-baseline gap-3">
+                              <span className="text-xl font-medium tabular-nums leading-none text-amber-500 dark:text-amber-400 shrink-0">{item.qty}×</span>
+                              <span className="text-base font-medium leading-snug">{item.mp}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{ordemParaVer.obs}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Orientações */}
+                {ordemParaVer.orientacoes && (
+                  <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-1.5 shadow-md">
+                    <p className="text-sm font-extrabold text-white uppercase tracking-widest">📋 ORIENTAÇÕES DE PRODUÇÃO</p>
+                    <p className="text-sm font-bold text-white whitespace-pre-wrap">{ordemParaVer.orientacoes}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOrdemParaVer(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog: selecionar operador para iniciar/retomar */}
       <Dialog open={!!ordemParaIniciar} onOpenChange={(o) => { if (!o) { setOrdemParaIniciar(null); setOperadorSelecionadoId(""); } }}>
         <DialogContent className="max-w-sm">
