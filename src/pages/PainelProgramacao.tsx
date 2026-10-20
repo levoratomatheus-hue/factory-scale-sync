@@ -719,6 +719,7 @@ export default function PainelProgramacao() {
   const [voltarPesagemDados, setVoltarPesagemDados] = useState<{ jaProduzidoKg: number; faltaKg: number } | null>(null);
   const [voltarPesagemBatelada, setVoltarPesagemBatelada] = useState('');
   const [voltarPesagemItens, setVoltarPesagemItens] = useState<{ sequencia: number | null; materia_prima: string; quantidade_kg: number }[]>([]);
+  const [voltarPesagemFormulaBase, setVoltarPesagemFormulaBase] = useState<{ sequencia: number | null; materia_prima: string; percentual: number }[]>([]);
   const [voltarPesagemCarregando, setVoltarPesagemCarregando] = useState(false);
   const [ordemParaForcar, setOrdemParaForcar] = useState<Ordem | null>(null);
   const [forcarHoraInicio, setForcarHoraInicio] = useState("");
@@ -1146,15 +1147,20 @@ export default function PainelProgramacao() {
     setVoltarPesagemDados(null);
     setVoltarPesagemBatelada('');
     setVoltarPesagemItens([]);
+    setVoltarPesagemFormulaBase([]);
     setVoltarPesagemCarregando(true);
-    const [{ data: pesagensData }, { data: formulaData }] = await Promise.all([
+    const [{ data: pesagensData }, { data: formulaData }, { data: baseData }] = await Promise.all([
       (supabase as any).from('pesagens').select('kg_nominal').eq('ordem_id', ordem.id).not('fim', 'is', null),
       (supabase as any).from('ordens_formula').select('sequencia, materia_prima, quantidade_kg').eq('ordem_id', ordem.id).order('sequencia', { ascending: true }),
+      ordem.formula_id
+        ? (supabase as any).from('formulas').select('sequencia, materia_prima, percentual').eq('formula_id', ordem.formula_id).order('sequencia', { ascending: true })
+        : Promise.resolve({ data: [] }),
     ]);
     const jaProduzidoKg = (pesagensData ?? []).reduce((s: number, p: any) => s + (p.kg_nominal ?? 0), 0);
     const faltaKg = ordem.quantidade - jaProduzidoKg;
     setVoltarPesagemDados({ jaProduzidoKg, faltaKg });
     setVoltarPesagemItens((formulaData ?? []) as { sequencia: number | null; materia_prima: string; quantidade_kg: number }[]);
+    setVoltarPesagemFormulaBase((baseData ?? []) as { sequencia: number | null; materia_prima: string; percentual: number }[]);
     setVoltarPesagemCarregando(false);
   };
 
@@ -2072,7 +2078,7 @@ export default function PainelProgramacao() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => { if (!open) { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemItens([]); } }}>
+      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => { if (!open) { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemItens([]); setVoltarPesagemFormulaBase([]); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Voltar para pesagem</DialogTitle>
@@ -2130,7 +2136,20 @@ export default function PainelProgramacao() {
                     min={0.001}
                     step="any"
                     value={voltarPesagemBatelada}
-                    onChange={(e) => setVoltarPesagemBatelada(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setVoltarPesagemBatelada(val);
+                      const b = parseFloat(val.replace(',', '.'));
+                      if (!isNaN(b) && b > 0 && voltarPesagemFormulaBase.length > 0) {
+                        setVoltarPesagemItens(
+                          voltarPesagemFormulaBase.map((row) => ({
+                            sequencia: row.sequencia,
+                            materia_prima: row.materia_prima,
+                            quantidade_kg: parseFloat(((row.percentual / 100) * b).toFixed(3)),
+                          }))
+                        );
+                      }
+                    }}
                     placeholder="kg por batelada"
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     autoFocus
@@ -2190,7 +2209,7 @@ export default function PainelProgramacao() {
           })()}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemItens([]); }} disabled={voltandoPesagem}>
+            <Button variant="outline" onClick={() => { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemItens([]); setVoltarPesagemFormulaBase([]); }} disabled={voltandoPesagem}>
               Cancelar
             </Button>
             <Button
