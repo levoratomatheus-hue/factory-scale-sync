@@ -1168,6 +1168,29 @@ export default function PainelProgramacao() {
       .update(update)
       .eq("id", ordemParaVoltarPesagem.id);
     if (!error) {
+      // Re-escalar ordens_formula se a batelada mudou e a OP tem fórmula custom
+      if (novaBatelada && novaBatelada > 0) {
+        const tamanhoAtual = ordemParaVoltarPesagem.tamanho_batelada;
+        if (tamanhoAtual && tamanhoAtual > 0 && novaBatelada !== tamanhoAtual) {
+          const { data: customData } = await (supabase as any)
+            .from("ordens_formula")
+            .select("sequencia, materia_prima, quantidade_kg")
+            .eq("ordem_id", ordemParaVoltarPesagem.id)
+            .order("sequencia", { ascending: true });
+          if (customData && customData.length > 0) {
+            const fator = novaBatelada / tamanhoAtual;
+            await (supabase as any).from("ordens_formula").delete().eq("ordem_id", ordemParaVoltarPesagem.id);
+            await (supabase as any).from("ordens_formula").insert(
+              customData.map((item: any) => ({
+                ordem_id: ordemParaVoltarPesagem!.id,
+                sequencia: item.sequencia,
+                materia_prima: item.materia_prima,
+                quantidade_kg: Math.round(item.quantidade_kg * fator * 1000) / 1000,
+              }))
+            );
+          }
+        }
+      }
       supabase.from("historico").insert({
         ordem_id: ordemParaVoltarPesagem.id,
         status_anterior: ordemParaVoltarPesagem.status,
