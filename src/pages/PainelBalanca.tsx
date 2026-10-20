@@ -190,16 +190,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
   const displayItens: FormulaRow[] = useMemo(() => {
     if (!hasCustom) return formulaItens;
-    // Fórmula custom: se a OP voltou com nova batelada, escalar proporcionalmente
-    if (jaProduzidoKg > 0 && tamanhoBatelada && tamanhoBatelada > 0 && customItens.length > 0) {
-      const originalSum = customItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0);
-      if (originalSum > 0) {
-        const fator = tamanhoBatelada / originalSum;
-        return customItens.map((i) => ({ ...i, quantidade_kg: Math.round(i.quantidade_kg * fator * 1000) / 1000 }));
-      }
-    }
     return customItens;
-  }, [hasCustom, customItens, formulaItens, jaProduzidoKg, tamanhoBatelada]);
+  }, [hasCustom, customItens, formulaItens]);
   const somaFormula = useMemo(() => displayItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0), [displayItens]);
   const isLoadingFormula = loadingOrdem || (!hasCustom && loadingFormula);
   const formulaNaoEncontrada = !isLoadingFormula && !hasCustom && !!formulaId && !!tamanhoBatelada && displayItens.length === 0;
