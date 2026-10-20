@@ -13,7 +13,7 @@ import { useFormula } from '@/hooks/useFormula';
 import { formatKg, cn } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
 import { ComparatorPanel } from '@/components/ComparatorPanel';
-import { baixarEstoqueOP, verificarEstoqueOP, inferirMarcaFormula, type MpFaltante } from '@/lib/estoqueUtils';
+import { verificarEstoqueOP, inferirMarcaFormula, type MpFaltante } from '@/lib/estoqueUtils';
 import { isLoteBloqueado } from '@/lib/lotesBloqueados';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -489,13 +489,6 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
 
     // Tudo que não bloqueia o UX roda em paralelo após o insert
     await Promise.all([
-      // Baixa automática de estoque
-      formulaId
-        ? baixarEstoqueOP(ordemId, formulaId, values.quantidade, values.lote, perfil?.nome, itensSdrId).catch((err: any) => {
-            toast({ title: 'Aviso: falha ao baixar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
-          })
-        : Promise.resolve(),
-
       // Atualiza orientações na tabela formulas para futuras OPs
       formulaId
         ? supabase.from('formulas').update({ orientacoes: orientacoes.trim() || null } as any).eq('id', formulaId)

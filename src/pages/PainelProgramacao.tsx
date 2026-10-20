@@ -1102,14 +1102,15 @@ export default function PainelProgramacao() {
   const handleExcluirOP = async () => {
     if (!ordemParaExcluir) return;
     setExcluindo(true);
-    // Estorna PRIMEIRO — se falhar, aborta a exclusão para não furar o saldo
-    try {
-      await estornarEstoqueOP(ordemParaExcluir.id);
-    } catch (err: any) {
-      setExcluindo(false);
-      setOrdemParaExcluir(null);
-      toast({ title: 'Erro ao estornar estoque', description: err?.message ?? 'Falha desconhecida', variant: 'destructive' });
-      return;
+    if (ordemParaExcluir.status === 'concluido') {
+      try {
+        await estornarEstoqueOP(ordemParaExcluir.id);
+      } catch (err: any) {
+        setExcluindo(false);
+        setOrdemParaExcluir(null);
+        toast({ title: 'Erro ao estornar estoque', description: err?.message ?? 'Falha desconhecida', variant: 'destructive' });
+        return;
+      }
     }
     const { error } = await supabase.from("ordens").delete().eq("id", ordemParaExcluir.id);
     setExcluindo(false);
@@ -1289,24 +1290,26 @@ export default function PainelProgramacao() {
     setOrdens((prev) => prev.map((o) => o.id === id ? { ...o, ...payload } : o));
     toast({ title: "Ordem atualizada com sucesso" });
 
-    // Ajusta estoque ZC se quantidade ou fórmula mudou (silencioso — não bloqueia)
-    try {
-      const qtdNova = payload.quantidade as number | undefined;
-      const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
-      const formulaMudou = formulaIdNovo !== formulaIdAntigo;
+    // Ajusta estoque ZC apenas se a OP já foi concluída
+    if (ordemEditando?.status === 'concluido') {
+      try {
+        const qtdNova = payload.quantidade as number | undefined;
+        const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
+        const formulaMudou = formulaIdNovo !== formulaIdAntigo;
 
-      if (qtdAntiga !== undefined && qtdNova !== undefined) {
-        if (formulaMudou) {
-          // Fórmula trocada: estorna tudo e rebaixa com novos valores
-          await estornarEstoqueOP(id);
-          if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
-        } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
-          // Só quantidade mudou: aplica diferença
-          await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+        if (qtdAntiga !== undefined && qtdNova !== undefined) {
+          if (formulaMudou) {
+            // Fórmula trocada: estorna tudo e rebaixa com novos valores
+            await estornarEstoqueOP(id);
+            if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
+          } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
+            // Só quantidade mudou: aplica diferença
+            await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+          }
         }
+      } catch (err: any) {
+        toast({ title: 'Aviso: falha ao atualizar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
       }
-    } catch (err: any) {
-      toast({ title: 'Aviso: falha ao atualizar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
     }
   };
 

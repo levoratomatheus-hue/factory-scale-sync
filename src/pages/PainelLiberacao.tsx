@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { baixarEstoqueOP, verificarEstoqueOP } from "@/lib/estoqueUtils";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { parseObsLinhaItems, formatObsLinha, parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { formatKg } from "@/lib/utils";
@@ -60,6 +62,7 @@ function calcQtdFromRegistros(regs: any[]): number | null {
 }
 
 export default function PainelLiberacao() {
+  const { perfil } = useAuth();
   const [ordens, setOrdens] = useState<any[]>([]);
   const ordensRef = useRef<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +94,7 @@ export default function PainelLiberacao() {
   const fetchOrdens = async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao, reaproveitamento_id")
       .eq("status", "aguardando_liberacao")
       .order("posicao", { ascending: true, nullsFirst: false });
 
@@ -477,6 +480,38 @@ export default function PainelLiberacao() {
     if (error) {
       toast({ title: "Erro ao liberar ordem", description: error.message, variant: "destructive" });
       return;
+    }
+
+    // Baixa estoque na liberação (quantidade planejada)
+    if (ordem.formula_id) {
+      try {
+        const faltantes = await verificarEstoqueOP(
+          ordem.formula_id,
+          ordem.quantidade,
+          (ordem as any).reaproveitamento_id ?? null
+        );
+        await baixarEstoqueOP(
+          ordem.id,
+          ordem.formula_id,
+          ordem.quantidade,
+          ordem.lote,
+          (perfil as any)?.nome ?? null,
+          (ordem as any).reaproveitamento_id ?? null
+        );
+        if (faltantes.length > 0) {
+          toast({
+            title: 'Estoque insuficiente — OP liberada mesmo assim',
+            description: faltantes.map(f => `${f.materia_prima}: faltam ${Math.abs(f.saldoApos).toFixed(1)} kg`).join(' · '),
+            variant: 'destructive',
+          });
+        }
+      } catch (err: any) {
+        toast({
+          title: 'Aviso: falha ao baixar estoque na liberação',
+          description: err?.message,
+          variant: 'destructive',
+        });
+      }
     }
 
     setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));

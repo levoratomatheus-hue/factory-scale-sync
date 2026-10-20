@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, Loader2, AlertCircle, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { ajustarEstoqueOP } from '@/lib/estoqueUtils';
 import { isLoteBloqueado, LOTES_BLOQUEADOS } from '@/lib/lotesBloqueados';
 
 interface LoteRow {
@@ -128,18 +127,6 @@ export default function ImportarProgramacao() {
           return;
         }
 
-        // Busca quantidades atuais das OPs afetadas para calcular diferença de estoque
-        const loteNums = batch.map((r) => String(r.lote));
-        const { data: ordensAtuais } = await supabase
-          .from('ordens')
-          .select('id, lote, quantidade, formula_id')
-          .in('lote', loteNums)
-          .neq('status', 'concluido');
-
-        const ordemPorLote = new Map(
-          (ordensAtuais ?? []).map((o: any) => [String(o.lote), o]),
-        );
-
         // Atualiza quantidades
         await Promise.all(
           batch.map((lote) =>
@@ -151,21 +138,6 @@ export default function ImportarProgramacao() {
           )
         );
 
-        // Ajusta estoque ZC para OPs onde a quantidade realmente mudou
-        for (const loteRow of batch) {
-          const ordemAtual = ordemPorLote.get(String(loteRow.lote));
-          if (!ordemAtual || !ordemAtual.formula_id) continue;
-          if (ordemAtual.quantidade === loteRow.quantidade) continue;
-          try {
-            await ajustarEstoqueOP(
-              ordemAtual.id,
-              ordemAtual.formula_id,
-              ordemAtual.quantidade,
-              loteRow.quantidade,
-              String(loteRow.lote),
-            );
-          } catch { /* silencioso */ }
-        }
       }
 
       // Remove lotes bloqueados do banco caso tenham entrado por importações anteriores

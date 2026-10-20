@@ -196,13 +196,14 @@ export default function PreProgramacao() {
   const excluir = async () => {
     if (!ordemExcluir) return;
     setExcluindo(true);
-    // Estorna PRIMEIRO — se falhar, aborta a exclusão para não furar o saldo
-    try {
-      await estornarEstoqueOP(ordemExcluir.id);
-    } catch (err: any) {
-      setExcluindo(false);
-      toast({ title: 'Erro ao estornar estoque', description: err?.message ?? 'Falha desconhecida', variant: 'destructive' });
-      return;
+    if (ordemExcluir.status === 'concluido') {
+      try {
+        await estornarEstoqueOP(ordemExcluir.id);
+      } catch (err: any) {
+        setExcluindo(false);
+        toast({ title: 'Erro ao estornar estoque', description: err?.message ?? 'Falha desconhecida', variant: 'destructive' });
+        return;
+      }
     }
     const { error } = await supabase.from('ordens').delete().eq('id', ordemExcluir.id);
     setExcluindo(false);
@@ -255,21 +256,23 @@ export default function PreProgramacao() {
     await fetchOrdens();
     toast({ title: 'OP atualizada' });
 
-    try {
-      const qtdNova = payload.quantidade as number | undefined;
-      const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
-      const formulaMudou = formulaIdNovo !== formulaIdAntigo;
+    if (ordemEditar?.status === 'concluido') {
+      try {
+        const qtdNova = payload.quantidade as number | undefined;
+        const formulaIdNovo = "formula_id" in payload ? (payload.formula_id as string | null) : formulaIdAntigo;
+        const formulaMudou = formulaIdNovo !== formulaIdAntigo;
 
-      if (qtdAntiga !== undefined && qtdNova !== undefined) {
-        if (formulaMudou) {
-          await estornarEstoqueOP(id);
-          if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
-        } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
-          await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+        if (qtdAntiga !== undefined && qtdNova !== undefined) {
+          if (formulaMudou) {
+            await estornarEstoqueOP(id);
+            if (formulaIdNovo) await baixarEstoqueOP(id, formulaIdNovo, qtdNova, lote);
+          } else if (qtdNova !== qtdAntiga && formulaIdAntigo) {
+            await ajustarEstoqueOP(id, formulaIdAntigo, qtdAntiga, qtdNova, lote);
+          }
         }
+      } catch (err: any) {
+        toast({ title: 'Aviso: falha ao atualizar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
       }
-    } catch (err: any) {
-      toast({ title: 'Aviso: falha ao atualizar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
     }
   };
 
