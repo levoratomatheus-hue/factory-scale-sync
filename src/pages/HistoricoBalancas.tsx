@@ -445,7 +445,7 @@ function CardOP({ grupo, onApagar, onEditar, onAdicionarManual, onConcluir, oper
                   </tr>
                 </thead>
                 <tbody>
-                  {grupo.sessoes.map((s) => {
+                  {useMemo(() => grupo.sessoes.map((s) => {
                     const { label, cls } = fmtMotivo(s.motivo_fim);
                     return (
                       <tr key={s.id} className="border-t border-black/5 dark:border-white/10">
@@ -481,7 +481,7 @@ function CardOP({ grupo, onApagar, onEditar, onAdicionarManual, onConcluir, oper
                         </td>
                       </tr>
                     );
-                  })}
+                  }), [grupo.sessoes, abrirEditar, setSessaoParaApagar])}
                 </tbody>
               </table>
             </div>
@@ -706,6 +706,11 @@ function BarrasOperadores({ rows, titulo }: { rows: RowAnalise[]; titulo: string
   if (rows.length === 0) return null;
   const maxKg = Math.max(...rows.map((r) => r.kg), 1);
 
+  const rowsWithPct = useMemo(
+    () => rows.map((r) => ({ ...r, pct: (r.kg / maxKg) * 100, showInside: (r.kg / maxKg) * 100 > 28 })),
+    [rows, maxKg],
+  );
+
   return (
     <div className="rounded-xl border bg-card p-4 space-y-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -724,9 +729,8 @@ function BarrasOperadores({ rows, titulo }: { rows: RowAnalise[]; titulo: string
       </div>
 
       <div className="space-y-4">
-        {rows.map((r, i) => {
-          const pct = (r.kg / maxKg) * 100;
-          const showInside = pct > 28;
+        {rowsWithPct.map((r, i) => {
+          const { pct, showInside } = r;
 
           return (
             <div key={r.label}>
@@ -877,6 +881,21 @@ export default function HistoricoBalancas() {
       });
   }, [sessoes]);
 
+  // ── Cache de soma da fórmula padrão por formula_id ──
+  // Indexado por formula_id → soma de (percentual/100 * tamanho_batelada)
+  // Só inclui entradas que têm ambos formula_id e tamanho_batelada não nulos.
+  const formulaSumMap = useMemo<Record<string, number>>(() => {
+    const result: Record<string, number> = {};
+    ordensInfo.forEach((info) => {
+      if (!info.formula_id || !info.tamanho_batelada) return;
+      // A soma real dos percentuais não está em ordensInfo (estaria em formulas).
+      // Este mapa é preenchido de forma lazy via calcKg quando os dados são buscados;
+      // usamos aqui como store de resultados já calculados.
+      // A chave é ordem_id → soma já conhecida (populada abaixo).
+    });
+    return result;
+  }, [ordensInfo]);
+
   // ── Calcular kg (usa ordens_formula se existir, senão formulas) ──
   const calcKg = useCallback(async (
     ordemId: string,
@@ -894,6 +913,15 @@ export default function HistoricoBalancas() {
 
     const tamanho: number = (info as any)?.tamanho_batelada ?? 0;
 
+    // Fast path: se já temos a soma em cache (formula padrão, sem override)
+    const cachedSum = formulaSumMap[ordemId];
+    if (cachedSum !== undefined) {
+      return {
+        kg_pesado: nBateladas * cachedSum,
+        kg_nominal: nBateladas * tamanho,
+      };
+    }
+
     const { data: customRows } = await (supabase as any)
       .from('ordens_formula')
       .select('quantidade_kg')
@@ -910,13 +938,15 @@ export default function HistoricoBalancas() {
         .eq('formula_id', (info as any).formula_id);
       somaFormula = ((fRows ?? []) as { percentual: number }[])
         .reduce((s, r) => s + (r.percentual / 100) * tamanho, 0);
+      // Armazena no cache para reutilização dentro da mesma sessão
+      formulaSumMap[ordemId] = somaFormula;
     }
 
     return {
       kg_pesado: nBateladas * somaFormula,
       kg_nominal: nBateladas * tamanho,
     };
-  }, [ordensInfo]);
+  }, [ordensInfo, formulaSumMap]);
 
   // ── Apagar sessão ──
   const apagarSessao = useCallback(async (id: string) => {

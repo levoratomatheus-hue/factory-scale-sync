@@ -190,6 +190,19 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     hasCustom ? null : tamanhoBatelada
   );
 
+  // ── Valores derivados (render-only) ──
+  const derived = useMemo(() => {
+    const quantidade = emPesagem?.quantidade ?? 0;
+    const tb = tamanhoBatelada && tamanhoBatelada > 0 ? tamanhoBatelada : null;
+    const faltaKg           = Math.max(0, quantidade - jaProduzidoKg);
+    const bateladasRestantes = tb ? Math.round(faltaKg / tb) : 0;
+    const totalBateladas     = tb ? Math.round(quantidade / tb) : 0;
+    const faltaKgPausa       = faltaKg;
+    const maxPermitido       = tb ? Math.round(faltaKgPausa / tb) : 0;
+    const bateladasSessaoConc = tb ? Math.round(faltaKg / tb) : 0;
+    return { faltaKg, bateladasRestantes, totalBateladas, faltaKgPausa, maxPermitido, bateladasSessaoConc };
+  }, [jaProduzidoKg, emPesagem, tamanhoBatelada]);
+
   const displayItens: FormulaRow[] = useMemo(() => {
     if (!hasCustom) return formulaItens;
     return customItens;
@@ -362,32 +375,24 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
             {formatKg(emPesagem.quantidade)} <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
 
-          {tamanhoBatelada && tamanhoBatelada > 0 && !(jaProduzidoKg > 0 && emPesagem.quantidade - jaProduzidoKg > 0) && (() => {
-            const totalBateladas = Math.round(emPesagem.quantidade / tamanhoBatelada);
-            return (
-              <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700 px-4 py-3">
-                <div className="font-extrabold leading-tight text-amber-900 dark:text-amber-100 uppercase">
-                  <span className="text-2xl text-amber-600 dark:text-amber-400 tabular-nums">{totalBateladas}</span>
-                  <span className="text-xl"> batelada{totalBateladas !== 1 ? 's' : ''} de </span>
-                  <span className="text-2xl text-amber-600 dark:text-amber-400 tabular-nums">{formatKg(tamanhoBatelada)} kg</span>
-                </div>
+          {tamanhoBatelada && tamanhoBatelada > 0 && !(jaProduzidoKg > 0 && emPesagem.quantidade - jaProduzidoKg > 0) && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700 px-4 py-3">
+              <div className="font-extrabold leading-tight text-amber-900 dark:text-amber-100 uppercase">
+                <span className="text-2xl text-amber-600 dark:text-amber-400 tabular-nums">{derived.totalBateladas}</span>
+                <span className="text-xl"> batelada{derived.totalBateladas !== 1 ? 's' : ''} de </span>
+                <span className="text-2xl text-amber-600 dark:text-amber-400 tabular-nums">{formatKg(tamanhoBatelada)} kg</span>
               </div>
-            );
-          })()}
+            </div>
+          )}
 
-          {jaProduzidoKg > 0 && tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-            const faltaKg = Math.max(0, emPesagem.quantidade - jaProduzidoKg);
-            const bateladasRestantes = Math.round(faltaKg / tamanhoBatelada);
-            if (faltaKg <= 0) return null;
-            return (
-              <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-400 dark:border-orange-600 px-4 py-3 flex items-start gap-3">
-                <span className="text-orange-500 text-xl shrink-0 mt-0.5">⚠️</span>
-                <p className="text-sm font-bold text-orange-900 dark:text-orange-200 leading-snug">
-                  OP já tem {formatKg(jaProduzidoKg)} kg pesados — pese {bateladasRestantes} batelada{bateladasRestantes !== 1 ? 's' : ''} de {formatKg(tamanhoBatelada)} kg (faltam {formatKg(faltaKg)} kg).
-                </p>
-              </div>
-            );
-          })()}
+          {jaProduzidoKg > 0 && tamanhoBatelada && tamanhoBatelada > 0 && derived.faltaKg > 0 && (
+            <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-400 dark:border-orange-600 px-4 py-3 flex items-start gap-3">
+              <span className="text-orange-500 text-xl shrink-0 mt-0.5">⚠️</span>
+              <p className="text-sm font-bold text-orange-900 dark:text-orange-200 leading-snug">
+                OP já tem {formatKg(jaProduzidoKg)} kg pesados — pese {derived.bateladasRestantes} batelada{derived.bateladasRestantes !== 1 ? 's' : ''} de {formatKg(tamanhoBatelada)} kg (faltam {formatKg(derived.faltaKg)} kg).
+              </p>
+            </div>
+          )}
 
           {isLoadingFormula && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -493,22 +498,18 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   Deseja finalizar a pesagem desta ordem?
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-                const faltaKg = Math.max(0, emPesagem.quantidade - jaProduzidoKg);
-                const bateladasSessao = Math.round(faltaKg / tamanhoBatelada);
-                return (
-                  <div className="rounded-lg bg-muted/50 border px-4 py-3 text-sm space-y-0.5">
-                    <p className="font-medium">
-                      {bateladasSessao} batelada{bateladasSessao !== 1 ? 's' : ''} serão registradas nesta conclusão
+              {tamanhoBatelada && tamanhoBatelada > 0 && (
+                <div className="rounded-lg bg-muted/50 border px-4 py-3 text-sm space-y-0.5">
+                  <p className="font-medium">
+                    {derived.bateladasSessaoConc} batelada{derived.bateladasSessaoConc !== 1 ? 's' : ''} serão registradas nesta conclusão
+                  </p>
+                  {jaProduzidoKg > 0 && (
+                    <p className="text-muted-foreground text-xs">
+                      {formatKg(jaProduzidoKg)} kg já pesados em etapas anteriores — faltam {formatKg(derived.faltaKg)} kg
                     </p>
-                    {jaProduzidoKg > 0 && (
-                      <p className="text-muted-foreground text-xs">
-                        {formatKg(jaProduzidoKg)} kg já pesados em etapas anteriores — faltam {formatKg(faltaKg)} kg
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
+                  )}
+                </div>
+              )}
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <AlertDialogAction
@@ -542,28 +543,26 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </AlertDialogHeader>
               <div className="space-y-3">
                 {tamanhoBatelada && tamanhoBatelada > 0 && (() => {
-                  const faltaKgPausa   = Math.max(0, emPesagem.quantidade - jaProduzidoKg);
-                  const maxPermitido   = Math.round(faltaKgPausa / tamanhoBatelada);
-                  const valorNum       = parseInt(bateladasSessaoPausa);
-                  const excedeu        = bateladasSessaoPausa !== '' && (!Number.isInteger(valorNum) || valorNum > maxPermitido);
+                  const valorNum = parseInt(bateladasSessaoPausa);
+                  const excedeu  = bateladasSessaoPausa !== '' && (!Number.isInteger(valorNum) || valorNum > derived.maxPermitido);
                   return (
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium">Quantas bateladas você pesou nesta vez?</label>
                       <input
                         type="number"
                         min={0}
-                        max={maxPermitido}
+                        max={derived.maxPermitido}
                         value={bateladasSessaoPausa}
                         onChange={(e) => setBateladasSessaoPausa(e.target.value)}
                         className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${excedeu ? 'border-destructive focus:ring-destructive' : ''}`}
                       />
                       {excedeu ? (
                         <p className="text-xs text-destructive font-medium">
-                          Máximo de {maxPermitido} batelada{maxPermitido !== 1 ? 's' : ''} restante{maxPermitido !== 1 ? 's' : ''} nesta OP.
+                          Máximo de {derived.maxPermitido} batelada{derived.maxPermitido !== 1 ? 's' : ''} restante{derived.maxPermitido !== 1 ? 's' : ''} nesta OP.
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Faltam {maxPermitido} batelada{maxPermitido !== 1 ? 's' : ''} ({formatKg(faltaKgPausa)} kg restantes)
+                          Faltam {derived.maxPermitido} batelada{derived.maxPermitido !== 1 ? 's' : ''} ({formatKg(derived.faltaKgPausa)} kg restantes)
                         </p>
                       )}
                     </div>
@@ -581,7 +580,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                 <AlertDialogAction
                   disabled={pausando || !!(tamanhoBatelada && tamanhoBatelada > 0 && (
                     bateladasSessaoPausa === '' ||
-                    parseInt(bateladasSessaoPausa) > Math.round(Math.max(0, emPesagem.quantidade - jaProduzidoKg) / tamanhoBatelada)
+                    parseInt(bateladasSessaoPausa) > derived.maxPermitido
                   ))}
                   onClick={(e) => { e.preventDefault(); pausarOrdem(); }}
                 >
