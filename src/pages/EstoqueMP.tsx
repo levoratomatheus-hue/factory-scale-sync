@@ -488,14 +488,48 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
         const data = new Uint8Array(ev.target!.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        // Remove cabeçalho (primeira linha)
-        const preview = rows.slice(1).filter((r: any[]) => r[0]).map((r: any[]) => ({
-          cod_tid: String(r[0] ?? '').trim(),
-          materia_prima: String(r[1] ?? '').trim(),
-          saldo_kg: parseFloat(String(r[2] ?? '0').replace(',', '.')) || 0,
-          minimo_kg: parseFloat(String(r[3] ?? '0').replace(',', '.')) || 0,
-        }));
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // Normaliza texto para comparação (sem acento, minúsculo, sem espaços extras)
+        const norm = (v: any) =>
+          String(v ?? '').trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // Localiza a linha de cabeçalho: primeira que tenha "codigo do material"
+        const headerIdx = rows.findIndex((r) =>
+          r.some((cell) => norm(cell) === 'codigo do material')
+        );
+
+        if (headerIdx === -1) {
+          toast({ title: 'Cabeçalho não encontrado', description: 'Nenhuma coluna "Codigo do Material" localizada na planilha.', variant: 'destructive' });
+          return;
+        }
+
+        const header = rows[headerIdx];
+        const colIdx = (label: string) => header.findIndex((h) => norm(h) === norm(label));
+
+        const iCod   = colIdx('Codigo do Material');
+        const iNome  = colIdx('Descrição');
+        const iSaldo = colIdx('Estoque do Material');
+
+        if (iSaldo === -1) {
+          toast({ title: 'Coluna de saldo não encontrada', description: 'Coluna "Estoque do Material" não localizada no cabeçalho.', variant: 'destructive' });
+          return;
+        }
+
+        const preview = rows
+          .slice(headerIdx + 1)
+          .filter((r) => {
+            const cod = String(r[iCod] ?? '').trim();
+            return cod !== '' && /^\d/.test(cod); // ignora linhas sem código ou de total
+          })
+          .map((r) => ({
+            cod_tid:       String(r[iCod] ?? '').trim(),
+            materia_prima: iNome >= 0 ? String(r[iNome] ?? '').trim() : '',
+            saldo_kg:      parseFloat(String(r[iSaldo] ?? '0').replace(',', '.')) || 0,
+            minimo_kg:     0,
+          }));
+
         setImportPreview(preview);
       } catch {
         toast({ title: 'Erro ao ler planilha', variant: 'destructive' });
@@ -1188,11 +1222,13 @@ export default function EstoqueMP({ perfilNome, papel }: Props) {
           </DialogHeader>
           <div className="space-y-3 flex-1 overflow-y-auto min-h-0">
             <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-300">
-              <p className="font-semibold mb-1">Formato esperado da planilha (a partir da 2ª linha):</p>
-              <p>Coluna A: Código TID (ex.: <code>000141</code>)</p>
-              <p>Coluna B: Nome da matéria-prima</p>
-              <p>Coluna C: Saldo em kg</p>
-              <p>Coluna D: Estoque mínimo em kg (opcional)</p>
+              <p className="font-semibold mb-1">Formato aceito: relatório de inventário ZC (exportado direto do sistema)</p>
+              <p>O arquivo pode ter quantas linhas de cabeçalho quiser — o import localiza automaticamente a linha com <strong>"Codigo do Material"</strong>.</p>
+              <p className="mt-1">Colunas lidas pelo nome:</p>
+              <p>• <code>Codigo do Material</code> → código TID (ex.: <code>141</code>)</p>
+              <p>• <code>Descrição</code> → nome da matéria-prima</p>
+              <p>• <code>Estoque do Material</code> → saldo em kg</p>
+              <p className="mt-1 text-blue-600 dark:text-blue-400">O mínimo não vem no arquivo — use "Atualizar Mínimo" após importar.</p>
             </div>
 
             <div>
