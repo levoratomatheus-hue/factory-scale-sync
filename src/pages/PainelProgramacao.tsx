@@ -718,7 +718,7 @@ export default function PainelProgramacao() {
   const [voltandoPesagem, setVoltandoPesagem] = useState(false);
   const [voltarPesagemDados, setVoltarPesagemDados] = useState<{ jaProduzidoKg: number; faltaKg: number } | null>(null);
   const [voltarPesagemBatelada, setVoltarPesagemBatelada] = useState('');
-  const [voltarPesagemSomaFormula, setVoltarPesagemSomaFormula] = useState<number>(0);
+  const [voltarPesagemItens, setVoltarPesagemItens] = useState<{ sequencia: number | null; materia_prima: string; quantidade_kg: number }[]>([]);
   const [voltarPesagemCarregando, setVoltarPesagemCarregando] = useState(false);
   const [ordemParaForcar, setOrdemParaForcar] = useState<Ordem | null>(null);
   const [forcarHoraInicio, setForcarHoraInicio] = useState("");
@@ -1145,17 +1145,16 @@ export default function PainelProgramacao() {
     setOrdemParaVoltarPesagem(ordem);
     setVoltarPesagemDados(null);
     setVoltarPesagemBatelada('');
-    setVoltarPesagemSomaFormula(0);
+    setVoltarPesagemItens([]);
     setVoltarPesagemCarregando(true);
     const [{ data: pesagensData }, { data: formulaData }] = await Promise.all([
       (supabase as any).from('pesagens').select('kg_nominal').eq('ordem_id', ordem.id).not('fim', 'is', null),
-      (supabase as any).from('ordens_formula').select('quantidade_kg').eq('ordem_id', ordem.id),
+      (supabase as any).from('ordens_formula').select('sequencia, materia_prima, quantidade_kg').eq('ordem_id', ordem.id).order('sequencia', { ascending: true }),
     ]);
     const jaProduzidoKg = (pesagensData ?? []).reduce((s: number, p: any) => s + (p.kg_nominal ?? 0), 0);
     const faltaKg = ordem.quantidade - jaProduzidoKg;
-    const somaFormula = (formulaData ?? []).reduce((s: number, i: any) => s + (i.quantidade_kg ?? 0), 0);
     setVoltarPesagemDados({ jaProduzidoKg, faltaKg });
-    setVoltarPesagemSomaFormula(somaFormula);
+    setVoltarPesagemItens((formulaData ?? []) as { sequencia: number | null; materia_prima: string; quantidade_kg: number }[]);
     setVoltarPesagemCarregando(false);
   };
 
@@ -1163,33 +1162,25 @@ export default function PainelProgramacao() {
     if (!ordemParaVoltarPesagem) return;
     setVoltandoPesagem(true);
     const jaProduzidoKg = voltarPesagemDados?.jaProduzidoKg ?? 0;
-    const novaFormula = voltarPesagemBatelada ? parseFloat(voltarPesagemBatelada.replace(',', '.')) : null;
+    const novaBatelada = voltarPesagemBatelada ? parseFloat(voltarPesagemBatelada.replace(',', '.')) : null;
     const update: any = { status: "pendente", bateladas_feitas: 0, obs_pausa: null };
-    if (novaFormula && novaFormula > 0) update.tamanho_batelada = novaFormula;
+    if (novaBatelada && novaBatelada > 0) update.tamanho_batelada = novaBatelada;
     const { error } = await supabase
       .from("ordens")
       .update(update)
       .eq("id", ordemParaVoltarPesagem.id);
     if (!error) {
-      // Re-escalar ordens_formula pelo total da fórmula (V / soma_formula_atual)
-      if (novaFormula && novaFormula > 0 && voltarPesagemSomaFormula > 0) {
-        const { data: customData } = await (supabase as any)
-          .from("ordens_formula")
-          .select("sequencia, materia_prima, quantidade_kg")
-          .eq("ordem_id", ordemParaVoltarPesagem.id)
-          .order("sequencia", { ascending: true });
-        if (customData && customData.length > 0) {
-          const fator = novaFormula / voltarPesagemSomaFormula;
-          await (supabase as any).from("ordens_formula").delete().eq("ordem_id", ordemParaVoltarPesagem.id);
-          await (supabase as any).from("ordens_formula").insert(
-            customData.map((item: any) => ({
-              ordem_id: ordemParaVoltarPesagem!.id,
-              sequencia: item.sequencia,
-              materia_prima: item.materia_prima,
-              quantidade_kg: Math.round(item.quantidade_kg * fator * 1000) / 1000,
-            }))
-          );
-        }
+      // Salvar fórmula exatamente como o gestor digitou (sem escalonamento)
+      if (voltarPesagemItens.length > 0) {
+        await (supabase as any).from("ordens_formula").delete().eq("ordem_id", ordemParaVoltarPesagem.id);
+        await (supabase as any).from("ordens_formula").insert(
+          voltarPesagemItens.map((item) => ({
+            ordem_id: ordemParaVoltarPesagem!.id,
+            sequencia: item.sequencia,
+            materia_prima: item.materia_prima,
+            quantidade_kg: item.quantidade_kg,
+          }))
+        );
       }
       supabase.from("historico").insert({
         ordem_id: ordemParaVoltarPesagem.id,
@@ -1211,7 +1202,7 @@ export default function PainelProgramacao() {
     setOrdemParaVoltarPesagem(null);
     setVoltarPesagemDados(null);
     setVoltarPesagemBatelada('');
-    setVoltarPesagemSomaFormula(0);
+    setVoltarPesagemItens([]);
   };
 
   const handleForcarConclusao = async () => {
@@ -2081,34 +2072,41 @@ export default function PainelProgramacao() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => { if (!open) { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemSomaFormula(0); } }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => { if (!open) { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemItens([]); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Voltar para pesagem?</DialogTitle>
-            <DialogDescription asChild>
-              <div>
-                <span className="font-medium text-foreground">{ordemParaVoltarPesagem?.produto}</span>
-                {!voltarPesagemCarregando && voltarPesagemDados && voltarPesagemDados.jaProduzidoKg > 0 && voltarPesagemDados.faltaKg > 0 ? (
-                  <p className="mt-1">A OP já tem <strong>{formatKg(voltarPesagemDados.jaProduzidoKg)} kg</strong> pesados. O operador vai pesar só o restante ({formatKg(voltarPesagemDados.faltaKg)} kg). O estoque não será alterado.</p>
-                ) : (
-                  <p className="mt-1">A pesagem anterior será desfeita. O operador terá que pesar a OP inteira novamente. O estoque não será alterado.</p>
-                )}
-              </div>
-            </DialogDescription>
+            <DialogTitle>Voltar para pesagem</DialogTitle>
+            <p className="text-sm text-muted-foreground truncate">{ordemParaVoltarPesagem?.produto}</p>
           </DialogHeader>
 
           {voltarPesagemCarregando && (
-            <div className="flex justify-center py-2">
+            <div className="flex justify-center py-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           )}
 
-          {!voltarPesagemCarregando && voltarPesagemDados && voltarPesagemDados.jaProduzidoKg > 0 && voltarPesagemDados.faltaKg > 0 && (() => {
-            const v = parseFloat(voltarPesagemBatelada.replace(',', '.'));
-            const valida = !isNaN(v) && v > 0;
-            const fator = valida && voltarPesagemSomaFormula > 0 ? v / voltarPesagemSomaFormula : null;
+          {!voltarPesagemCarregando && voltarPesagemDados && (() => {
+            const { jaProduzidoKg, faltaKg } = voltarPesagemDados;
+            const cresceu = jaProduzidoKg > 0 && faltaKg > 0;
+            const bat = parseFloat(voltarPesagemBatelada.replace(',', '.'));
+            const batValida = !isNaN(bat) && bat > 0;
+            const nBat = batValida && cresceu ? Math.round(faltaKg / bat) : 0;
+            const naoDivide = batValida && cresceu && Math.abs((nBat * bat) - faltaKg) > 0.01;
+            const somaItens = voltarPesagemItens.reduce((s, i) => s + (i.quantidade_kg || 0), 0);
+            const updateItem = (idx: number, val: string) => {
+              const num = parseFloat(val);
+              setVoltarPesagemItens((prev) => prev.map((it, i) => i === idx ? { ...it, quantidade_kg: isNaN(num) ? 0 : num } : it));
+            };
+
+            if (!cresceu) {
+              return (
+                <p className="text-sm text-muted-foreground">A pesagem anterior será desfeita. O operador terá que pesar a OP inteira novamente. O estoque não será alterado.</p>
+              );
+            }
+
             return (
               <div className="space-y-4">
+                {/* Resumo */}
                 <div className="rounded-lg bg-muted/50 border px-4 py-3 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total da OP</span>
@@ -2116,53 +2114,90 @@ export default function PainelProgramacao() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Já pesado</span>
-                    <span className="font-semibold tabular-nums text-green-600 dark:text-green-400">{formatKg(voltarPesagemDados.jaProduzidoKg)} kg</span>
+                    <span className="font-semibold tabular-nums text-green-600 dark:text-green-400">{formatKg(jaProduzidoKg)} kg</span>
                   </div>
                   <div className="flex justify-between border-t pt-1 mt-1">
                     <span className="font-medium">Falta pesar</span>
-                    <span className="font-bold tabular-nums text-primary">{formatKg(voltarPesagemDados.faltaKg)} kg</span>
+                    <span className="font-bold tabular-nums text-primary">{formatKg(faltaKg)} kg</span>
                   </div>
-                  {voltarPesagemSomaFormula > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total atual da fórmula</span>
-                      <span className="font-semibold tabular-nums">{formatKg(voltarPesagemSomaFormula)} kg</span>
-                    </div>
-                  )}
                 </div>
+
+                {/* Batelada */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Total de fórmula a pesar (kg)</label>
+                  <label className="text-sm font-medium">Batelada (kg)</label>
                   <input
                     type="number"
                     min={0.001}
                     step="any"
                     value={voltarPesagemBatelada}
                     onChange={(e) => setVoltarPesagemBatelada(e.target.value)}
-                    placeholder={voltarPesagemSomaFormula > 0 ? `Atual: ${formatKg(voltarPesagemSomaFormula)} kg` : 'kg de fórmula'}
+                    placeholder="kg por batelada"
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     autoFocus
                   />
-                  {valida && fator !== null && (
-                    <p className="text-xs font-medium text-muted-foreground">
-                      fator {fator.toFixed(3)} — fórmula total ficará {formatKg(v)} kg
+                  {batValida && (
+                    <p className={`text-xs font-medium ${naoDivide ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                      = {nBat} batelada{nBat !== 1 ? 's' : ''} de {formatKg(bat)} kg
+                      {naoDivide && ' — não fecha certinho'}
                     </p>
                   )}
-                  {voltarPesagemBatelada !== '' && !valida && (
-                    <p className="text-xs text-destructive font-medium">Digite um valor maior que 0.</p>
-                  )}
                 </div>
+
+                {/* Tabela de fórmula editável */}
+                {voltarPesagemItens.length > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Matéria-prima por batelada</label>
+                    <div className="rounded-md border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted text-muted-foreground text-xs">
+                          <tr>
+                            <th className="text-left px-2 py-1.5">Seq</th>
+                            <th className="text-left px-2 py-1.5">Matéria-Prima</th>
+                            <th className="text-right px-2 py-1.5">Qtd (kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {voltarPesagemItens.map((item, idx) => (
+                            <tr key={idx} className="border-t">
+                              <td className="px-2 py-1.5 text-muted-foreground">{item.sequencia ?? '-'}</td>
+                              <td className="px-2 py-1.5 font-medium">{item.materia_prima}</td>
+                              <td className="px-2 py-1.5">
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  value={item.quantidade_kg}
+                                  onChange={(e) => updateItem(idx, e.target.value)}
+                                  className="w-24 rounded border border-input bg-background px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-ring ml-auto block"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t">
+                            <td colSpan={2} className="px-2 py-1.5 text-xs text-muted-foreground/60 text-right">total fórmula</td>
+                            <td className="px-2 py-1.5 text-right text-xs font-medium text-muted-foreground">
+                              {formatKg(somaItens)} kg
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemSomaFormula(0); }} disabled={voltandoPesagem}>
+            <Button variant="outline" onClick={() => { setOrdemParaVoltarPesagem(null); setVoltarPesagemDados(null); setVoltarPesagemBatelada(''); setVoltarPesagemItens([]); }} disabled={voltandoPesagem}>
               Cancelar
             </Button>
             <Button
               onClick={handleVoltarParaPesagem}
               disabled={voltandoPesagem || voltarPesagemCarregando || (
                 !!(voltarPesagemDados && voltarPesagemDados.jaProduzidoKg > 0 && voltarPesagemDados.faltaKg > 0) &&
-                (() => { const v = parseFloat(voltarPesagemBatelada.replace(',', '.')); return isNaN(v) || v <= 0; })()
+                (() => { const b = parseFloat(voltarPesagemBatelada.replace(',', '.')); return isNaN(b) || b <= 0; })()
               )}
             >
               {voltandoPesagem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
