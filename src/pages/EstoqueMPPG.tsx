@@ -13,7 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { formatKg } from '@/lib/utils';
 import {
   Loader2, Search, PackageOpen, ArrowDownToLine, ArrowUpToLine, SlidersHorizontal,
-  History, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp, Plus,
+  History, FileUp, Download, AlertTriangle, RefreshCw, Pencil, TrendingUp, Plus,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -149,6 +149,12 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
   const [savingAjuste, setSavingAjuste] = useState(false);
   const [savingMinimo, setSavingMinimo] = useState(false);
   const [savingCadastro, setSavingCadastro] = useState(false);
+
+  // Import
+  const [importarOpen, setImportarOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importando, setImportando] = useState(false);
 
   // Cadastrar MP
   const [cadastrarOpen, setCadastrarOpen] = useState(false);
@@ -541,6 +547,129 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
     fetchEstoque();
   };
 
+  // ── Importar ─────────────────────────────────────────────────────────────────
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setImportFile(file);
+    setImportPreview([]);
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const XLSX = await import('xlsx');
+        const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // Normaliza texto para comparação (sem acento, minúsculo, sem espaços extras)
+        const norm = (v: any) =>
+          String(v ?? '').trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // Localiza a linha de cabeçalho: primeira que tenha "codigo do material"
+        const headerIdx = rows.findIndex((r) =>
+          r.some((cell) => norm(cell) === 'codigo do material')
+        );
+
+        if (headerIdx === -1) {
+          toast({ title: 'Cabeçalho não encontrado', description: 'Nenhuma coluna "Codigo do Material" localizada na planilha.', variant: 'destructive' });
+          return;
+        }
+
+        const header = rows[headerIdx];
+        const colIdx = (label: string) => header.findIndex((h) => norm(h) === norm(label));
+
+        const iCod   = colIdx('Codigo do Material');
+        const iNome  = colIdx('Descrição');
+        const iSaldo = colIdx('Estoque do Material');
+
+        if (iSaldo === -1) {
+          toast({ title: 'Coluna de saldo não encontrada', description: 'Coluna "Estoque do Material" não localizada no cabeçalho.', variant: 'destructive' });
+          return;
+        }
+
+        const preview = rows
+          .slice(headerIdx + 1)
+          .filter((r) => {
+            const cod = String(r[iCod] ?? '').trim();
+            return cod !== '' && /^\d/.test(cod); // ignora linhas sem código ou de total
+          })
+          .map((r) => ({
+            cod_pg:        String(r[iCod] ?? '').trim(),
+            materia_prima: iNome >= 0 ? String(r[iNome] ?? '').trim() : '',
+            saldo_kg:      parseFloat(String(r[iSaldo] ?? '0').replace(',', '.')) || 0,
+            minimo_kg:     0,
+          }));
+
+        setImportPreview(preview);
+      } catch {
+        toast({ title: 'Erro ao ler planilha', variant: 'destructive' });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportar = async () => {
+    if (importPreview.length === 0) return;
+    setImportando(true);
+
+    const agora = new Date().toISOString();
+    const allRows: object[] = [];
+    const allMovs: object[] = [];
+
+    for (const row of importPreview) {
+      if (!row.cod_pg) continue;
+
+      allRows.push({
+        cod_pg: row.cod_pg,
+        materia_prima: row.materia_prima || row.cod_pg,
+        saldo_kg: row.saldo_kg,
+        minimo_kg: row.minimo_kg,
+        atualizado_em: agora,
+      });
+
+      allMovs.push({
+        cod_pg: row.cod_pg,
+        materia_prima: row.materia_prima || row.cod_pg,
+        tipo: 'saldo_inicial',
+        quantidade_kg: row.saldo_kg,
+        saldo_apos: row.saldo_kg,
+        observacao: 'Importação de saldo inicial',
+        criado_por: perfilNome,
+      });
+    }
+
+    const { error: errUpsert } = await (supabase as any)
+      .from('estoque_mp_pg')
+      .upsert(allRows, { onConflict: 'cod_pg' });
+
+    if (errUpsert) {
+      toast({ title: 'Erro ao importar estoque', description: errUpsert.message, variant: 'destructive' });
+      setImportando(false);
+      return;
+    }
+
+    const { error: errMovs } = await (supabase as any)
+      .from('estoque_movimentacoes_pg')
+      .insert(allMovs);
+
+    if (errMovs) {
+      toast({ title: 'Erro ao registrar movimentações', description: errMovs.message, variant: 'destructive' });
+      setImportando(false);
+      return;
+    }
+
+    toast({ title: `${allRows.length} MP(s) importada(s) com sucesso` });
+    setImportando(false);
+    setImportarOpen(false);
+    setImportFile(null);
+    setImportPreview([]);
+    fetchEstoque();
+  };
+
   // ── Exportar ─────────────────────────────────────────────────────────────────
 
   const handleExportar = async () => {
@@ -572,6 +701,10 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
           <Button variant="outline" size="sm" onClick={() => fetchEstoque()} disabled={loading}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportarOpen(true)}>
+            <FileUp className="h-3.5 w-3.5 mr-1.5" />
+            Importar
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportar} disabled={estoque.length === 0}>
             <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -1033,6 +1166,80 @@ export default function EstoqueMPPG({ perfilNome }: Props) {
               </table>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal Importar ── */}
+      <Dialog open={importarOpen} onOpenChange={(open) => { if (!open) { setImportarOpen(false); setImportFile(null); setImportPreview([]); } }}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Importar Saldos Iniciais — PG</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 flex-1 overflow-y-auto min-h-0">
+            <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-300">
+              <p className="font-semibold mb-1">Formato aceito: relatório de inventário PG (exportado direto do sistema)</p>
+              <p>O arquivo pode ter quantas linhas de cabeçalho quiser — o import localiza automaticamente a linha com <strong>"Codigo do Material"</strong>.</p>
+              <p className="mt-1">Colunas lidas pelo nome:</p>
+              <p>• <code>Codigo do Material</code> → código PG</p>
+              <p>• <code>Descrição</code> → nome da matéria-prima</p>
+              <p>• <code>Estoque do Material</code> → saldo em kg</p>
+              <p className="mt-1 text-blue-600 dark:text-blue-400">O mínimo não vem no arquivo — use "Atualizar Mínimo" após importar.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium">Selecionar arquivo (.xlsx, .xls, .csv)</label>
+              <Input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileChange}
+                className="mt-1 h-8 text-xs"
+              />
+            </div>
+
+            {importPreview.length > 0 && (
+              <div>
+                <p className="text-xs font-medium mb-1">{importPreview.length} linha(s) encontrada(s) — pré-visualização:</p>
+                <div className="rounded border overflow-auto max-h-48">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 text-muted-foreground sticky top-0">
+                      <tr>
+                        <th className="text-left px-2 py-1">Cód. PG</th>
+                        <th className="text-left px-2 py-1">Matéria-Prima</th>
+                        <th className="text-right px-2 py-1">Saldo (kg)</th>
+                        <th className="text-right px-2 py-1">Mínimo (kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.slice(0, 20).map((row, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="px-2 py-1 font-mono">{row.cod_pg}</td>
+                          <td className="px-2 py-1">{row.materia_prima || '—'}</td>
+                          <td className="px-2 py-1 text-right">{formatKg(row.saldo_kg)}</td>
+                          <td className="px-2 py-1 text-right">{formatKg(row.minimo_kg)}</td>
+                        </tr>
+                      ))}
+                      {importPreview.length > 20 && (
+                        <tr>
+                          <td colSpan={4} className="px-2 py-1 text-center text-muted-foreground italic">
+                            ... e mais {importPreview.length - 20} linha(s)
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setImportarOpen(false); setImportFile(null); setImportPreview([]); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleImportar} disabled={importPreview.length === 0 || importando}>
+              {importando && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Importar {importPreview.length > 0 ? `(${importPreview.length})` : ''}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
