@@ -163,7 +163,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const fetchOrdens = useCallback(async () => {
     const { data: allData } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim, temperaturas")
+      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim, temperaturas, obs_carga_extra")
       .eq("linha", linha)
       .in("status", ["em_linha", "aguardando_linha"])
       .order("data_programacao", { ascending: true })
@@ -527,6 +527,24 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   </ul>
                 ) : (
                   <p className="text-sm text-amber-900 whitespace-pre-wrap">{emLinha.obs}</p>
+                )}
+              </div>
+            );
+          })()}
+
+          {(emLinha as any).obs_carga_extra && (() => {
+            const items = parseObsItems((emLinha as any).obs_carga_extra);
+            return (
+              <div className="rounded-md border border-orange-200 bg-orange-50 px-4 py-3 space-y-1">
+                <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">⚠ Mistura para carga extra</p>
+                {items ? (
+                  <ul className="space-y-0.5">
+                    {items.map((item: any, i: number) => (
+                      <li key={i} className="text-sm text-orange-900 font-mono">{formatObsLine(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-orange-900 whitespace-pre-wrap">{(emLinha as any).obs_carga_extra}</p>
                 )}
               </div>
             );

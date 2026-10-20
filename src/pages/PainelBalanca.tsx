@@ -50,6 +50,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [jaProduzidoKg, setJaProduzidoKg] = useState(0);
   const [bateladasSessaoPausa, setBateladasSessaoPausa] = useState('');
   const [obsPausaInicial, setObsPausaInicial] = useState<string | null>(null);
+  const [obsCargaExtra, setObsCargaExtra] = useState<string | null>(null);
   const [pausarOpen, setPausarOpen] = useState(false);
   const [pausaObs, setPausaObs] = useState('');
   const [pausando, setPausando] = useState(false);
@@ -159,7 +160,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     let cancelled = false;
 
     Promise.all([
-      supabase.from("ordens").select("formula_id, tamanho_batelada, obs_pausa").eq("id", emPesagem.id).single(),
+      (supabase as any).from("ordens").select("formula_id, tamanho_batelada, obs_pausa, obs_carga_extra").eq("id", emPesagem.id).single(),
       supabase.from("ordens_formula").select("sequencia, materia_prima, quantidade_kg").eq("ordem_id", emPesagem.id).order("sequencia", { ascending: true }),
       (supabase as any).from("pesagens").select("bateladas, motivo_fim, kg_nominal").eq("ordem_id", emPesagem.id).not("fim", "is", null),
     ]).then(([ordemRes, formulaRes, pesagensRes]) => {
@@ -173,6 +174,7 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
       setJaConcluida(sessoesFechadas.some((p) => p.motivo_fim === 'conclusao'));
       setJaProduzidoKg(sessoesFechadas.reduce((s, p) => s + (p.kg_nominal ?? 0), 0));
       setObsPausaInicial(row?.obs_pausa ?? null);
+      setObsCargaExtra(row?.obs_carga_extra ?? null);
       if (hasC) {
         setCustomItens(formulaRes.data as FormulaRow[]);
         setHasCustom(true);
@@ -628,6 +630,33 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
               </div>
             </div>
           )}
+
+          {obsCargaExtra && (() => {
+            const items = parseObsItems(obsCargaExtra);
+            return (
+              <div className="flex overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <div className="w-1.5 shrink-0 bg-orange-400 dark:bg-orange-500 rounded-l-xl" />
+                <div className="flex-1 px-4 py-3 space-y-2.5">
+                  <p className="flex items-center gap-1.5 text-[13px] font-medium tracking-widest uppercase text-orange-600 dark:text-orange-400">
+                    <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                    Mistura para carga extra
+                  </p>
+                  {items ? (
+                    <ul className="space-y-2">
+                      {items.map((item, i) => (
+                        <li key={i} className="flex items-baseline gap-3">
+                          <span className="text-2xl font-medium tabular-nums leading-none text-orange-500 dark:text-orange-400 shrink-0">{item.qty}×</span>
+                          <span className="text-lg font-medium leading-snug text-foreground">{item.mp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-base text-foreground whitespace-pre-wrap">{obsCargaExtra}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {emPesagem.orientacoes && (
             <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-2 shadow-md">
