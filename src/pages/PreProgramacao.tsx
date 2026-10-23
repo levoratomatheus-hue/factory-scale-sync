@@ -86,6 +86,7 @@ interface OrdemPre {
   balanca: number | null;
   posicao: number | null;
   conclusao_direta: boolean;
+  reaproveitamento_id: string | null;
 }
 
 export default function PreProgramacao() {
@@ -120,7 +121,7 @@ export default function PreProgramacao() {
     setLoading(true);
     const { data, error } = await supabase
       .from('ordens')
-      .select('id, produto, lote, quantidade, marca, requer_mistura, criado_em, tipo_op, obs, formula_id, tamanho_batelada, orientacoes, status, linha, balanca, posicao, conclusao_direta')
+      .select('id, produto, lote, quantidade, marca, requer_mistura, criado_em, tipo_op, obs, formula_id, tamanho_batelada, orientacoes, status, linha, balanca, posicao, conclusao_direta, reaproveitamento_id')
       .eq('status', 'pre_programacao')
       .order('criado_em', { ascending: true });
     if (!error && data) setOrdens(data as OrdemPre[]);
@@ -219,6 +220,7 @@ export default function PreProgramacao() {
   const concluirDireto = async () => {
     if (!ordemConcluirDireto) return;
     setConcluindoDireto(true);
+    const ordem = ordemConcluirDireto;
     const { error } = await supabase
       .from('ordens')
       .update({
@@ -226,18 +228,26 @@ export default function PreProgramacao() {
         data_conclusao: new Date().toISOString(),
         conclusao_direta: true,
       } as any)
-      .eq('id', ordemConcluirDireto.id);
+      .eq('id', ordem.id);
     if (error) {
       setConcluindoDireto(false);
       toast({ title: 'Erro ao concluir OP', description: error.message, variant: 'destructive' });
       return;
     }
     await supabase.from('historico').insert({
-      ordem_id: ordemConcluirDireto.id,
+      ordem_id: ordem.id,
       status_anterior: 'pre_programacao',
       status_novo: 'concluido',
     });
-    toast({ title: 'OP concluída', description: `${ordemConcluirDireto.produto} marcada como concluída (conclusão direta).` });
+    // Baixar estoque pela quantidade planejada, se houver fórmula
+    if (ordem.formula_id) {
+      try {
+        await baixarEstoqueOP(ordem.id, ordem.formula_id, ordem.quantidade, ordem.lote, null, ordem.reaproveitamento_id ?? null);
+      } catch (err: any) {
+        toast({ title: 'Aviso: falha ao baixar estoque', description: err?.message ?? 'Erro desconhecido', variant: 'destructive' });
+      }
+    }
+    toast({ title: 'OP concluída', description: `${ordem.produto} marcada como concluída (conclusão direta).` });
     setConcluindoDireto(false);
     setOrdemConcluirDireto(null);
     fetchOrdens();
@@ -530,7 +540,7 @@ export default function PreProgramacao() {
               {' '}— Lote {ordemConcluirDireto?.lote}
               <br /><br />
               A OP será marcada como <strong>concluída</strong> sem passar por linha, pesagem ou registro de produção.
-              O estoque <strong>não será alterado</strong> (a baixa já ocorreu na criação).
+              O estoque <strong>será baixado</strong> pela quantidade da OP ao concluir.
               <br /><br />
               <span className="text-amber-600 dark:text-amber-400 font-medium">
                 Esta OP não entrará nas análises de kg/hora ou produtividade.
@@ -557,7 +567,7 @@ export default function PreProgramacao() {
       <EditarOrdemDialog
         ordem={ordemEditar}
         onClose={() => setOrdemEditar(null)}
-        onSave={editar}
+        onSalvar={editar}
       />
     </div>
   );
