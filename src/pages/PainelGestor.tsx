@@ -8,7 +8,6 @@ import {
   CalendarPlus,
   CalendarClock,
   ListOrdered,
-  RotateCcw,
   Search,
   X,
   FlaskConical,
@@ -151,8 +150,6 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
   const [pendentesOpen, setPendentesOpen] = useState(false);
   const [novaData, setNovaData] = useState<Record<string, string>>({});
   const [reprogramando, setReprogramando] = useState<Record<string, boolean>>({});
-  const [ordemParaVoltarPesagem, setOrdemParaVoltarPesagem] = useState<OrdemProgramada | null>(null);
-  const [voltandoPesagem, setVoltandoPesagem] = useState(false);
   const [filterMaterial, setFilterMaterial] = useState("");
 
   const [filterStatuses, setFilterStatuses] = useState<Set<string>>(new Set());
@@ -238,29 +235,6 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
     setReprogramando((prev) => ({ ...prev, [ordemId]: false }));
     if (error) { toast({ title: "Erro ao reprogramar", description: error.message, variant: "destructive" }); return; }
     toast({ title: `Ordem reprogramada para ${paraHoje ? "hoje" : format(new Date(data + "T12:00:00"), "dd/MM/yyyy")}` });
-  };
-
-  const handleVoltarParaPesagem = async () => {
-    if (!ordemParaVoltarPesagem) return;
-    setVoltandoPesagem(true);
-    const { error } = await supabase
-      .from("ordens")
-      .update({ status: "pendente", bateladas_feitas: 0, obs_pausa: null } as any)
-      .eq("id", ordemParaVoltarPesagem.id);
-    if (!error) {
-      supabase.from("historico").insert({
-        ordem_id: ordemParaVoltarPesagem.id,
-        status_anterior: ordemParaVoltarPesagem.status,
-        status_novo: "pendente",
-        obs: "Retorno para pesagem solicitado pelo gestor — pesagem anterior cancelada",
-      } as any);
-      toast({ title: "OP voltou para a pesagem" });
-      fetchAll();
-    } else {
-      toast({ title: "Erro ao voltar para pesagem", description: error.message, variant: "destructive" });
-    }
-    setVoltandoPesagem(false);
-    setOrdemParaVoltarPesagem(null);
   };
 
   if (loading) {
@@ -476,19 +450,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
                     <td className="px-4 py-2">
                       <StatusBadge status={op.status} />
                     </td>
-                    <td className="px-4 py-2 text-right">
-                      {["aguardando_mistura", "em_mistura", "aguardando_linha"].includes(op.status) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 h-7 text-xs text-orange-600 border-orange-300 hover:bg-orange-50"
-                          onClick={() => setOrdemParaVoltarPesagem(op)}
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          Voltar para pesagem
-                        </Button>
-                      )}
-                    </td>
+                    <td className="px-4 py-2 text-right" />
                   </tr>
                 ))}
               </tbody>
@@ -640,28 +602,6 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: voltar para pesagem */}
-      <Dialog open={!!ordemParaVoltarPesagem} onOpenChange={(open) => !open && setOrdemParaVoltarPesagem(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Voltar para pesagem?</DialogTitle>
-            <DialogDescription>
-              <span className="font-medium text-foreground">{ordemParaVoltarPesagem?.produto}</span>
-              <br />
-              A pesagem anterior será desfeita. O operador terá que pesar a OP inteira novamente. O estoque não será alterado.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOrdemParaVoltarPesagem(null)} disabled={voltandoPesagem}>
-              Cancelar
-            </Button>
-            <Button onClick={handleVoltarParaPesagem} disabled={voltandoPesagem}>
-              {voltandoPesagem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirmar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
