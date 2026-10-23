@@ -77,7 +77,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       .eq("status", "Em Aberto")
       .order("lote", { ascending: true });
 
-    // Step 2: busca ordens ativas
+    // Step 2: busca ordens ativas (para a tabela Lotes Programados)
     const { data: ordensData } = await supabase
       .from("ordens")
       .select("id, lote, produto, quantidade, status, data_programacao, data_emissao, linha, balanca, posicao, marca")
@@ -85,10 +85,14 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
       .order("data_programacao", { ascending: true })
       .order("posicao", { ascending: true, nullsFirst: false });
 
-    // Filtra lotes sem OP usando ordensData já em memória — sem Step 3 extra
+    // Step 3: busca todos os lotes que têm OP (qualquer status, inclusive concluído)
+    const { data: lotesOrdens } = await supabase.from("ordens").select("lote");
+
+    // Normaliza lote para comparação: remove espaços, converte para string sem zeros à esquerda
+    const normLote = (v: unknown) => String(v ?? "").trim().replace(/^0+(\d)/, "$1");
     if (cadastro?.length) {
-      const lotesComOP = new Set((ordensData ?? []).map((o: any) => String(o.lote)));
-      setLotesSemOP((cadastro as any[]).filter((l) => !lotesComOP.has(String(l.lote)) && !isLoteBloqueado(Number(l.lote))));
+      const lotesComOP = new Set((lotesOrdens ?? []).map((o: any) => normLote(o.lote)));
+      setLotesSemOP((cadastro as any[]).filter((l) => !lotesComOP.has(normLote(l.lote)) && !isLoteBloqueado(Number(l.lote))));
     } else {
       setLotesSemOP([]);
     }
