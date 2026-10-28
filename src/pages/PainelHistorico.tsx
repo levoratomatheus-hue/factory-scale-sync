@@ -11,6 +11,7 @@ import { DetalheOrdemDialog } from "@/components/DetalheOrdemDialog";
 import { EditarRegistrosDiariosModal } from "@/components/EditarRegistrosDiariosModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { estornarEstoqueOP } from "@/lib/estoqueUtils";
 
 function LabDialog({ ordem, onClose, onSalvo }: {
   ordem: any;
@@ -141,7 +142,7 @@ export default function PainelHistorico() {
 
   async function handleReabrir(ordem: any, e: React.MouseEvent) {
     e.stopPropagation();
-    const ok = window.confirm(`Reabrir a OP ${ordem.lote} — ${ordem.produto}?\nO status voltará para "Aguardando Liberação" e a data de conclusão será removida.`);
+    const ok = window.confirm(`Reabrir a OP ${ordem.lote} — ${ordem.produto}?\nO status voltará para "Aguardando Liberação", a data de conclusão será removida e o estoque baixado será estornado.`);
     if (!ok) return;
     setReabrindo(ordem.id);
     const { error } = await (supabase as any)
@@ -158,6 +159,11 @@ export default function PainelHistorico() {
       status_anterior: "concluido",
       status_novo: "aguardando_liberacao",
     });
+    try {
+      await estornarEstoqueOP(ordem.id);
+    } catch (estornoError: any) {
+      toast({ title: "Aviso: estorno de estoque falhou", description: estornoError?.message ?? "Verifique o saldo manualmente.", variant: "destructive" });
+    }
     toast({ title: `OP ${ordem.lote} reaberta`, description: "Status voltou para Aguardando Liberação." });
     setReabrindo(null);
   }
