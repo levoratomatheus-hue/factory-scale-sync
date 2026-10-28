@@ -569,6 +569,17 @@ export default function PainelAnalises() {
       if (qr > 0) kgPorOrdem[r.ordem_id] = qr;
     });
 
+    // OPs concluídas direto (pré-programação) não têm registros_diarios,
+    // então não entram pelos loops acima. Contam pela quantidade_real
+    // apenas quando foram marcadas para contagem (quantidade_real > 0).
+    // 'ordens' já está filtrado por linha/material/classe.
+    ordens.forEach((o: any) => {
+      if (!o.conclusao_direta) return;
+      if ((kgPorOrdem[o.id] ?? 0) > 0) return; // já contada por registro
+      const qr = Number(o.quantidade_real);
+      if (qr > 0) kgPorOrdem[o.id] = qr;
+    });
+
     const producaoTotal = Object.values(kgPorOrdem).reduce((s, v) => s + v, 0);
 
     // kg/hora e contagem de OPs baseados nos registros diários (inclui OPs em aberto)

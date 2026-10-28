@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -116,6 +117,7 @@ export default function PreProgramacao() {
   // Concluir direto
   const [ordemConcluirDireto, setOrdemConcluirDireto] = useState<OrdemPre | null>(null);
   const [concluindoDireto, setConcluindoDireto] = useState(false);
+  const [contarProducao, setContarProducao] = useState(false);
 
   const fetchOrdens = useCallback(async () => {
     setLoading(true);
@@ -227,6 +229,7 @@ export default function PreProgramacao() {
         status: 'concluido',
         data_conclusao: new Date().toISOString(),
         conclusao_direta: true,
+        quantidade_real: contarProducao ? (ordemConcluirDireto.quantidade ?? null) : null,
       } as any)
       .eq('id', ordem.id);
     if (error) {
@@ -250,6 +253,7 @@ export default function PreProgramacao() {
     toast({ title: 'OP concluída', description: `${ordem.produto} marcada como concluída (conclusão direta).` });
     setConcluindoDireto(false);
     setOrdemConcluirDireto(null);
+    setContarProducao(false);
     fetchOrdens();
   };
 
@@ -531,7 +535,7 @@ export default function PreProgramacao() {
       </Dialog>
 
       {/* Dialog: Concluir direto */}
-      <Dialog open={!!ordemConcluirDireto} onOpenChange={(open) => !open && setOrdemConcluirDireto(null)}>
+      <Dialog open={!!ordemConcluirDireto} onOpenChange={(open) => { if (!open) { setOrdemConcluirDireto(null); setContarProducao(false); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Concluir OP direto?</DialogTitle>
@@ -543,12 +547,25 @@ export default function PreProgramacao() {
               O estoque <strong>será baixado</strong> pela quantidade da OP ao concluir.
               <br /><br />
               <span className="text-amber-600 dark:text-amber-400 font-medium">
-                Esta OP não entrará nas análises de kg/hora ou produtividade.
+                Esta OP não entra em kg/hora nem em produtividade (não teve produção em linha).
               </span>
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-start gap-2 rounded-md border p-3">
+            <Checkbox
+              id="contar-producao"
+              checked={contarProducao}
+              onCheckedChange={(v) => setContarProducao(v === true)}
+            />
+            <label htmlFor="contar-producao" className="text-sm leading-tight cursor-pointer">
+              Contar esta OP na produção (kg)
+              <span className="block text-xs text-muted-foreground">
+                Soma {ordemConcluirDireto?.quantidade ?? 0} kg (quantidade planejada) no total de produção das análises.
+              </span>
+            </label>
+          </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOrdemConcluirDireto(null)} disabled={concluindoDireto}>
+            <Button variant="outline" onClick={() => { setOrdemConcluirDireto(null); setContarProducao(false); }} disabled={concluindoDireto}>
               Cancelar
             </Button>
             <Button
