@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown, CheckCheck } from 'lucide-react';
+import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown, CheckCheck, FastForward } from 'lucide-react';
 import { formatKg, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -119,6 +119,11 @@ export default function PreProgramacao() {
   const [concluindoDireto, setConcluindoDireto] = useState(false);
   const [contarProducao, setContarProducao] = useState(false);
 
+  // Pular para linha
+  const [ordemPularLinha, setOrdemPularLinha] = useState<OrdemPre | null>(null);
+  const [pularData, setPularData] = useState('');
+  const [pularLinha, setPularLinha] = useState('');
+
   const fetchOrdens = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -193,6 +198,38 @@ export default function PreProgramacao() {
     setDataProg('');
     setLinha('');
     setBalanca('');
+    fetchOrdens();
+  };
+
+  const pularParaLinha = async () => {
+    if (!ordemPularLinha || !pularData || !pularLinha) return;
+    setSalvando(true);
+    const linhaNum = parseInt(pularLinha);
+    const posicao = await getNextPosicaoFila(linhaNum, pularData, null);
+    const { error } = await supabase
+      .from('ordens')
+      .update({
+        status: 'aguardando_linha',
+        data_programacao: pularData,
+        linha: linhaNum,
+        balanca: null,
+        posicao,
+      } as any)
+      .eq('id', ordemPularLinha.id);
+    setSalvando(false);
+    if (error) {
+      toast({ title: 'Erro ao enviar para linha', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await supabase.from('historico').insert({
+      ordem_id: ordemPularLinha.id,
+      status_anterior: 'pre_programacao',
+      status_novo: 'aguardando_linha',
+    });
+    toast({ title: 'OP enviada para a linha!', description: `${ordemPularLinha.produto} → Linha ${linhaNum} (pulou a pesagem)` });
+    setOrdemPularLinha(null);
+    setPularData('');
+    setPularLinha('');
     fetchOrdens();
   };
 
@@ -438,6 +475,14 @@ export default function PreProgramacao() {
                           <CheckCheck className="h-3 w-3" />
                           Concluir direto
                         </button>
+                        <button
+                          onClick={() => { setOrdemPularLinha(ordem); setPularData(''); setPularLinha(''); }}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-blue-600 hover:bg-muted transition-colors"
+                          title="Pular pesagem e enviar direto para a linha"
+                        >
+                          <FastForward className="h-3 w-3" />
+                          Pular p/ linha
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -575,6 +620,47 @@ export default function PreProgramacao() {
             >
               {concluindoDireto && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Concluir direto
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Pular para linha */}
+      <Dialog
+        open={!!ordemPularLinha}
+        onOpenChange={(open) => { if (!open) { setOrdemPularLinha(null); setPularData(''); setPularLinha(''); } }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pular pesagem → enviar para linha</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{ordemPularLinha?.produto}</span>
+              <br />
+              A OP vai direto para a linha com status <strong>Aguardando linha</strong>, sem passar por pesagem nem mistura.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Data de produção <span className="text-destructive">*</span></label>
+              <Input type="date" value={pularData} onChange={(e) => setPularData(e.target.value)} className="h-9" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Linha <span className="text-destructive">*</span></label>
+              <Select value={pularLinha} onValueChange={setPularLinha}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione a linha" /></SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <SelectItem key={n} value={String(n)}>Linha {n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOrdemPularLinha(null)} disabled={salvando}>Cancelar</Button>
+            <Button disabled={!pularData || !pularLinha || salvando} onClick={pularParaLinha}>
+              {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Enviar para linha
             </Button>
           </DialogFooter>
         </DialogContent>
