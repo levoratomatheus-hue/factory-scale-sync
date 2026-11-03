@@ -431,8 +431,6 @@ export default function PainelAnaliseReaproveitamento() {
         ["Material total (kg)", `${formatKg(cards.totalKgMaterial)} kg`],
         ["Produção prevista (kg)", `${formatKg(cards.totalProducao)} kg`],
         ["Taxa de utilização", `${cards.taxaUtil}%`],
-        ["SDRs pendentes (todos os tempos)", String(cards.qtdPendentes)],
-        ["Kg pendentes (todos os tempos)", `${formatKg(cards.kgPendentes)} kg`],
       ],
       theme: "grid",
       headStyles: { fillColor: [8, 145, 178] },
@@ -484,19 +482,6 @@ export default function PainelAnaliseReaproveitamento() {
       y = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // Material parado há mais de 30 dias
-    const criticos = materialParado.filter((r) => r.dias >= LIMITE_DIAS_PARADO);
-    if (criticos.length > 0) {
-      doc.setFontSize(12); doc.text(`Material parado há >${LIMITE_DIAS_PARADO} dias`, 14, y);
-      autoTable(doc, {
-        startY: y + 2,
-        head: [["Código", "Origens", "Produto destino", "Kg", "Dias parado"]],
-        body: criticos.map((r) => [r.codigo, r.origens, r.produto_destino, `${formatKg(r.totalKg)} kg`, String(r.dias)]),
-        theme: "striped",
-        headStyles: { fillColor: [220, 38, 38] },
-        styles: { fontSize: 9 },
-      });
-    }
 
     doc.save(`analise_reaproveitamento_${hoje.replace(/\//g, "-")}.pdf`);
   }, [periodo, dataInicio, dataFim, cards, divisaoTipo, rankingOrigem, rankingDestino, materialParado]);
