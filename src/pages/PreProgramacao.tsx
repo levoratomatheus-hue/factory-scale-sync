@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown, CheckCheck, FastForward } from 'lucide-react';
+import { Loader2, Search, CalendarDays, Pencil, Trash2, Inbox, ChevronDown, CheckCheck, FastForward, Calculator } from 'lucide-react';
+import { FormulaDialog } from '@/components/FormulaDialog';
 import { formatKg, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -118,6 +119,9 @@ export default function PreProgramacao() {
   const [ordemConcluirDireto, setOrdemConcluirDireto] = useState<OrdemPre | null>(null);
   const [concluindoDireto, setConcluindoDireto] = useState(false);
   const [contarProducao, setContarProducao] = useState(false);
+
+  // Ver cálculo (fórmula)
+  const [ordemFormula, setOrdemFormula] = useState<OrdemPre | null>(null);
 
   // Pular para linha
   const [ordemPularLinha, setOrdemPularLinha] = useState<OrdemPre | null>(null);
@@ -483,6 +487,14 @@ export default function PreProgramacao() {
                           <FastForward className="h-3 w-3" />
                           Pular p/ linha
                         </button>
+                        <button
+                          onClick={() => setOrdemFormula(ordem)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                          title="Ver como a OP está calculada"
+                        >
+                          <Calculator className="h-3 w-3" />
+                          Ver cálculo
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -672,6 +684,8 @@ export default function PreProgramacao() {
         onClose={() => setOrdemEditar(null)}
         onSalvar={editar}
       />
+
+      <FormulaDialog ordem={ordemFormula} onClose={() => setOrdemFormula(null)} />
     </div>
   );
 }
