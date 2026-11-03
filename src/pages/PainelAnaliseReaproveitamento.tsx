@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatKg } from "@/lib/utils";
 import {
   Loader2, Recycle, BarChart2, CalendarRange, AlertTriangle,
-  TrendingDown, ArrowDownToLine, Download,
+  TrendingDown, ArrowDownToLine, Download, FileDown,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -406,6 +408,99 @@ export default function PainelAnaliseReaproveitamento() {
       .sort((a, b) => b.kgProducao - a.kgProducao);
   }, [periodo]);
 
+  // ── PDF report ────────────────────────────────────────────────────────────
+  const gerarRelatorioPDF = useCallback(() => {
+    const doc = new jsPDF();
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    const periodoLabel = `${dataInicio.split("-").reverse().join("/")} – ${dataFim.split("-").reverse().join("/")}`;
+    let y = 16;
+
+    doc.setFontSize(16);
+    doc.text("Relatório — Análise de Reaproveitamento", 14, y); y += 7;
+    doc.setFontSize(10); doc.setTextColor(120);
+    doc.text(`Período: ${periodoLabel}   |   Gerado em ${hoje}`, 14, y); y += 8;
+    doc.setTextColor(0);
+
+    // Resumo
+    doc.setFontSize(12); doc.text("Resumo do período", 14, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Total de SDRs", String(cards.totalSDRs)],
+        ["Material total (kg)", `${formatKg(cards.totalKgMaterial)} kg`],
+        ["Produção prevista (kg)", `${formatKg(cards.totalProducao)} kg`],
+        ["Taxa de utilização", `${cards.taxaUtil}%`],
+        ["SDRs pendentes (todos os tempos)", String(cards.qtdPendentes)],
+        ["Kg pendentes (todos os tempos)", `${formatKg(cards.kgPendentes)} kg`],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [8, 145, 178] },
+      styles: { fontSize: 10 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // Divisão por tipo de erro
+    doc.setFontSize(12); doc.text("Divisão por tipo de erro", 14, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Tipo", "Qtd SDRs", "Kg material"]],
+      body: [
+        ["Produção",         String(divisaoTipo.producao.qtd),  `${formatKg(divisaoTipo.producao.kg)} kg`],
+        ["Comercial",        String(divisaoTipo.comercial.qtd), `${formatKg(divisaoTipo.comercial.kg)} kg`],
+        ["Não classificado", String(divisaoTipo.semTipo.qtd),   `${formatKg(divisaoTipo.semTipo.kg)} kg`],
+      ],
+      theme: "striped",
+      headStyles: { fillColor: [8, 145, 178] },
+      styles: { fontSize: 10 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // Ranking por origem
+    if (rankingOrigem.length > 0) {
+      doc.setFontSize(12); doc.text("Ranking por material de origem", 14, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Material de origem", "Nº SDRs", "Kg material"]],
+        body: rankingOrigem.slice(0, 20).map((r) => [r.nome, String(r.qtd), `${formatKg(r.kgMaterial)} kg`]),
+        theme: "striped",
+        headStyles: { fillColor: [8, 145, 178] },
+        styles: { fontSize: 9 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Ranking por destino
+    if (rankingDestino.length > 0) {
+      doc.setFontSize(12); doc.text("Ranking por produto destino", 14, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Produto destino", "Nº SDRs", "Produção prevista (kg)"]],
+        body: rankingDestino.slice(0, 20).map((r) => [r.nome, String(r.qtd), `${formatKg(r.kgProducao)} kg`]),
+        theme: "striped",
+        headStyles: { fillColor: [5, 150, 105] },
+        styles: { fontSize: 9 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Material parado há mais de 30 dias
+    const criticos = materialParado.filter((r) => r.dias >= LIMITE_DIAS_PARADO);
+    if (criticos.length > 0) {
+      doc.setFontSize(12); doc.text(`Material parado há >${LIMITE_DIAS_PARADO} dias`, 14, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Código", "Origens", "Produto destino", "Kg", "Dias parado"]],
+        body: criticos.map((r) => [r.codigo, r.origens, r.produto_destino, `${formatKg(r.totalKg)} kg`, String(r.dias)]),
+        theme: "striped",
+        headStyles: { fillColor: [220, 38, 38] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    doc.save(`analise_reaproveitamento_${hoje.replace(/\//g, "-")}.pdf`);
+  }, [periodo, dataInicio, dataFim, cards, divisaoTipo, rankingOrigem, rankingDestino, materialParado]);
+
   // ── CSV exports ───────────────────────────────────────────────────────────
   function exportarOrigemCSV() {
     const header = "Produto origem;Nº SDRs;Material total (kg)";
@@ -448,14 +543,32 @@ export default function PainelAnaliseReaproveitamento() {
     <div style={{ background: D.page, minHeight: "100vh", padding: "1.5rem", color: D.text }}>
 
       {/* ── Header ── */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
-          <Recycle style={{ width: 24, height: 24, color: D.cyan }} />
-          <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>Análise de Reaproveitamento</h1>
+      <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
+            <Recycle style={{ width: 24, height: 24, color: D.cyan }} />
+            <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>Análise de Reaproveitamento</h1>
+          </div>
+          <p style={{ margin: 0, color: D.muted, fontSize: "0.875rem" }}>
+            {periodo.length} SDR{periodo.length !== 1 ? "s" : ""} no período
+          </p>
         </div>
-        <p style={{ margin: 0, color: D.muted, fontSize: "0.875rem" }}>
-          {periodo.length} SDR{periodo.length !== 1 ? "s" : ""} no período
-        </p>
+        <button
+          onClick={gerarRelatorioPDF}
+          disabled={periodo.length === 0}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.4rem",
+            padding: "0.5rem 1rem", borderRadius: "0.5rem",
+            background: D.cyan, color: "#fff",
+            border: "none", cursor: periodo.length === 0 ? "not-allowed" : "pointer",
+            fontSize: "0.8125rem", fontWeight: 600,
+            opacity: periodo.length === 0 ? 0.5 : 1,
+            flexShrink: 0,
+          }}
+        >
+          <FileDown size={15} />
+          Gerar relatório (PDF)
+        </button>
       </div>
 
       {/* ── Filtro de período e tipo ── */}
