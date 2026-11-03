@@ -454,7 +454,7 @@ export default function PreProgramacao() {
                       <StatusBadge status="pre_programacao" className="text-[10px] px-1.5 py-0" />
 
                       {/* Ações secundárias */}
-                      <div className="flex gap-1 pt-1 border-t border-black/5 dark:border-white/10">
+                      <div className="flex flex-wrap gap-1 pt-1 border-t border-black/5 dark:border-white/10">
                         <button
                           onClick={() => setOrdemEditar(ordem as any)}
                           className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
