@@ -5,6 +5,7 @@ import { MarcaBadge } from "@/components/MarcaBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useFormula } from "@/hooks/useFormula";
 import { formatKg } from "@/lib/utils";
+import { parseObsItems } from "@/lib/obsUtils";
 
 export interface FormulaOrdemLike {
   produto: string;
@@ -30,6 +31,8 @@ export const FormulaDialog = memo(function FormulaDialog({
   );
 
   if (!ordem) return null;
+
+  const obsItems = parseObsItems(ordem.obs ?? null);
 
   const nbateladas =
     ordem.tamanho_batelada && ordem.tamanho_batelada > 0
@@ -71,8 +74,21 @@ export const FormulaDialog = memo(function FormulaDialog({
 
         {ordem.obs && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 mb-2">
-            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-0.5">Observações</p>
-            <p className="text-sm text-amber-900 whitespace-pre-wrap">{ordem.obs}</p>
+            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+              {obsItems ? "Adições para Mistura" : "Observações"}
+            </p>
+            {obsItems ? (
+              <ul className="space-y-1">
+                {obsItems.map((item, i) => (
+                  <li key={i} className="flex items-baseline gap-2 text-sm text-amber-900">
+                    <span className="font-bold tabular-nums">{item.qty}×</span>
+                    <span className="font-medium">{item.mp}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-amber-900 whitespace-pre-wrap">{ordem.obs}</p>
+            )}
           </div>
         )}
 
