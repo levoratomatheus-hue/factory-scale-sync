@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from "@/lib/estoqueUtils";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -47,7 +47,7 @@ interface Ordem {
   data_emissao: string | null;
 }
 
-function SortableCard({
+const SortableCard = memo(function SortableCard({
   ordem,
   onReprogramarClick,
   onDblClick,
@@ -195,9 +195,9 @@ function SortableCard({
       </div>
     </div>
   );
-}
+});
 
-function BalancaColumn({
+const BalancaColumn = memo(function BalancaColumn({
   balanca,
   ordens,
   onReprogramarClick,
@@ -266,7 +266,7 @@ function BalancaColumn({
       </div>
     </div>
   );
-}
+});
 
 const FIELDS =
   "id, produto, lote, quantidade, status, posicao, posicao_balanca, linha, balanca, formula_id, tamanho_batelada, obs, marca, requer_mistura, data_programacao, data_emissao";
@@ -315,7 +315,7 @@ export default function PainelProgramacaoBalanca() {
     [ordens]
   );
 
-  const handleReorder = async (balanca: number, reordered: Ordem[]) => {
+  const handleReorder = useCallback(async (balanca: number, reordered: Ordem[]) => {
     const anterior = ordens;
     const comPosicao = reordered.map((o, i) => ({ ...o, posicao_balanca: i + 1 }));
     setOrdens((prev) => [
@@ -330,9 +330,9 @@ export default function PainelProgramacaoBalanca() {
       setOrdens(anterior);
       toast({ title: "Erro ao salvar sequência", description: "Tente novamente.", variant: "destructive" });
     }
-  };
+  }, [ordens]);
 
-  const handleMoverBalanca = async (id: string, novaBalanca: number) => {
+  const handleMoverBalanca = useCallback(async (id: string, novaBalanca: number) => {
     const { count } = await supabase
       .from("ordens")
       .select("*", { count: "exact", head: true })
@@ -355,9 +355,9 @@ export default function PainelProgramacaoBalanca() {
       prev.map((o) => o.id === id ? { ...o, balanca: novaBalanca, posicao_balanca: novaPosicao } : o)
     );
     toast({ title: `Ordem movida para Balança ${novaBalanca}` });
-  };
+  }, []);
 
-  const handleReprogramar = async (id: string, novaData: string) => {
+  const handleReprogramar = useCallback(async (id: string, novaData: string) => {
     const { error } = await supabase
       .from("ordens")
       .update({ data_programacao: novaData } as any)
@@ -368,7 +368,10 @@ export default function PainelProgramacaoBalanca() {
       setOrdens((prev) => prev.map((o) => o.id === id ? { ...o, data_programacao: novaData } : o));
       toast({ title: "Ordem reprogramada com sucesso" });
     }
-  };
+  }, []);
+
+  const handleReprogramarClick = useCallback((o: Ordem) => { setOrdemParaReprogramar(o); setNovaDataReprogramar(""); }, []);
+  const handleMoverParaBalanca = useCallback((o: Ordem, nova: number) => handleMoverBalanca(o.id, nova), [handleMoverBalanca]);
 
   const handleExcluir = async () => {
     if (!ordemParaExcluir) return;
@@ -394,7 +397,7 @@ export default function PainelProgramacaoBalanca() {
     }
   };
 
-  const avancarStatus = async (ordem: Ordem) => {
+  const avancarStatus = useCallback(async (ordem: Ordem) => {
     let novoStatus = "";
 
     if (ordem.status === "pendente") {
@@ -421,9 +424,9 @@ export default function PainelProgramacaoBalanca() {
     } else {
       toast({ title: "Erro ao avançar status", description: error.message, variant: "destructive" });
     }
-  };
+  }, [fetchOrdens]);
 
-  const devolverParaFila = async (ordem: Ordem) => {
+  const devolverParaFila = useCallback(async (ordem: Ordem) => {
     const { error } = await supabase.from("ordens").update({ status: "pendente" } as any).eq("id", ordem.id);
     if (error) {
       toast({ title: "Erro ao devolver ordem", description: error.message, variant: "destructive" });
@@ -436,7 +439,7 @@ export default function PainelProgramacaoBalanca() {
     });
     setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "pendente" } : o));
     toast({ title: "Ordem devolvida para a fila" });
-  };
+  }, []);
 
   const handleEditar = async (id: string, payload: Record<string, unknown>) => {
     const qtdAntiga = ordemEditando?.quantidade;
@@ -525,12 +528,12 @@ export default function PainelProgramacaoBalanca() {
                 key={b}
                 balanca={b}
                 ordens={ordensParaBalanca(b)}
-                onReprogramarClick={(o) => { setOrdemParaReprogramar(o); setNovaDataReprogramar(""); }}
+                onReprogramarClick={handleReprogramarClick}
                 onDblClick={setOrdemFormula}
                 onEditar={setOrdemEditando}
                 onExcluir={setOrdemParaExcluir}
                 onAvancar={avancarStatus}
-                onMoverParaBalanca={(o, nova) => handleMoverBalanca(o.id, nova)}
+                onMoverParaBalanca={handleMoverParaBalanca}
                 onDevolverParaFila={devolverParaFila}
               />
             ))}

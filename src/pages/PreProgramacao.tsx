@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { estornarEstoqueOP, ajustarEstoqueOP, baixarEstoqueOP } from '@/lib/estoqueUtils';
 import { MarcaBadge } from '@/components/MarcaBadge';
@@ -91,6 +91,131 @@ interface OrdemPre {
   reaproveitamento_id: string | null;
 }
 
+const LINHAS = [1, 2, 3, 4, 5];
+
+interface OrdemPreCardProps {
+  ordem: OrdemPre;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  onProgramar: (o: OrdemPre) => void;
+  onEditar: (o: OrdemPre) => void;
+  onExcluir: (o: OrdemPre) => void;
+  onConcluirDireto: (o: OrdemPre) => void;
+  onPularLinha: (o: OrdemPre) => void;
+  onFormula: (o: OrdemPre) => void;
+}
+
+const OrdemPreCard = memo(function OrdemPreCard({
+  ordem, isOpen, onToggle, onProgramar, onEditar, onExcluir, onConcluirDireto, onPularLinha, onFormula,
+}: OrdemPreCardProps) {
+  const familia = inferirFamilia(ordem.produto);
+  return (
+    <div
+      className="rounded-xl border bg-card select-none"
+      style={familia ? { borderLeftColor: familia.cor, borderLeftWidth: '3px' } : undefined}
+    >
+      <div className="flex items-start gap-1.5 px-3 py-2.5">
+        <span className="mt-1 h-2 w-2 rounded-full shrink-0 bg-slate-400 dark:bg-slate-500" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold leading-snug break-words">{ordem.produto}</p>
+          <p className="text-xs font-bold tabular-nums text-muted-foreground mt-0.5">{formatKg(ordem.quantidade)} kg</p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-[11px] gap-1 shrink-0 mt-0.5 border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground"
+          onClick={(e) => { e.stopPropagation(); onProgramar(ordem); }}
+        >
+          <CalendarDays className="h-3 w-3" />
+          Programar
+        </Button>
+        <button
+          onClick={() => onToggle(ordem.id)}
+          className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+          aria-expanded={isOpen}
+        >
+          <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')} />
+        </button>
+      </div>
+      <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+        <div className="overflow-hidden">
+          <div className="px-3 pb-3 pt-1.5 space-y-1.5 border-t border-black/5 dark:border-white/10">
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono">Lote {ordem.lote}</span>
+              <MarcaBadge marca={ordem.marca} size="sm" />
+            </p>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {ordem.criado_em && (
+                <div className="flex justify-between">
+                  <span>Criada em</span>
+                  <span className="font-mono">
+                    {format(parseISO(ordem.criado_em), 'dd/MM/yyyy', { locale: ptBR })}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span>Mistura</span>
+                <span className={ordem.requer_mistura === false ? 'text-muted-foreground' : 'text-foreground'}>
+                  {ordem.requer_mistura === false ? 'Não requer' : 'Requer'}
+                </span>
+              </div>
+              {ordem.tipo_op && ordem.tipo_op !== 'venda' && (
+                <div className="flex justify-between">
+                  <span>Tipo</span>
+                  <span className="capitalize text-foreground">{ordem.tipo_op}</span>
+                </div>
+              )}
+            </div>
+            <StatusBadge status="pre_programacao" className="text-[10px] px-1.5 py-0" />
+            <div className="flex flex-wrap gap-1 pt-1 border-t border-black/5 dark:border-white/10">
+              <button
+                onClick={() => onEditar(ordem)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                title="Editar"
+              >
+                <Pencil className="h-3 w-3" />
+                Editar
+              </button>
+              <button
+                onClick={() => onExcluir(ordem)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+                title="Excluir"
+              >
+                <Trash2 className="h-3 w-3" />
+                Excluir
+              </button>
+              <button
+                onClick={() => onConcluirDireto(ordem)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-emerald-600 hover:bg-muted transition-colors"
+                title="Concluir direto (sem produção medida)"
+              >
+                <CheckCheck className="h-3 w-3" />
+                Concluir direto
+              </button>
+              <button
+                onClick={() => onPularLinha(ordem)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-blue-600 hover:bg-muted transition-colors"
+                title="Pular pesagem e enviar direto para a linha"
+              >
+                <FastForward className="h-3 w-3" />
+                Pular p/ linha
+              </button>
+              <button
+                onClick={() => onFormula(ordem)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                title="Ver como a OP está calculada"
+              >
+                <Calculator className="h-3 w-3" />
+                Ver cálculo
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export default function PreProgramacao() {
   const [ordens, setOrdens] = useState<OrdemPre[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,8 +233,8 @@ export default function PreProgramacao() {
 
   // Expansão dos cards
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const toggleCard = (id: string) =>
-    setExpandedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const handleToggleCard = useCallback((id: string) =>
+    setExpandedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }), []);
 
   // Excluir
   const [ordemExcluir, setOrdemExcluir] = useState<OrdemPre | null>(null);
@@ -127,6 +252,14 @@ export default function PreProgramacao() {
   const [ordemPularLinha, setOrdemPularLinha] = useState<OrdemPre | null>(null);
   const [pularData, setPularData] = useState('');
   const [pularLinha, setPularLinha] = useState('');
+
+  // Handlers estáveis para OrdemPreCard
+  const handleProgramar = useCallback((o: OrdemPre) => { setOrdemProgramar(o); setDataProg(''); setLinha(''); setBalanca(''); }, []);
+  const handleEditar = useCallback((o: OrdemPre) => setOrdemEditar(o as any), []);
+  const handleExcluir = useCallback((o: OrdemPre) => setOrdemExcluir(o), []);
+  const handleConcluirDireto = useCallback((o: OrdemPre) => setOrdemConcluirDireto(o), []);
+  const handlePularLinha = useCallback((o: OrdemPre) => { setOrdemPularLinha(o); setPularData(''); setPularLinha(''); }, []);
+  const handleFormula = useCallback((o: OrdemPre) => setOrdemFormula(o), []);
 
   const fetchOrdens = useCallback(async () => {
     setLoading(true);
@@ -374,135 +507,20 @@ export default function PreProgramacao() {
         </div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {ordensOrdenadas.map((ordem) => {
-            const isOpen = expandedIds.has(ordem.id);
-            const familia = inferirFamilia(ordem.produto);
-            return (
-              <div
-                key={ordem.id}
-                className="rounded-xl border bg-card select-none"
-                style={familia ? { borderLeftColor: familia.cor, borderLeftWidth: '3px' } : undefined}
-              >
-
-                {/* ── Cabeçalho — sempre visível ─────────────────── */}
-                <div className="flex items-start gap-1.5 px-3 py-2.5">
-                  {/* Bolinha de status */}
-                  <span className="mt-1 h-2 w-2 rounded-full shrink-0 bg-slate-400 dark:bg-slate-500" />
-
-                  {/* Produto + Quantidade */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold leading-snug break-words">{ordem.produto}</p>
-                    <p className="text-xs font-bold tabular-nums text-muted-foreground mt-0.5">{formatKg(ordem.quantidade)} kg</p>
-                  </div>
-
-                  {/* Programar compacto — sempre visível */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 px-2 text-[11px] gap-1 shrink-0 mt-0.5 border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground"
-                    onClick={(e) => { e.stopPropagation(); setOrdemProgramar(ordem); setDataProg(''); setLinha(''); setBalanca(''); }}
-                  >
-                    <CalendarDays className="h-3 w-3" />
-                    Programar
-                  </Button>
-
-                  {/* Chevron */}
-                  <button
-                    onClick={() => toggleCard(ordem.id)}
-                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
-                    aria-expanded={isOpen}
-                  >
-                    <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')} />
-                  </button>
-                </div>
-
-                {/* ── Corpo expansível ───────────────────────────── */}
-                <div className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
-                  <div className="overflow-hidden">
-                    <div className="px-3 pb-3 pt-1.5 space-y-1.5 border-t border-black/5 dark:border-white/10">
-
-                      {/* Lote + marca */}
-                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono">Lote {ordem.lote}</span>
-                        <MarcaBadge marca={ordem.marca} size="sm" />
-                      </p>
-
-                      {/* Dados */}
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        {ordem.criado_em && (
-                          <div className="flex justify-between">
-                            <span>Criada em</span>
-                            <span className="font-mono">
-                              {format(parseISO(ordem.criado_em), 'dd/MM/yyyy', { locale: ptBR })}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span>Mistura</span>
-                          <span className={ordem.requer_mistura === false ? 'text-muted-foreground' : 'text-foreground'}>
-                            {ordem.requer_mistura === false ? 'Não requer' : 'Requer'}
-                          </span>
-                        </div>
-                        {ordem.tipo_op && ordem.tipo_op !== 'venda' && (
-                          <div className="flex justify-between">
-                            <span>Tipo</span>
-                            <span className="capitalize text-foreground">{ordem.tipo_op}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <StatusBadge status="pre_programacao" className="text-[10px] px-1.5 py-0" />
-
-                      {/* Ações secundárias */}
-                      <div className="flex flex-wrap gap-1 pt-1 border-t border-black/5 dark:border-white/10">
-                        <button
-                          onClick={() => setOrdemEditar(ordem as any)}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-                          title="Editar"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setOrdemExcluir(ordem)}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                          title="Excluir"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          Excluir
-                        </button>
-                        <button
-                          onClick={() => setOrdemConcluirDireto(ordem)}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-emerald-600 hover:bg-muted transition-colors"
-                          title="Concluir direto (sem produção medida)"
-                        >
-                          <CheckCheck className="h-3 w-3" />
-                          Concluir direto
-                        </button>
-                        <button
-                          onClick={() => { setOrdemPularLinha(ordem); setPularData(''); setPularLinha(''); }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-blue-600 hover:bg-muted transition-colors"
-                          title="Pular pesagem e enviar direto para a linha"
-                        >
-                          <FastForward className="h-3 w-3" />
-                          Pular p/ linha
-                        </button>
-                        <button
-                          onClick={() => setOrdemFormula(ordem)}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-                          title="Ver como a OP está calculada"
-                        >
-                          <Calculator className="h-3 w-3" />
-                          Ver cálculo
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            );
-          })}
+          {ordensOrdenadas.map((ordem) => (
+            <OrdemPreCard
+              key={ordem.id}
+              ordem={ordem}
+              isOpen={expandedIds.has(ordem.id)}
+              onToggle={handleToggleCard}
+              onProgramar={handleProgramar}
+              onEditar={handleEditar}
+              onExcluir={handleExcluir}
+              onConcluirDireto={handleConcluirDireto}
+              onPularLinha={handlePularLinha}
+              onFormula={handleFormula}
+            />
+          ))}
         </div>
       )}
 
@@ -539,7 +557,7 @@ export default function PreProgramacao() {
               <Select value={linha} onValueChange={setLinha}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione a linha" /></SelectTrigger>
                 <SelectContent>
-                  {[1, 2, 3, 4, 5].map((n) => (
+                  {LINHAS.map((n) => (
                     <SelectItem key={n} value={String(n)}>Linha {n}</SelectItem>
                   ))}
                 </SelectContent>
@@ -661,7 +679,7 @@ export default function PreProgramacao() {
               <Select value={pularLinha} onValueChange={setPularLinha}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione a linha" /></SelectTrigger>
                 <SelectContent>
-                  {[1, 2, 3, 4, 5].map((n) => (
+                  {LINHAS.map((n) => (
                     <SelectItem key={n} value={String(n)}>Linha {n}</SelectItem>
                   ))}
                 </SelectContent>

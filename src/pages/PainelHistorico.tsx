@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useHistorico } from "@/hooks/useOrdens";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MarcaBadge } from "@/components/MarcaBadge";
@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { estornarEstoqueOP } from "@/lib/estoqueUtils";
 
-function LabDialog({ ordem, onClose, onSalvo }: {
+const LabDialog = memo(function LabDialog({ ordem, onClose, onSalvo }: {
   ordem: any;
   onClose: () => void;
   onSalvo: (id: string, obsOp: string) => void;
@@ -112,7 +112,7 @@ function LabDialog({ ordem, onClose, onSalvo }: {
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 type Modo = "dia" | "periodo";
 
@@ -140,7 +140,7 @@ export default function PainelHistorico() {
   // Atualiza obs_laboratorio localmente após salvar no dialog de lab
   const [labOverrides, setLabOverrides] = useState<Record<string, string>>({});
 
-  async function handleReabrir(ordem: any, e: React.MouseEvent) {
+  const handleReabrir = useCallback(async function handleReabrir(ordem: any, e: React.MouseEvent) {
     e.stopPropagation();
     const ok = window.confirm(`Reabrir a OP ${ordem.lote} — ${ordem.produto}?\nO status voltará para "Aguardando Liberação", a data de conclusão será removida e o estoque baixado será estornado.`);
     if (!ok) return;
@@ -166,14 +166,14 @@ export default function PainelHistorico() {
     }
     toast({ title: `OP ${ordem.lote} reaberta`, description: "Status voltou para Aguardando Liberação." });
     setReabrindo(null);
-  }
+  }, []);
 
-  const handleRegistroSalvo = (ordemId: string, novaQtdReal: number) => {
+  const handleRegistroSalvo = useCallback((ordemId: string, novaQtdReal: number) => {
     setOverrides((prev) => ({
       ...prev,
       [ordemId]: { quantidade_real: novaQtdReal },
     }));
-  };
+  }, []);
 
   const ordensFiltradas = useMemo(() => {
     const termo = busca.toLowerCase().trim();

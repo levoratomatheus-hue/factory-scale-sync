@@ -85,6 +85,54 @@ const FormulaViewDialog = memo(function FormulaViewDialog({ ordem, onClose }: { 
   );
 });
 
+const OrdemFilaCard = memo(function OrdemFilaCard({
+  ordem,
+  index,
+  kgHoje,
+  emLinha,
+  onIniciar,
+  onVerFormula,
+}: {
+  ordem: any;
+  index: number;
+  kgHoje: number;
+  emLinha: any;
+  onIniciar: (o: any) => void;
+  onVerFormula: (o: any) => void;
+}) {
+  return (
+    <div
+      className="bg-card rounded-lg border p-3 flex items-center gap-3 cursor-pointer hover:bg-muted/40 transition-colors"
+      onClick={() => onVerFormula(ordem)}
+    >
+      <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-muted-foreground font-bold text-sm shrink-0">
+        {index + 1}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium truncate">{ordem.produto}</div>
+        <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+          Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
+          {ordem.tamanho_batelada > 0 && (
+            <> · {Math.round(ordem.quantidade / ordem.tamanho_batelada)} bat.</>
+          )}
+          <MarcaBadge marca={ordem.marca} size="sm" />
+        </div>
+        {kgHoje > 0 && (
+          <div className="text-xs text-primary font-medium mt-0.5">
+            {formatKg(kgHoje)} kg produzidos hoje
+          </div>
+        )}
+      </div>
+      {!emLinha && (
+        <Button variant="outline" onClick={(e) => { e.stopPropagation(); onIniciar(ordem); }} className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm">
+          <Play className="mr-1.5 h-4 w-4 sm:h-3 sm:w-3" />
+          Iniciar
+        </Button>
+      )}
+    </div>
+  );
+});
+
 const MOTIVOS: Record<string, string> = {
   manutencao: "Manutenção",
   sem_material: "Sem Material",
@@ -123,6 +171,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [savingTemp, setSavingTemp] = useState(false);
 
   const [ordemFormula, setOrdemFormula] = useState<any | null>(null);
+  const handleVerFormula = useCallback((o: any) => setOrdemFormula(o), []);
 
   // Paradas
   const { paradas, fetchParadas } = useParadasLinha(linha, today);
@@ -222,7 +271,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     };
   }, [fetchOrdens]);
 
-  const iniciarOrdem = async (ordem: any) => {
+  const iniciarOrdem = useCallback(async (ordem: any) => {
     const { error } = await supabase
       .from("ordens")
       .update({ status: "em_linha" })
@@ -240,7 +289,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     });
 
     setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "em_linha" } : o));
-  };
+  }, []);
 
   const salvarInicio = async () => {
     if (!emLinha || !horaInicioInput) {
@@ -836,36 +885,15 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Próximas ordens</h2>
           <div className="space-y-2">
             {emAberto.map((ordem, i) => (
-              <div
+              <OrdemFilaCard
                 key={ordem.id}
-                className="bg-card rounded-lg border p-3 flex items-center gap-3 cursor-pointer hover:bg-muted/40 transition-colors"
-                onClick={() => setOrdemFormula(ordem)}
-              >
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-muted-foreground font-bold text-sm shrink-0">
-                  {i + 1}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{ordem.produto}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                    Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
-                    {ordem.tamanho_batelada > 0 && (
-                      <> · {Math.round(ordem.quantidade / ordem.tamanho_batelada)} bat.</>
-                    )}
-                    <MarcaBadge marca={ordem.marca} size="sm" />
-                  </div>
-                  {(kgHoje[ordem.id] ?? 0) > 0 && (
-                    <div className="text-xs text-primary font-medium mt-0.5">
-                      {formatKg(kgHoje[ordem.id])} kg produzidos hoje
-                    </div>
-                  )}
-                </div>
-                {!emLinha && (
-                  <Button variant="outline" onClick={(e) => { e.stopPropagation(); iniciarOrdem(ordem); }} className="shrink-0 min-h-[44px] sm:min-h-0 sm:h-8 px-3 text-sm">
-                    <Play className="mr-1.5 h-4 w-4 sm:h-3 sm:w-3" />
-                    Iniciar
-                  </Button>
-                )}
-              </div>
+                ordem={ordem}
+                index={i}
+                kgHoje={kgHoje[ordem.id] ?? 0}
+                emLinha={emLinha}
+                onIniciar={iniciarOrdem}
+                onVerFormula={handleVerFormula}
+              />
             ))}
           </div>
         </div>

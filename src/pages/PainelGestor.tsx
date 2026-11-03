@@ -56,6 +56,16 @@ interface OrdemProgramada {
   marca: string | null;
 }
 
+const STATUS_FILTROS = [
+  { value: "pendente",             label: "Pendente" },
+  { value: "em_pesagem",           label: "Em Pesagem" },
+  { value: "aguardando_mistura",   label: "Ag. Mistura" },
+  { value: "em_mistura",           label: "Em Mistura" },
+  { value: "aguardando_linha",     label: "Ag. Linha" },
+  { value: "aguardando_liberacao", label: "Ag. Liberação" },
+  { value: "pre_programacao",      label: "Pré-prog." },
+] as const;
+
 interface PainelGestorProps {
   onCriarOP?: (lote: number) => void;
 }
@@ -158,12 +168,12 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
 
   const [filterStatuses, setFilterStatuses] = useState<Set<string>>(new Set());
 
-  const toggleStatus = (s: string) =>
+  const toggleStatus = useCallback((s: string) =>
     setFilterStatuses((prev) => {
       const next = new Set(prev);
       next.has(s) ? next.delete(s) : next.add(s);
       return next;
-    });
+    }), []);
 
   const [prospecaoLote, setProspecaoLote] = useState<LoteSemOP | null>(null);
   const [prospecaoIngredientes, setProspecaoIngredientes] = useState<IngredienteMP[]>([]);
@@ -367,15 +377,7 @@ export default function PainelGestor({ onCriarOP }: PainelGestorProps = {}) {
             <h3 className="font-semibold text-sm dark:text-white">Lotes Programados</h3>
           </div>
           <div className="flex items-center gap-1 flex-wrap">
-            {[
-              { value: "pendente",             label: "Pendente" },
-              { value: "em_pesagem",           label: "Em Pesagem" },
-              { value: "aguardando_mistura",   label: "Ag. Mistura" },
-              { value: "em_mistura",           label: "Em Mistura" },
-              { value: "aguardando_linha",     label: "Ag. Linha" },
-              { value: "aguardando_liberacao", label: "Ag. Liberação" },
-              { value: "pre_programacao",      label: "Pré-prog." },
-            ].map(({ value, label }) => {
+            {STATUS_FILTROS.map(({ value, label }) => {
               const active = filterStatuses.has(value);
               return (
                 <button
