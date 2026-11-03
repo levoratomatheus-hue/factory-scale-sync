@@ -87,6 +87,7 @@ type Reaprov = {
   status: "pendente" | "utilizado";
   tipo_erro: TipoErro;
   criado_em: string;
+  utilizado_em: string | null;
   materiais: ReaprovMaterial[];
 };
 
@@ -250,7 +251,7 @@ export default function PainelAnaliseReaproveitamento() {
   const fetchLista = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
-      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em, reaproveitamentos_materiais(*)")
+      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em, utilizado_em, reaproveitamentos_materiais(*)")
       .order("criado_em", { ascending: false })
       .limit(5000);
     if (!error) {
@@ -410,69 +411,102 @@ export default function PainelAnaliseReaproveitamento() {
 
   // ── PDF report ────────────────────────────────────────────────────────────
   const gerarRelatorioPDF = useCallback(() => {
+    // Somente SDRs REAPROVEITADOS, pela data de reaproveitamento, dentro do período + filtro de tipo
+    const reaproveitados = lista.filter((r) => {
+      if (r.status !== "utilizado") return false;
+      const d = r.utilizado_em ? r.utilizado_em.split("T")[0] : null;
+      if (!d) return false;
+      if (dataInicio && d < dataInicio) return false;
+      if (dataFim && d > dataFim) return false;
+      if (filtroTipo === null && r.tipo_erro !== null) return false;
+      if (filtroTipo !== "todos" && filtroTipo !== null && r.tipo_erro !== filtroTipo) return false;
+      return true;
+    });
+
+    const totalSDRs = reaproveitados.length;
+    const totalKgMaterial = reaproveitados.reduce((s, r) => s + totalKgSDR(r), 0);
+    const totalProducao = reaproveitados.reduce((s, r) => s + (calcProducao(r) ?? 0), 0);
+
+    const prodArr = reaproveitados.filter((r) => r.tipo_erro === "producao");
+    const comArr  = reaproveitados.filter((r) => r.tipo_erro === "comercial");
+    const divProd = { qtd: prodArr.length, kg: prodArr.reduce((s, r) => s + totalKgSDR(r), 0) };
+    const divCom  = { qtd: comArr.length,  kg: comArr.reduce((s, r) => s + totalKgSDR(r), 0) };
+
+    // Ranking por origem (itera materiais)
+    const mapO = new Map<string, { qtd: number; kg: number; ids: Set<string> }>();
+    reaproveitados.forEach((r) => {
+      const mats = r.materiais && r.materiais.length > 0
+        ? r.materiais.map((m) => ({ nome: m.produto_origem?.trim() || "Origem não informada", kg: m.quantidade_material }))
+        : [{ nome: r.produto_origem?.trim() || "Origem não informada", kg: r.quantidade_material }];
+      mats.forEach((m) => {
+        if (!mapO.has(m.nome)) mapO.set(m.nome, { qtd: 0, kg: 0, ids: new Set() });
+        const e = mapO.get(m.nome)!;
+        if (!e.ids.has(r.id)) { e.qtd++; e.ids.add(r.id); }
+        e.kg += m.kg;
+      });
+    });
+    const rankO = Array.from(mapO.entries())
+      .map(([nome, v]) => ({ nome, qtd: v.qtd, kg: v.kg }))
+      .sort((a, b) => b.kg - a.kg);
+
+    // Ranking por destino
+    const mapD = new Map<string, { qtd: number; kg: number }>();
+    reaproveitados.forEach((r) => {
+      const key = r.produto_destino.trim() || "Destino não informado";
+      if (!mapD.has(key)) mapD.set(key, { qtd: 0, kg: 0 });
+      const e = mapD.get(key)!;
+      e.qtd++; e.kg += calcProducao(r) ?? 0;
+    });
+    const rankD = Array.from(mapD.entries())
+      .map(([nome, v]) => ({ nome, qtd: v.qtd, kg: v.kg }))
+      .sort((a, b) => b.kg - a.kg);
+
     const doc = new jsPDF();
     const hoje = new Date().toLocaleDateString("pt-BR");
     const periodoLabel = `${dataInicio.split("-").reverse().join("/")} – ${dataFim.split("-").reverse().join("/")}`;
     let y = 16;
 
     doc.setFontSize(16);
-    doc.text("Relatório — Análise de Reaproveitamento", 14, y); y += 7;
+    doc.text("Relatório — Reaproveitamento efetivado", 14, y); y += 7;
     doc.setFontSize(10); doc.setTextColor(120);
-    doc.text(`Período: ${periodoLabel}   |   Gerado em ${hoje}`, 14, y); y += 8;
+    doc.text(`Período (por data de reaproveitamento): ${periodoLabel}   |   Gerado em ${hoje}`, 14, y); y += 8;
     doc.setTextColor(0);
 
-    // Resumo
     doc.setFontSize(12); doc.text("Resumo do período", 14, y);
     autoTable(doc, {
       startY: y + 2,
       head: [["Indicador", "Valor"]],
       body: [
-        ["Total de SDRs", String(cards.totalSDRs)],
-        ["Material total (kg)", `${formatKg(cards.totalKgMaterial)} kg`],
-        ["Produção prevista (kg)", `${formatKg(cards.totalProducao)} kg`],
+        ["SDRs reaproveitados", String(totalSDRs)],
+        ["Material reaproveitado (kg)", `${formatKg(totalKgMaterial)} kg`],
+        ["Produção gerada (kg)", `${formatKg(totalProducao)} kg`],
       ],
       theme: "grid",
-      headStyles: { fillColor: [8, 145, 178] },
+      headStyles: { fillColor: [5, 150, 105] },
       styles: { fontSize: 10 },
     });
     y = (doc as any).lastAutoTable.finalY + 10;
 
-    // Divisão por tipo de erro
     doc.setFontSize(12); doc.text("Divisão por tipo de erro", 14, y);
     autoTable(doc, {
       startY: y + 2,
       head: [["Tipo", "Qtd SDRs", "Kg material"]],
       body: [
-        ["Produção",  String(divisaoTipo.producao.qtd),  `${formatKg(divisaoTipo.producao.kg)} kg`],
-        ["Comercial", String(divisaoTipo.comercial.qtd), `${formatKg(divisaoTipo.comercial.kg)} kg`],
+        ["Produção",  String(divProd.qtd), `${formatKg(divProd.kg)} kg`],
+        ["Comercial", String(divCom.qtd),  `${formatKg(divCom.kg)} kg`],
       ],
       theme: "striped",
-      headStyles: { fillColor: [8, 145, 178] },
+      headStyles: { fillColor: [5, 150, 105] },
       styles: { fontSize: 10 },
     });
     y = (doc as any).lastAutoTable.finalY + 10;
 
-    // Ranking por origem
-    if (rankingOrigem.length > 0) {
+    if (rankO.length > 0) {
       doc.setFontSize(12); doc.text("Ranking por material de origem", 14, y);
       autoTable(doc, {
         startY: y + 2,
         head: [["Material de origem", "Nº SDRs", "Kg material"]],
-        body: rankingOrigem.slice(0, 20).map((r) => [r.nome, String(r.qtd), `${formatKg(r.kgMaterial)} kg`]),
-        theme: "striped",
-        headStyles: { fillColor: [8, 145, 178] },
-        styles: { fontSize: 9 },
-      });
-      y = (doc as any).lastAutoTable.finalY + 10;
-    }
-
-    // Ranking por destino
-    if (rankingDestino.length > 0) {
-      doc.setFontSize(12); doc.text("Ranking por produto destino", 14, y);
-      autoTable(doc, {
-        startY: y + 2,
-        head: [["Produto destino", "Nº SDRs", "Produção prevista (kg)"]],
-        body: rankingDestino.slice(0, 20).map((r) => [r.nome, String(r.qtd), `${formatKg(r.kgProducao)} kg`]),
+        body: rankO.slice(0, 20).map((r) => [r.nome, String(r.qtd), `${formatKg(r.kg)} kg`]),
         theme: "striped",
         headStyles: { fillColor: [5, 150, 105] },
         styles: { fontSize: 9 },
@@ -480,9 +514,20 @@ export default function PainelAnaliseReaproveitamento() {
       y = (doc as any).lastAutoTable.finalY + 10;
     }
 
+    if (rankD.length > 0) {
+      doc.setFontSize(12); doc.text("Ranking por produto destino", 14, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Produto destino", "Nº SDRs", "Produção gerada (kg)"]],
+        body: rankD.slice(0, 20).map((r) => [r.nome, String(r.qtd), `${formatKg(r.kg)} kg`]),
+        theme: "striped",
+        headStyles: { fillColor: [5, 150, 105] },
+        styles: { fontSize: 9 },
+      });
+    }
 
-    doc.save(`analise_reaproveitamento_${hoje.replace(/\//g, "-")}.pdf`);
-  }, [periodo, dataInicio, dataFim, cards, divisaoTipo, rankingOrigem, rankingDestino, materialParado]);
+    doc.save(`reaproveitamento_efetivado_${hoje.replace(/\//g, "-")}.pdf`);
+  }, [lista, dataInicio, dataFim, filtroTipo]);
 
   // ── CSV exports ───────────────────────────────────────────────────────────
   function exportarOrigemCSV() {
@@ -538,14 +583,12 @@ export default function PainelAnaliseReaproveitamento() {
         </div>
         <button
           onClick={gerarRelatorioPDF}
-          disabled={periodo.length === 0}
           style={{
             display: "inline-flex", alignItems: "center", gap: "0.4rem",
             padding: "0.5rem 1rem", borderRadius: "0.5rem",
             background: D.cyan, color: "#fff",
-            border: "none", cursor: periodo.length === 0 ? "not-allowed" : "pointer",
+            border: "none", cursor: "pointer",
             fontSize: "0.8125rem", fontWeight: 600,
-            opacity: periodo.length === 0 ? 0.5 : 1,
             flexShrink: 0,
           }}
         >
