@@ -9,6 +9,8 @@ import {
 import { formatKg } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -1294,6 +1296,93 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     m.quantidade_material && m.percentual_reaproveitado
   );
 
+  // ── PDF Report ──────────────────────────────────────────────────────────────
+  const gerarRelatorioPDF = useCallback(() => {
+    const pendentes = lista.filter((r) => r.status === "pendente");
+    const utilizados = lista.filter((r) => r.status === "utilizado");
+
+    const kgDisp = (r: ReaprovFull) =>
+      r.materiais && r.materiais.length > 0
+        ? r.materiais.reduce((ms, m) => ms + m.quantidade_material, 0)
+        : r.quantidade_material;
+    const kgUtil = (r: ReaprovFull) =>
+      r.materiais && r.materiais.length > 0
+        ? r.materiais.reduce((ms, m) => ms + (m.quantidade_utilizada ?? m.quantidade_material), 0)
+        : (r.quantidade_utilizada ?? r.quantidade_material);
+    const produtoOrigem = (r: ReaprovFull) =>
+      r.materiais && r.materiais.length > 0
+        ? (r.materiais.map((m) => m.produto_origem).filter(Boolean).join(", ") || "—")
+        : (r.produto_origem || "—");
+    const tipoLabel = (r: ReaprovFull) => (r.tipo_erro ? String(r.tipo_erro) : "—");
+    const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+
+    const kgPendentes = pendentes.reduce((s, r) => s + kgDisp(r), 0);
+    const kgUtilizados = utilizados.reduce((s, r) => s + kgUtil(r), 0);
+    const prodPossivelTotal = pendentes.reduce((s, r) => s + (calcProducaoPrevista(r) ?? 0), 0);
+
+    const doc = new jsPDF();
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    let y = 16;
+
+    doc.setFontSize(16);
+    doc.text("Relatório de Reaproveitamento", 14, y); y += 7;
+    doc.setFontSize(10); doc.setTextColor(120);
+    doc.text(`Gerado em ${hoje} por ${perfilNome}`, 14, y); y += 6;
+    doc.setTextColor(0);
+
+    doc.setFontSize(12); doc.text("Resumo", 14, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Pendentes (SDRs parados)", String(pendentes.length)],
+        ["Kg parados (pendentes)", `${formatKg(kgPendentes)} kg`],
+        ["Produção possível com pendentes", `${formatKg(prodPossivelTotal)} kg`],
+        ["Já reaproveitados (SDRs)", String(utilizados.length)],
+        ["Kg já reaproveitados", `${formatKg(kgUtilizados)} kg`],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [245, 158, 11] },
+      styles: { fontSize: 10 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    doc.setFontSize(12); doc.text("Pendentes (parados)", 14, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Produto / origem", "Tipo", "Kg disponível", "Produção prevista", "Criado em"]],
+      body: pendentes.map((r) => [
+        produtoOrigem(r),
+        tipoLabel(r),
+        `${formatKg(kgDisp(r))} kg`,
+        calcProducaoPrevista(r) != null ? `${formatKg(calcProducaoPrevista(r)!)} kg` : "—",
+        fmt((r as any).criado_em ?? (r as any).created_at ?? null),
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: [245, 158, 11] },
+      styles: { fontSize: 9 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    doc.setFontSize(12); doc.text("Já reaproveitados", 14, y);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Produto / origem", "Tipo", "Kg utilizado", "Por", "Em"]],
+      body: utilizados.map((r) => [
+        produtoOrigem(r),
+        tipoLabel(r),
+        `${formatKg(kgUtil(r))} kg`,
+        r.utilizado_por || "—",
+        fmt(r.utilizado_em),
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: [16, 185, 129] },
+      styles: { fontSize: 9 },
+    });
+
+    doc.save(`reaproveitamento_${hoje.replace(/\//g, "-")}.pdf`);
+  }, [lista, perfilNome]);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1570,6 +1659,13 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                   style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 1rem", background: D.cardAlt, color: D.text, border: `1px solid ${D.border}`, borderRadius: "0.5rem", fontSize: 13, fontWeight: 600, cursor: listaFiltrada.length === 0 ? "not-allowed" : "pointer", opacity: listaFiltrada.length === 0 ? 0.5 : 1 }}
                 >
                   <Download size={14} /> Exportar CSV
+                </button>
+                <button
+                  onClick={gerarRelatorioPDF}
+                  disabled={lista.length === 0}
+                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 1rem", background: D.cardAlt, color: D.text, border: `1px solid ${D.border}`, borderRadius: "0.5rem", fontSize: 13, fontWeight: 600, cursor: lista.length === 0 ? "not-allowed" : "pointer", opacity: lista.length === 0 ? 0.5 : 1 }}
+                >
+                  <Download size={14} /> Gerar relatório (PDF)
                 </button>
                 <button
                   onClick={abrirNovo}
