@@ -3,14 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatKg } from "@/lib/utils";
 import {
   Loader2, Recycle, BarChart2, CalendarRange, AlertTriangle,
-  TrendingDown, ArrowDownToLine, Download, FileDown,
+  ArrowDownToLine, Download, FileDown, ArrowRightLeft,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, Cell,
 } from "recharts";
 import {
@@ -63,7 +63,6 @@ let tooltipStyle = makeTooltipStyle(D);
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TipoErro = "producao" | "comercial" | null;
 
-/** Material de origem — fonte da verdade para cálculos de produção e ranking */
 type ReaprovMaterial = {
   id: string;
   reaproveitamento_id: string;
@@ -79,7 +78,6 @@ type Reaprov = {
   id: string;
   codigo: string;
   produto_destino: string;
-  // Campos legados (mantidos para compat) — usar materiais[] como fonte de verdade
   produto_origem: string | null;
   quantidade_material: number;
   quantidade_utilizada: number | null;
@@ -88,6 +86,7 @@ type Reaprov = {
   tipo_erro: TipoErro;
   criado_em: string;
   utilizado_em: string | null;
+  utilizado_por: string | null;
   materiais: ReaprovMaterial[];
 };
 
@@ -121,6 +120,21 @@ function calcAtalho(id: AtalhoId): { inicio: string; fim: string } {
   return { inicio: "", fim: "" };
 }
 
+/** Lista de meses "YYYY-MM" entre duas datas (inclusive) */
+function mesesEntre(ini: string, fim: string): string[] {
+  if (!ini || !fim) return [];
+  const [ay, am] = ini.split("-").map(Number);
+  const [by, bm] = fim.split("-").map(Number);
+  const res: string[] = [];
+  let y = ay, m = am, guard = 0;
+  while ((y < by || (y === by && m <= bm)) && guard < 120) {
+    res.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++; if (m > 12) { m = 1; y++; }
+    guard++;
+  }
+  return res;
+}
+
 /** Produção de um SDR = MÍNIMO entre materiais (gargalo limita a fórmula inteira) */
 function calcProducao(r: Reaprov): number | null {
   if (r.materiais && r.materiais.length > 0) {
@@ -133,7 +147,6 @@ function calcProducao(r: Reaprov): number | null {
       .filter((p): p is number => p !== null);
     return possiveis.length > 0 ? Math.min(...possiveis) : null;
   }
-  // Fallback para SDRs antigos sem materiais cadastrados
   const qtd = r.quantidade_utilizada ?? r.quantidade_material;
   const pct = r.percentual_reaproveitado;
   if (!pct || pct <= 0 || !qtd || qtd <= 0) return null;
@@ -175,11 +188,14 @@ function downloadCsv(content: string, filename: string) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+function SectionTitle({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-      {icon}
-      <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: D.text }}>{title}</h2>
+    <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        {icon}
+        <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: D.text }}>{title}</h2>
+      </div>
+      {hint && <span style={{ fontSize: "0.72rem", color: D.muted }}>{hint}</span>}
     </div>
   );
 }
@@ -193,10 +209,10 @@ function Vazio({ mensagem = "Nenhum dado no período" }: { mensagem?: string }) 
 }
 
 function SummaryCard({
-  label, value, sub, color,
-}: { label: string; value: string; sub?: string; color?: string }) {
+  label, value, sub, color, accent,
+}: { label: string; value: string; sub?: string; color?: string; accent?: string }) {
   return (
-    <div style={cardStyle}>
+    <div style={{ ...cardStyle, borderTop: accent ? `3px solid ${accent}` : cardStyle.border }}>
       <p style={{ fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
         {label}
       </p>
@@ -218,6 +234,23 @@ function TooltipKg({ active, payload }: any) {
       {d.qtd !== undefined && (
         <p style={{ margin: "2px 0 0", color: D.muted }}>{d.qtd} SDR{d.qtd !== 1 ? "s" : ""}</p>
       )}
+    </div>
+  );
+}
+
+function TooltipComparativo({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={tooltipStyle}>
+      <p style={{ fontWeight: 700, margin: 0 }}>{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} style={{ margin: "3px 0 0", color: p.color }}>
+          {p.name}: <strong>{formatKg(p.value)}</strong>
+          {p.payload?.[p.dataKey === "abertosKg" ? "abertosQtd" : "executadosQtd"] !== undefined && (
+            <span style={{ color: D.muted }}> · {p.payload[p.dataKey === "abertosKg" ? "abertosQtd" : "executadosQtd"]} SDR</span>
+          )}
+        </p>
+      ))}
     </div>
   );
 }
@@ -245,13 +278,12 @@ export default function PainelAnaliseReaproveitamento() {
 
   const [filtroTipo, setFiltroTipo] = useState<TipoErro | "todos">("todos");
 
-  // Modal: histórico de SDRs de uma origem
   const [modalOrigem, setModalOrigem] = useState<string | null>(null);
 
   const fetchLista = useCallback(async () => {
     const { data, error } = await (supabase as any)
       .from("reaproveitamentos")
-      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em, utilizado_em, reaproveitamentos_materiais(*)")
+      .select("id, codigo, produto_destino, produto_origem, quantidade_material, quantidade_utilizada, percentual_reaproveitado, status, tipo_erro, criado_em, utilizado_em, utilizado_por, reaproveitamentos_materiais(*)")
       .order("criado_em", { ascending: false })
       .limit(5000);
     if (!error) {
@@ -280,124 +312,120 @@ export default function PainelAnaliseReaproveitamento() {
     setAtalhoAtivo(id);
   }
 
-  // SDRs filtrados por período e tipo de erro
-  const periodo = useMemo(() => {
-    return lista.filter((r) => {
-      const dia = r.criado_em.split("T")[0];
-      if (dataInicio && dia < dataInicio) return false;
-      if (dataFim && dia > dataFim) return false;
-      if (filtroTipo === null && r.tipo_erro !== null) return false;
-      if (filtroTipo !== "todos" && filtroTipo !== null && r.tipo_erro !== filtroTipo) return false;
-      return true;
-    });
-  }, [lista, dataInicio, dataFim, filtroTipo]);
+  const tipoMatch = useCallback((r: Reaprov) => {
+    if (filtroTipo === null && r.tipo_erro !== null) return false;
+    if (filtroTipo !== "todos" && filtroTipo !== null && r.tipo_erro !== filtroTipo) return false;
+    return true;
+  }, [filtroTipo]);
 
-  // ── Cards de resumo ────────────────────────────────────────────────────────
+  const dentroPeriodo = useCallback((iso: string | null) => {
+    if (!iso) return false;
+    const d = iso.split("T")[0];
+    if (dataInicio && d < dataInicio) return false;
+    if (dataFim && d > dataFim) return false;
+    return true;
+  }, [dataInicio, dataFim]);
+
+  // ABERTOS = criados no período (criado_em)
+  const abertos = useMemo(
+    () => lista.filter((r) => tipoMatch(r) && dentroPeriodo(r.criado_em)),
+    [lista, tipoMatch, dentroPeriodo],
+  );
+
+  // EXECUTADOS = reaproveitados no período (utilizado_em, status utilizado)
+  const executados = useMemo(
+    () => lista.filter((r) => r.status === "utilizado" && tipoMatch(r) && dentroPeriodo(r.utilizado_em)),
+    [lista, tipoMatch, dentroPeriodo],
+  );
+
+  // PENDENTES = foto do estoque atual
+  const pendentes = useMemo(() => lista.filter((r) => r.status === "pendente"), [lista]);
+
   const cards = useMemo(() => {
-    const totalSDRs = periodo.length;
-    const totalKgMaterial = periodo.reduce((s, r) => s + totalKgSDR(r), 0);
-    const totalProducao = periodo.reduce((s, r) => s + (calcProducao(r) ?? 0), 0);
-    const utilizados = periodo.filter((r) => r.status === "utilizado").length;
-    const taxaUtil = totalSDRs > 0 ? Math.round((utilizados / totalSDRs) * 100) : 0;
-    const pendentes = lista.filter((r) => r.status === "pendente");
-    const kgPendentes = pendentes.reduce((s, r) => s + totalKgSDR(r), 0);
-    return { totalSDRs, totalKgMaterial, totalProducao, taxaUtil, qtdPendentes: pendentes.length, kgPendentes };
-  }, [periodo, lista]);
+    const abertosKg = abertos.reduce((s, r) => s + totalKgSDR(r), 0);
+    const execKg = executados.reduce((s, r) => s + totalKgSDR(r), 0);
+    const execProducao = executados.reduce((s, r) => s + (calcProducao(r) ?? 0), 0);
+    const pendKg = pendentes.reduce((s, r) => s + totalKgSDR(r), 0);
+    const taxa = abertos.length > 0 ? Math.round((executados.length / abertos.length) * 100) : 0;
+    return {
+      abertosQtd: abertos.length, abertosKg,
+      execQtd: executados.length, execKg, execProducao,
+      pendQtd: pendentes.length, pendKg, taxa,
+    };
+  }, [abertos, executados, pendentes]);
 
-  // ── Seção 1: Ranking por origem ───────────────────────────────────────────
-  // Itera pelos materiais de cada SDR — um SDR pode contribuir para múltiplas origens
-  const rankingOrigem = useMemo(() => {
-    const map = new Map<string, { qtd: number; kgMaterial: number; sdrIds: Set<string> }>();
-
-    periodo.forEach((r) => {
-      if (r.materiais && r.materiais.length > 0) {
-        r.materiais.forEach((m) => {
-          const key = m.produto_origem?.trim() || "Origem não informada";
-          if (!map.has(key)) map.set(key, { qtd: 0, kgMaterial: 0, sdrIds: new Set() });
-          const e = map.get(key)!;
-          if (!e.sdrIds.has(r.id)) { e.qtd++; e.sdrIds.add(r.id); }
-          e.kgMaterial += m.quantidade_material;
-        });
-      } else {
-        // Fallback para SDRs sem materiais cadastrados
-        const key = r.produto_origem?.trim() || "Origem não informada";
-        if (!map.has(key)) map.set(key, { qtd: 0, kgMaterial: 0, sdrIds: new Set() });
-        const e = map.get(key)!;
-        if (!e.sdrIds.has(r.id)) { e.qtd++; e.sdrIds.add(r.id); }
-        e.kgMaterial += r.quantidade_material;
-      }
+  const comparativoMensal = useMemo(() => {
+    const mapAb = new Map<string, { kg: number; qtd: number }>();
+    const mapEx = new Map<string, { kg: number; qtd: number }>();
+    abertos.forEach((r) => {
+      const k = r.criado_em.substring(0, 7);
+      const e = mapAb.get(k) ?? { kg: 0, qtd: 0 };
+      e.kg += totalKgSDR(r); e.qtd++; mapAb.set(k, e);
     });
-
-    return Array.from(map.entries())
-      .map(([nome, { qtd, kgMaterial }]) => ({ nome, qtd, kgMaterial, label: nome }))
-      .sort((a, b) => b.kgMaterial - a.kgMaterial);
-  }, [periodo]);
-
-  // SDRs de uma origem específica (para o modal)
-  const sdrsModal = useMemo(() => {
-    if (!modalOrigem) return [];
-    const chave = modalOrigem === "Origem não informada" ? null : modalOrigem;
-    return lista.filter((r) => {
-      if (r.materiais && r.materiais.length > 0) {
-        if (chave === null) {
-          return r.materiais.length === 0;
-        }
-        return r.materiais.some((m) => m.produto_origem?.trim() === chave);
-      }
-      // Fallback
-      if (chave === null) return !r.produto_origem?.trim();
-      return r.produto_origem?.trim() === chave;
+    executados.forEach((r) => {
+      const k = (r.utilizado_em ?? "").substring(0, 7);
+      if (!k) return;
+      const e = mapEx.get(k) ?? { kg: 0, qtd: 0 };
+      e.kg += totalKgSDR(r); e.qtd++; mapEx.set(k, e);
     });
-  }, [lista, modalOrigem]);
+    const meses = mesesEntre(dataInicio, dataFim);
+    const base = meses.length > 0
+      ? meses
+      : Array.from(new Set([...mapAb.keys(), ...mapEx.keys()])).sort();
+    return base.map((k) => ({
+      label: format(new Date(k + "-02"), "MMM/yy", { locale: ptBR }),
+      abertosKg: mapAb.get(k)?.kg ?? 0,
+      executadosKg: mapEx.get(k)?.kg ?? 0,
+      abertosQtd: mapAb.get(k)?.qtd ?? 0,
+      executadosQtd: mapEx.get(k)?.qtd ?? 0,
+    }));
+  }, [abertos, executados, dataInicio, dataFim]);
 
-  // ── Seção 2: Volume por mês ────────────────────────────────────────────────
-  const volumeMensal = useMemo(() => {
-    const map = new Map<string, { kgMaterial: number; qtd: number }>();
-    periodo.forEach((r) => {
-      const key = r.criado_em.substring(0, 7);
-      if (!map.has(key)) map.set(key, { kgMaterial: 0, qtd: 0 });
-      const e = map.get(key)!;
-      e.kgMaterial += totalKgSDR(r);
-      e.qtd++;
-    });
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, { kgMaterial, qtd }]) => ({
-        label: format(new Date(key + "-02"), "MMM/yy", { locale: ptBR }),
-        kgMaterial,
-        qtd,
-      }));
-  }, [periodo]);
-
-  // ── Seção 3: Material parado ───────────────────────────────────────────────
-  const materialParado = useMemo(() => {
-    return lista
-      .filter((r) => r.status === "pendente")
-      .map((r) => ({
-        ...r,
-        dias: diasPassados(r.criado_em),
-        totalKg: totalKgSDR(r),
-        origens: origensLabel(r),
-      }))
-      .sort((a, b) => b.dias - a.dias);
-  }, [lista]);
-
-  // ── Divisão por tipo de erro ──────────────────────────────────────────────
   const divisaoTipo = useMemo(() => {
-    const producao  = periodo.filter((r) => r.tipo_erro === "producao");
-    const comercial = periodo.filter((r) => r.tipo_erro === "comercial");
-    const semTipo   = periodo.filter((r) => !r.tipo_erro);
+    const producao  = abertos.filter((r) => r.tipo_erro === "producao");
+    const comercial = abertos.filter((r) => r.tipo_erro === "comercial");
+    const semTipo   = abertos.filter((r) => !r.tipo_erro);
     return {
       producao:  { qtd: producao.length,  kg: producao.reduce((s, r) => s + totalKgSDR(r), 0) },
       comercial: { qtd: comercial.length, kg: comercial.reduce((s, r) => s + totalKgSDR(r), 0) },
       semTipo:   { qtd: semTipo.length,   kg: semTipo.reduce((s, r) => s + totalKgSDR(r), 0) },
     };
-  }, [periodo]);
+  }, [abertos]);
 
-  // ── Seção 4: Ranking por produto_destino ──────────────────────────────────
+  const rankingOrigem = useMemo(() => {
+    const map = new Map<string, { qtd: number; kgMaterial: number; sdrIds: Set<string> }>();
+    abertos.forEach((r) => {
+      const mats = (r.materiais && r.materiais.length > 0)
+        ? r.materiais.map((m) => ({ nome: m.produto_origem?.trim() || "Origem não informada", kg: m.quantidade_material }))
+        : [{ nome: r.produto_origem?.trim() || "Origem não informada", kg: r.quantidade_material }];
+      mats.forEach((m) => {
+        if (!map.has(m.nome)) map.set(m.nome, { qtd: 0, kgMaterial: 0, sdrIds: new Set() });
+        const e = map.get(m.nome)!;
+        if (!e.sdrIds.has(r.id)) { e.qtd++; e.sdrIds.add(r.id); }
+        e.kgMaterial += m.kg;
+      });
+    });
+    return Array.from(map.entries())
+      .map(([nome, { qtd, kgMaterial }]) => ({ nome, qtd, kgMaterial, label: nome }))
+      .sort((a, b) => b.kgMaterial - a.kgMaterial);
+  }, [abertos]);
+
+  const sdrsModal = useMemo(() => {
+    if (!modalOrigem) return [];
+    const chave = modalOrigem === "Origem não informada" ? null : modalOrigem;
+    return lista.filter((r) => {
+      if (r.materiais && r.materiais.length > 0) {
+        if (chave === null) return r.materiais.length === 0;
+        return r.materiais.some((m) => m.produto_origem?.trim() === chave);
+      }
+      if (chave === null) return !r.produto_origem?.trim();
+      return r.produto_origem?.trim() === chave;
+    });
+  }, [lista, modalOrigem]);
+
   const rankingDestino = useMemo(() => {
     const map = new Map<string, { qtd: number; kgProducao: number }>();
-    periodo.forEach((r) => {
+    executados.forEach((r) => {
       const key = r.produto_destino.trim() || "Destino não informado";
       if (!map.has(key)) map.set(key, { qtd: 0, kgProducao: 0 });
       const e = map.get(key)!;
@@ -407,35 +435,32 @@ export default function PainelAnaliseReaproveitamento() {
     return Array.from(map.entries())
       .map(([nome, { qtd, kgProducao }]) => ({ nome, qtd, kgProducao }))
       .sort((a, b) => b.kgProducao - a.kgProducao);
-  }, [periodo]);
+  }, [executados]);
 
-  // ── PDF report ────────────────────────────────────────────────────────────
+  const materialParado = useMemo(() => {
+    return pendentes
+      .map((r) => ({
+        ...r,
+        dias: diasPassados(r.criado_em),
+        totalKg: totalKgSDR(r),
+        origens: origensLabel(r),
+      }))
+      .sort((a, b) => b.dias - a.dias);
+  }, [pendentes]);
+
   const gerarRelatorioPDF = useCallback(() => {
-    // Somente SDRs REAPROVEITADOS, pela data de reaproveitamento, dentro do período + filtro de tipo
-    const reaproveitados = lista.filter((r) => {
-      if (r.status !== "utilizado") return false;
-      const d = r.utilizado_em ? r.utilizado_em.split("T")[0] : null;
-      if (!d) return false;
-      if (dataInicio && d < dataInicio) return false;
-      if (dataFim && d > dataFim) return false;
-      if (filtroTipo === null && r.tipo_erro !== null) return false;
-      if (filtroTipo !== "todos" && filtroTipo !== null && r.tipo_erro !== filtroTipo) return false;
-      return true;
-    });
+    const totalSDRs = executados.length;
+    const totalKgMaterial = executados.reduce((s, r) => s + totalKgSDR(r), 0);
+    const totalProducao = executados.reduce((s, r) => s + (calcProducao(r) ?? 0), 0);
 
-    const totalSDRs = reaproveitados.length;
-    const totalKgMaterial = reaproveitados.reduce((s, r) => s + totalKgSDR(r), 0);
-    const totalProducao = reaproveitados.reduce((s, r) => s + (calcProducao(r) ?? 0), 0);
-
-    const prodArr = reaproveitados.filter((r) => r.tipo_erro === "producao");
-    const comArr  = reaproveitados.filter((r) => r.tipo_erro === "comercial");
+    const prodArr = executados.filter((r) => r.tipo_erro === "producao");
+    const comArr  = executados.filter((r) => r.tipo_erro === "comercial");
     const divProd = { qtd: prodArr.length, kg: prodArr.reduce((s, r) => s + totalKgSDR(r), 0) };
     const divCom  = { qtd: comArr.length,  kg: comArr.reduce((s, r) => s + totalKgSDR(r), 0) };
 
-    // Ranking por origem (itera materiais)
     const mapO = new Map<string, { qtd: number; kg: number; ids: Set<string> }>();
-    reaproveitados.forEach((r) => {
-      const mats = r.materiais && r.materiais.length > 0
+    executados.forEach((r) => {
+      const mats = (r.materiais && r.materiais.length > 0)
         ? r.materiais.map((m) => ({ nome: m.produto_origem?.trim() || "Origem não informada", kg: m.quantidade_material }))
         : [{ nome: r.produto_origem?.trim() || "Origem não informada", kg: r.quantidade_material }];
       mats.forEach((m) => {
@@ -449,9 +474,8 @@ export default function PainelAnaliseReaproveitamento() {
       .map(([nome, v]) => ({ nome, qtd: v.qtd, kg: v.kg }))
       .sort((a, b) => b.kg - a.kg);
 
-    // Ranking por destino
     const mapD = new Map<string, { qtd: number; kg: number }>();
-    reaproveitados.forEach((r) => {
+    executados.forEach((r) => {
       const key = r.produto_destino.trim() || "Destino não informado";
       if (!mapD.has(key)) mapD.set(key, { qtd: 0, kg: 0 });
       const e = mapD.get(key)!;
@@ -467,7 +491,7 @@ export default function PainelAnaliseReaproveitamento() {
     let y = 16;
 
     doc.setFontSize(16);
-    doc.text("Relatório — Reaproveitamento efetivado", 14, y); y += 7;
+    doc.text("Relatório — Reaproveitamento executado", 14, y); y += 7;
     doc.setFontSize(10); doc.setTextColor(120);
     doc.text(`Período (por data de reaproveitamento): ${periodoLabel}   |   Gerado em ${hoje}`, 14, y); y += 8;
     doc.setTextColor(0);
@@ -477,7 +501,7 @@ export default function PainelAnaliseReaproveitamento() {
       startY: y + 2,
       head: [["Indicador", "Valor"]],
       body: [
-        ["SDRs reaproveitados", String(totalSDRs)],
+        ["SDRs executados", String(totalSDRs)],
         ["Material reaproveitado (kg)", `${formatKg(totalKgMaterial)} kg`],
         ["Produção gerada (kg)", `${formatKg(totalProducao)} kg`],
       ],
@@ -526,33 +550,21 @@ export default function PainelAnaliseReaproveitamento() {
       });
     }
 
-    doc.save(`reaproveitamento_efetivado_${hoje.replace(/\//g, "-")}.pdf`);
-  }, [lista, dataInicio, dataFim, filtroTipo]);
+    doc.save(`reaproveitamento_executado_${hoje.replace(/\//g, "-")}.pdf`);
+  }, [executados, dataInicio, dataFim]);
 
-  // ── CSV exports ───────────────────────────────────────────────────────────
   function exportarOrigemCSV() {
     const header = "Produto origem;Nº SDRs;Material total (kg)";
     const rows = rankingOrigem.map((r) =>
-      [
-        `"${r.nome.replace(/"/g, '""')}"`,
-        r.qtd,
-        r.kgMaterial.toFixed(3).replace(".", ","),
-      ].join(";")
+      [`"${r.nome.replace(/"/g, '""')}"`, r.qtd, r.kgMaterial.toFixed(3).replace(".", ",")].join(";")
     );
-    downloadCsv([header, ...rows].join("\n"), "ranking_origem_reaproveitamento.csv");
+    downloadCsv([header, ...rows].join("\n"), "origem_abertos_reaproveitamento.csv");
   }
 
   function exportarParadoCSV() {
     const header = "Código;Origens;Produto destino;Material (kg);Criado em;Dias parado";
     const rows = materialParado.map((r) =>
-      [
-        r.codigo,
-        `"${r.origens.replace(/"/g, '""')}"`,
-        `"${r.produto_destino.replace(/"/g, '""')}"`,
-        r.totalKg.toFixed(3).replace(".", ","),
-        fmtDate(r.criado_em),
-        r.dias,
-      ].join(";")
+      [r.codigo, `"${r.origens.replace(/"/g, '""')}"`, `"${r.produto_destino.replace(/"/g, '""')}"`, r.totalKg.toFixed(3).replace(".", ","), fmtDate(r.criado_em), r.dias].join(";")
     );
     downloadCsv([header, ...rows].join("\n"), "material_parado_reaproveitamento.csv");
   }
@@ -570,7 +582,7 @@ export default function PainelAnaliseReaproveitamento() {
   return (
     <div style={{ background: D.page, minHeight: "100vh", padding: "1.5rem", color: D.text }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
@@ -578,83 +590,49 @@ export default function PainelAnaliseReaproveitamento() {
             <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>Análise de Reaproveitamento</h1>
           </div>
           <p style={{ margin: 0, color: D.muted, fontSize: "0.875rem" }}>
-            {periodo.length} SDR{periodo.length !== 1 ? "s" : ""} no período
+            {cards.abertosQtd} aberto{cards.abertosQtd !== 1 ? "s" : ""} · {cards.execQtd} executado{cards.execQtd !== 1 ? "s" : ""} no período
           </p>
         </div>
         <button
           onClick={gerarRelatorioPDF}
+          disabled={cards.execQtd === 0}
+          title={cards.execQtd === 0 ? "Nenhum reaproveitamento executado no período" : "Relatório dos executados no período"}
           style={{
             display: "inline-flex", alignItems: "center", gap: "0.4rem",
             padding: "0.5rem 1rem", borderRadius: "0.5rem",
-            background: D.cyan, color: "#fff",
-            border: "none", cursor: "pointer",
+            background: D.emerald, color: "#fff",
+            border: "none", cursor: cards.execQtd === 0 ? "not-allowed" : "pointer",
             fontSize: "0.8125rem", fontWeight: 600,
-            flexShrink: 0,
+            opacity: cards.execQtd === 0 ? 0.5 : 1, flexShrink: 0,
           }}
         >
           <FileDown size={15} />
-          Gerar relatório (PDF)
+          Relatório (PDF) — executados
         </button>
       </div>
 
-      {/* ── Filtro de período e tipo ── */}
+      {/* Filtro de período e tipo */}
       <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
           <CalendarRange style={{ width: 15, height: 15, color: D.muted, flexShrink: 0 }} />
-
           {ATALHOS.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => aplicarAtalho(a.id)}
-              style={{
-                padding: "0.25rem 0.625rem",
-                borderRadius: "0.375rem",
-                border: `1px solid ${atalhoAtivo === a.id ? D.cyan : D.border}`,
-                background: atalhoAtivo === a.id ? `${D.cyan}22` : "transparent",
-                color: atalhoAtivo === a.id ? D.cyan : D.muted,
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-            >
+            <button key={a.id} onClick={() => aplicarAtalho(a.id)}
+              style={{ padding: "0.25rem 0.625rem", borderRadius: "0.375rem", border: `1px solid ${atalhoAtivo === a.id ? D.cyan : D.border}`, background: atalhoAtivo === a.id ? `${D.cyan}22` : "transparent", color: atalhoAtivo === a.id ? D.cyan : D.muted, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}>
               {a.label}
             </button>
           ))}
-          <button
-            onClick={() => setAtalhoAtivo(null)}
-            style={{
-              padding: "0.25rem 0.625rem",
-              borderRadius: "0.375rem",
-              border: `1px solid ${atalhoAtivo === null ? D.cyan : D.border}`,
-              background: atalhoAtivo === null ? `${D.cyan}22` : "transparent",
-              color: atalhoAtivo === null ? D.cyan : D.muted,
-              fontSize: "0.75rem",
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={() => setAtalhoAtivo(null)}
+            style={{ padding: "0.25rem 0.625rem", borderRadius: "0.375rem", border: `1px solid ${atalhoAtivo === null ? D.cyan : D.border}`, background: atalhoAtivo === null ? `${D.cyan}22` : "transparent", color: atalhoAtivo === null ? D.cyan : D.muted, fontSize: "0.75rem", fontWeight: 500, cursor: "pointer" }}>
             Personalizado
           </button>
-
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto", flexWrap: "wrap" }}>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => { setDataInicio(e.target.value); setAtalhoAtivo(null); }}
-              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none", colorScheme: dark ? "dark" : "light" }}
-            />
+            <input type="date" value={dataInicio} onChange={(e) => { setDataInicio(e.target.value); setAtalhoAtivo(null); }}
+              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none", colorScheme: dark ? "dark" : "light" }} />
             <span style={{ color: D.muted, fontSize: "0.75rem" }}>até</span>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => { setDataFim(e.target.value); setAtalhoAtivo(null); }}
-              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none", colorScheme: dark ? "dark" : "light" }}
-            />
+            <input type="date" value={dataFim} onChange={(e) => { setDataFim(e.target.value); setAtalhoAtivo(null); }}
+              style={{ background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.text, fontSize: "0.75rem", padding: "0.25rem 0.5rem", outline: "none", colorScheme: dark ? "dark" : "light" }} />
           </div>
         </div>
-
-        {/* Filtro por tipo de erro */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.625rem", flexWrap: "wrap" }}>
           <span style={{ fontSize: "0.72rem", color: D.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Tipo de erro:</span>
           {([
@@ -666,17 +644,8 @@ export default function PainelAnaliseReaproveitamento() {
             const sel = filtroTipo === f.v;
             const cor = "cor" in f ? f.cor : D.muted;
             return (
-              <button
-                key={String(f.v)}
-                onClick={() => setFiltroTipo(f.v)}
-                style={{
-                  padding: "0.2rem 0.625rem", borderRadius: "9999px", fontSize: "0.72rem", fontWeight: 600,
-                  border: `1px solid ${sel ? cor : D.border}`,
-                  background: sel ? `${cor}22` : "transparent",
-                  color: sel ? cor : D.muted,
-                  cursor: "pointer", transition: "all 0.15s",
-                }}
-              >
+              <button key={String(f.v)} onClick={() => setFiltroTipo(f.v)}
+                style={{ padding: "0.2rem 0.625rem", borderRadius: "9999px", fontSize: "0.72rem", fontWeight: 600, border: `1px solid ${sel ? cor : D.border}`, background: sel ? `${cor}22` : "transparent", color: sel ? cor : D.muted, cursor: "pointer", transition: "all 0.15s" }}>
                 {f.label}
               </button>
             );
@@ -684,167 +653,111 @@ export default function PainelAnaliseReaproveitamento() {
         </div>
       </div>
 
-      {/* ── Cards de resumo ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.75rem" }}>
-        <SummaryCard
-          label="Total de SDRs"
-          value={String(cards.totalSDRs)}
-          sub="no período"
-          color={D.cyan}
-        />
-        <SummaryCard
-          label="Material reaproveitado"
-          value={formatKg(cards.totalKgMaterial)}
-          sub="soma de todos os materiais"
-        />
-        <SummaryCard
-          label="Produção gerada"
-          value={cards.totalProducao > 0 ? formatKg(cards.totalProducao) : "—"}
-          sub="soma das contribuições"
-        />
-        <SummaryCard
-          label="Pendentes (estoque atual)"
-          value={`${cards.qtdPendentes} SDR${cards.qtdPendentes !== 1 ? "s" : ""}`}
-          sub={`${formatKg(cards.kgPendentes)} aguardando uso`}
-          color={cards.qtdPendentes > 0 ? D.amber : D.emerald}
-        />
-        <SummaryCard
-          label="Taxa de utilização"
-          value={`${cards.taxaUtil}%`}
-          sub="utilizados / total no período"
-          color={cards.taxaUtil >= 70 ? D.emerald : cards.taxaUtil >= 40 ? D.amber : D.red}
-        />
+      {/* Cards de resumo */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.75rem", marginBottom: "1.75rem" }}>
+        <SummaryCard label="Abertos no período" value={`${cards.abertosQtd} SDR${cards.abertosQtd !== 1 ? "s" : ""}`} sub={`${formatKg(cards.abertosKg)} de material`} color={D.amber} accent={D.amber} />
+        <SummaryCard label="Executados no período" value={`${cards.execQtd} SDR${cards.execQtd !== 1 ? "s" : ""}`} sub={`${formatKg(cards.execKg)} reaproveitados`} color={D.emerald} accent={D.emerald} />
+        <SummaryCard label="Produção gerada" value={cards.execProducao > 0 ? formatKg(cards.execProducao) : "—"} sub="a partir dos executados" />
+        <SummaryCard label="Taxa de execução" value={`${cards.taxa}%`} sub="executados ÷ abertos (período)" color={cards.taxa >= 70 ? D.emerald : cards.taxa >= 40 ? D.amber : D.red} />
+        <SummaryCard label="Pendentes (estoque atual)" value={`${cards.pendQtd} SDR${cards.pendQtd !== 1 ? "s" : ""}`} sub={`${formatKg(cards.pendKg)} aguardando uso`} color={cards.pendQtd > 0 ? D.amber : D.emerald} />
       </div>
 
-      {/* ── Card: Divisão por tipo de erro ── */}
+      {/* Gráfico central: Abertos vs Executados */}
+      <div style={{ marginBottom: "1.75rem" }}>
+        <SectionTitle icon={<ArrowRightLeft style={{ width: 15, height: 15, color: D.cyan }} />} title="Abertos × Executados por mês" hint="kg de material · abertos pela data de abertura, executados pela data de reaproveitamento" />
+        <div style={cardStyle}>
+          {comparativoMensal.length === 0 ? <Vazio /> : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={comparativoMensal} margin={{ top: 4, right: 8, left: -8, bottom: 0 }} barGap={4}>
+                <CartesianGrid vertical={false} stroke={D.grid} />
+                <XAxis dataKey="label" tick={{ fill: D.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: D.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}t`} />
+                <Tooltip content={<TooltipComparativo />} cursor={{ fill: D.grid }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="abertosKg" name="Abertos" fill={D.amber} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="executadosKg" name="Executados" fill={D.emerald} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Divisão por tipo de erro (abertos) */}
       <div style={{ ...cardStyle, marginBottom: "1.75rem" }}>
         <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          Divisão por tipo de erro — no período
+          Divisão por tipo de erro — abertos no período
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem" }}>
-          {/* Produção */}
           <div style={{ padding: "0.875rem 1rem", borderRadius: "0.5rem", border: "2px solid #0891b2", background: "#0891b218" }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#0891b2", textTransform: "uppercase", letterSpacing: "0.05em" }}>Erro de produção</p>
             <p style={{ margin: "0.35rem 0 0", fontSize: 22, fontWeight: 700, color: "#0891b2", lineHeight: 1 }}>
               {divisaoTipo.producao.qtd} <span style={{ fontSize: 13, fontWeight: 500 }}>SDR{divisaoTipo.producao.qtd !== 1 ? "s" : ""}</span>
             </p>
-            <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>
-              {formatKg(divisaoTipo.producao.kg)}
-            </p>
-            {cards.totalSDRs > 0 && (
+            <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>{formatKg(divisaoTipo.producao.kg)}</p>
+            {cards.abertosQtd > 0 && (
               <div style={{ marginTop: "0.625rem", height: 6, borderRadius: 999, background: D.border, overflow: "hidden" }}>
-                <div style={{ height: "100%", borderRadius: 999, background: "#0891b2", width: `${Math.round((divisaoTipo.producao.qtd / cards.totalSDRs) * 100)}%`, transition: "width 0.4s" }} />
+                <div style={{ height: "100%", borderRadius: 999, background: "#0891b2", width: `${Math.round((divisaoTipo.producao.qtd / cards.abertosQtd) * 100)}%`, transition: "width 0.4s" }} />
               </div>
             )}
-            <p style={{ margin: "0.25rem 0 0", fontSize: 11, color: D.muted }}>
-              {cards.totalSDRs > 0 ? `${Math.round((divisaoTipo.producao.qtd / cards.totalSDRs) * 100)}% dos SDRs` : "—"}
-            </p>
+            <p style={{ margin: "0.25rem 0 0", fontSize: 11, color: D.muted }}>{cards.abertosQtd > 0 ? `${Math.round((divisaoTipo.producao.qtd / cards.abertosQtd) * 100)}% dos abertos` : "—"}</p>
           </div>
-
-          {/* Comercial */}
           <div style={{ padding: "0.875rem 1rem", borderRadius: "0.5rem", border: "2px solid #7c3aed", background: "#7c3aed18" }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.05em" }}>Erro comercial</p>
             <p style={{ margin: "0.35rem 0 0", fontSize: 22, fontWeight: 700, color: "#7c3aed", lineHeight: 1 }}>
               {divisaoTipo.comercial.qtd} <span style={{ fontSize: 13, fontWeight: 500 }}>SDR{divisaoTipo.comercial.qtd !== 1 ? "s" : ""}</span>
             </p>
-            <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>
-              {formatKg(divisaoTipo.comercial.kg)}
-            </p>
-            {cards.totalSDRs > 0 && (
+            <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>{formatKg(divisaoTipo.comercial.kg)}</p>
+            {cards.abertosQtd > 0 && (
               <div style={{ marginTop: "0.625rem", height: 6, borderRadius: 999, background: D.border, overflow: "hidden" }}>
-                <div style={{ height: "100%", borderRadius: 999, background: "#7c3aed", width: `${Math.round((divisaoTipo.comercial.qtd / cards.totalSDRs) * 100)}%`, transition: "width 0.4s" }} />
+                <div style={{ height: "100%", borderRadius: 999, background: "#7c3aed", width: `${Math.round((divisaoTipo.comercial.qtd / cards.abertosQtd) * 100)}%`, transition: "width 0.4s" }} />
               </div>
             )}
-            <p style={{ margin: "0.25rem 0 0", fontSize: 11, color: D.muted }}>
-              {cards.totalSDRs > 0 ? `${Math.round((divisaoTipo.comercial.qtd / cards.totalSDRs) * 100)}% dos SDRs` : "—"}
-            </p>
+            <p style={{ margin: "0.25rem 0 0", fontSize: 11, color: D.muted }}>{cards.abertosQtd > 0 ? `${Math.round((divisaoTipo.comercial.qtd / cards.abertosQtd) * 100)}% dos abertos` : "—"}</p>
           </div>
-
-          {/* Não classificado */}
           {divisaoTipo.semTipo.qtd > 0 && (
             <div style={{ padding: "0.875rem 1rem", borderRadius: "0.5rem", border: `1px solid ${D.border}`, background: D.cardAlt }}>
               <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Não classificado</p>
               <p style={{ margin: "0.35rem 0 0", fontSize: 22, fontWeight: 700, color: D.muted, lineHeight: 1 }}>
                 {divisaoTipo.semTipo.qtd} <span style={{ fontSize: 13, fontWeight: 500 }}>SDR{divisaoTipo.semTipo.qtd !== 1 ? "s" : ""}</span>
               </p>
-              <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>
-                {formatKg(divisaoTipo.semTipo.kg)}
-              </p>
-              <p style={{ margin: "0.5rem 0 0", fontSize: 11, color: D.amber, fontStyle: "italic" }}>
-                Registros antigos — classifique editando cada SDR
-              </p>
+              <p style={{ margin: "0.25rem 0 0", fontSize: 13, fontWeight: 600, color: D.text }}>{formatKg(divisaoTipo.semTipo.kg)}</p>
+              <p style={{ margin: "0.5rem 0 0", fontSize: 11, color: D.amber, fontStyle: "italic" }}>Registros antigos — classifique editando cada SDR</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Seção 1: Origem do retrabalho ── */}
+      {/* Origem do retrabalho (abertos) */}
       <div style={{ marginBottom: "1.75rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-          <SectionTitle
-            icon={<BarChart2 style={{ width: 15, height: 15, color: D.cyan }} />}
-            title="Origem do retrabalho"
-          />
+          <SectionTitle icon={<BarChart2 style={{ width: 15, height: 15, color: D.cyan }} />} title="Origem do retrabalho" hint="dos abertos no período" />
           {rankingOrigem.length > 0 && (
-            <button
-              onClick={exportarOrigemCSV}
-              style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0.625rem", background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.muted, fontSize: "0.72rem", fontWeight: 500, cursor: "pointer" }}
-            >
+            <button onClick={exportarOrigemCSV} style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0.625rem", background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.muted, fontSize: "0.72rem", fontWeight: 500, cursor: "pointer" }}>
               <Download style={{ width: 12, height: 12 }} /> CSV
             </button>
           )}
         </div>
-
         {rankingOrigem.length === 0 ? (
           <div style={cardStyle}><Vazio /></div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1rem" }}>
-            {/* Gráfico de barras horizontal */}
             <div style={cardStyle}>
-              <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Top 10 por kg de material
-              </p>
+              <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Top 10 por kg de material</p>
               <ResponsiveContainer width="100%" height={Math.min(400, Math.max(200, rankingTop10.length * 44))}>
-                <BarChart
-                  data={rankingTop10}
-                  layout="vertical"
-                  margin={{ top: 0, right: 60, left: 0, bottom: 0 }}
-                >
+                <BarChart data={rankingTop10} layout="vertical" margin={{ top: 0, right: 60, left: 0, bottom: 0 }}>
                   <CartesianGrid horizontal={false} stroke={D.grid} />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: D.muted, fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}t`}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="nome"
-                    tick={{ fill: D.text, fontSize: 10 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={160}
-                    tickFormatter={(v: string) => v.length > 22 ? v.substring(0, 22) + "…" : v}
-                  />
+                  <XAxis type="number" tick={{ fill: D.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}t`} />
+                  <YAxis type="category" dataKey="nome" tick={{ fill: D.text, fontSize: 10 }} axisLine={false} tickLine={false} width={160} tickFormatter={(v: string) => v.length > 22 ? v.substring(0, 22) + "…" : v} />
                   <Tooltip content={<TooltipKg />} cursor={{ fill: D.grid }} />
                   <Bar dataKey="kgMaterial" radius={[0, 4, 4, 0]}>
-                    {rankingTop10.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? D.red : i === 1 ? D.amber : D.cyan} />
-                    ))}
+                    {rankingTop10.map((_, i) => (<Cell key={i} fill={i === 0 ? D.red : i === 1 ? D.amber : D.cyan} />))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: D.muted }}>
-                Vermelho = maior gerador de retrabalho
-              </p>
+              <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: D.muted }}>Vermelho = maior gerador de retrabalho</p>
             </div>
-
-            {/* Tabela ranking completo */}
             <div style={cardStyle}>
-              <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Ranking completo — clique para ver histórico
-              </p>
+              <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Ranking completo — clique para ver histórico</p>
               <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
                 <div style={{ overflowY: "auto", maxHeight: 420 }}>
                   <table style={{ width: "100%", fontSize: "0.8rem", borderCollapse: "collapse" }}>
@@ -858,23 +771,12 @@ export default function PainelAnaliseReaproveitamento() {
                     </thead>
                     <tbody>
                       {rankingOrigem.map(({ nome, qtd, kgMaterial }, i) => (
-                        <tr
-                          key={nome}
-                          style={{ borderBottom: `1px solid ${D.border}`, cursor: "pointer" }}
-                          onClick={() => setModalOrigem(nome)}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = D.cardAlt)}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                        >
-                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>
-                            {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}º`}
-                          </td>
-                          <td style={{ padding: "0.5rem 0.75rem", color: i === 0 ? D.red : D.text, fontWeight: i < 3 ? 600 : 400, fontSize: 12 }}>
-                            {nome}
-                          </td>
+                        <tr key={nome} style={{ borderBottom: `1px solid ${D.border}`, cursor: "pointer" }} onClick={() => setModalOrigem(nome)}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = D.cardAlt)} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}º`}</td>
+                          <td style={{ padding: "0.5rem 0.75rem", color: i === 0 ? D.red : D.text, fontWeight: i < 3 ? 600 : 400, fontSize: 12 }}>{nome}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", color: D.muted, fontSize: 12 }}>{qtd}</td>
-                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.cyan, fontFamily: "monospace", fontSize: 12 }}>
-                            {formatKg(kgMaterial)}
-                          </td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.cyan, fontFamily: "monospace", fontSize: 12 }}>{formatKg(kgMaterial)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -886,47 +788,16 @@ export default function PainelAnaliseReaproveitamento() {
         )}
       </div>
 
-      {/* ── Seção 2: Volume ao longo do tempo ── */}
-      <div style={{ marginBottom: "1.75rem" }}>
-        <SectionTitle
-          icon={<TrendingDown style={{ width: 15, height: 15, color: D.cyan }} />}
-          title="Volume ao longo do tempo"
-        />
-        <div style={cardStyle}>
-          <p style={{ margin: "0 0 0.875rem", fontSize: "0.8rem", fontWeight: 600, color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            kg de material reaproveitado por mês
-          </p>
-          {volumeMensal.length === 0 ? <Vazio /> : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={volumeMensal} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke={D.grid} />
-                <XAxis dataKey="label" tick={{ fill: D.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: D.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}t`} />
-                <Tooltip content={<TooltipKg />} cursor={{ fill: D.grid }} />
-                <Bar dataKey="kgMaterial" fill={D.cyan} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* ── Seção 3: Material parado ── */}
+      {/* Material parado (estoque atual) */}
       <div style={{ marginBottom: "1.75rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-          <SectionTitle
-            icon={<AlertTriangle style={{ width: 15, height: 15, color: D.amber }} />}
-            title="Material parado (estoque atual)"
-          />
+          <SectionTitle icon={<AlertTriangle style={{ width: 15, height: 15, color: D.amber }} />} title="Material parado (estoque atual)" hint="foto do momento — independe do período" />
           {materialParado.length > 0 && (
-            <button
-              onClick={exportarParadoCSV}
-              style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0.625rem", background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.muted, fontSize: "0.72rem", fontWeight: 500, cursor: "pointer" }}
-            >
+            <button onClick={exportarParadoCSV} style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0.625rem", background: D.cardAlt, border: `1px solid ${D.border}`, borderRadius: "0.375rem", color: D.muted, fontSize: "0.72rem", fontWeight: 500, cursor: "pointer" }}>
               <Download style={{ width: 12, height: 12 }} /> CSV
             </button>
           )}
         </div>
-
         {materialParado.length === 0 ? (
           <div style={cardStyle}><Vazio mensagem="Nenhum SDR pendente — sem material parado" /></div>
         ) : (
@@ -934,24 +805,17 @@ export default function PainelAnaliseReaproveitamento() {
             <div style={{ ...cardStyle, display: "inline-flex", alignItems: "center", gap: "1.5rem", marginBottom: "0.75rem", padding: "0.875rem 1.5rem" }}>
               <div>
                 <p style={{ margin: 0, fontSize: "0.7rem", color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>SDRs pendentes</p>
-                <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.amber, lineHeight: 1 }}>
-                  {materialParado.length}
-                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.amber, lineHeight: 1 }}>{materialParado.length}</p>
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: "0.7rem", color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>kg parados</p>
-                <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.amber, lineHeight: 1 }}>
-                  {formatKg(materialParado.reduce((s, r) => s + r.totalKg, 0))}
-                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.amber, lineHeight: 1 }}>{formatKg(materialParado.reduce((s, r) => s + r.totalKg, 0))}</p>
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: "0.7rem", color: D.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Críticos ({`>`}{LIMITE_DIAS_PARADO}d)</p>
-                <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.red, lineHeight: 1 }}>
-                  {materialParado.filter((r) => r.dias > LIMITE_DIAS_PARADO).length}
-                </p>
+                <p style={{ margin: "0.125rem 0 0", fontSize: "1.75rem", fontWeight: 700, color: D.red, lineHeight: 1 }}>{materialParado.filter((r) => r.dias > LIMITE_DIAS_PARADO).length}</p>
               </div>
             </div>
-
             <div style={{ borderRadius: "0.75rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", fontSize: "0.8rem", borderCollapse: "collapse" }}>
@@ -971,25 +835,12 @@ export default function PainelAnaliseReaproveitamento() {
                       return (
                         <tr key={r.id} style={{ borderBottom: `1px solid ${D.border}`, background: i % 2 === 0 ? "transparent" : D.cardAlt }}>
                           <td style={{ padding: "0.5rem 0.75rem", color: D.cyan, fontWeight: 700, fontFamily: "monospace" }}>{r.codigo}</td>
-                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {r.origens || <span style={{ fontStyle: "italic" }}>—</span>}
-                          </td>
+                          <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.origens || <span style={{ fontStyle: "italic" }}>—</span>}</td>
                           <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontWeight: 500, fontSize: 12 }}>{r.produto_destino}</td>
-                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>
-                            {formatKg(r.totalKg)}
-                          </td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{formatKg(r.totalKg)}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", color: D.muted }}>{fmtDate(r.criado_em)}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>
-                            <span style={{
-                              display: "inline-block",
-                              padding: "0.15rem 0.5rem",
-                              borderRadius: 999,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              background: critico ? `${D.red}22` : `${D.amber}22`,
-                              color: critico ? D.red : D.amber,
-                              border: `1px solid ${critico ? D.red : D.amber}`,
-                            }}>
+                            <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 999, fontSize: 11, fontWeight: 700, background: critico ? `${D.red}22` : `${D.amber}22`, color: critico ? D.red : D.amber, border: `1px solid ${critico ? D.red : D.amber}` }}>
                               {r.dias}d {critico ? "⚠" : ""}
                             </span>
                           </td>
@@ -1000,21 +851,16 @@ export default function PainelAnaliseReaproveitamento() {
                 </table>
               </div>
             </div>
-            <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: D.muted }}>
-              Ordenado pelo mais antigo (maior risco de perda). Crítico: mais de {LIMITE_DIAS_PARADO} dias parado.
-            </p>
+            <p style={{ margin: "0.5rem 0 0", fontSize: "0.68rem", color: D.muted }}>Ordenado pelo mais antigo (maior risco de perda). Crítico: mais de {LIMITE_DIAS_PARADO} dias parado.</p>
           </>
         )}
       </div>
 
-      {/* ── Seção 4: Destino mais comum ── */}
+      {/* Destino dos executados */}
       <div style={{ marginBottom: "1.75rem" }}>
-        <SectionTitle
-          icon={<ArrowDownToLine style={{ width: 15, height: 15, color: D.cyan }} />}
-          title="Destino mais comum"
-        />
+        <SectionTitle icon={<ArrowDownToLine style={{ width: 15, height: 15, color: D.cyan }} />} title="Destino dos executados" hint="produção gerada pelos reaproveitados no período" />
         {rankingDestino.length === 0 ? (
-          <div style={cardStyle}><Vazio /></div>
+          <div style={cardStyle}><Vazio mensagem="Nenhum reaproveitamento executado no período" /></div>
         ) : (
           <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
             <table style={{ width: "100%", fontSize: "0.8rem", borderCollapse: "collapse" }}>
@@ -1032,9 +878,7 @@ export default function PainelAnaliseReaproveitamento() {
                     <td style={{ padding: "0.5rem 0.75rem", color: D.muted, fontFamily: "monospace", fontSize: 11 }}>{i + 1}º</td>
                     <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontWeight: 500, fontSize: 12 }}>{nome}</td>
                     <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", color: D.muted, fontSize: 12 }}>{qtd}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.emerald, fontFamily: "monospace", fontSize: 12 }}>
-                      {kgProducao > 0 ? formatKg(kgProducao) : "—"}
-                    </td>
+                    <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.emerald, fontFamily: "monospace", fontSize: 12 }}>{kgProducao > 0 ? formatKg(kgProducao) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1043,25 +887,18 @@ export default function PainelAnaliseReaproveitamento() {
         )}
       </div>
 
-      {/* ── Modal: histórico de SDRs de uma origem ── */}
+      {/* Modal: histórico de SDRs de uma origem */}
       <Dialog open={!!modalOrigem} onOpenChange={(o) => { if (!o) setModalOrigem(null); }}>
-        <DialogContent
-          className="max-w-2xl max-h-[80vh] overflow-y-auto"
-          style={{ background: D.card, border: `1px solid ${D.border}`, color: D.text }}
-        >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" style={{ background: D.card, border: `1px solid ${D.border}`, color: D.text }}>
           <DialogHeader>
-            <DialogTitle style={{ color: D.text }}>
-              SDRs — {modalOrigem}
-            </DialogTitle>
+            <DialogTitle style={{ color: D.text }}>SDRs — {modalOrigem}</DialogTitle>
           </DialogHeader>
           <div style={{ marginTop: "0.25rem" }}>
             {sdrsModal.length === 0 ? (
               <p style={{ color: D.muted, textAlign: "center", padding: "2rem 0" }}>Nenhum SDR encontrado.</p>
             ) : (
               <>
-                <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: D.muted }}>
-                  {sdrsModal.length} SDR{sdrsModal.length !== 1 ? "s" : ""} no total
-                </p>
+                <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: D.muted }}>{sdrsModal.length} SDR{sdrsModal.length !== 1 ? "s" : ""} no total</p>
                 <div style={{ borderRadius: "0.5rem", border: `1px solid ${D.border}`, overflow: "hidden" }}>
                   <table style={{ width: "100%", fontSize: "0.8rem", borderCollapse: "collapse" }}>
                     <thead>
@@ -1069,7 +906,8 @@ export default function PainelAnaliseReaproveitamento() {
                         <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Código</th>
                         <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", fontWeight: 600, color: D.muted, fontSize: 11 }}>Destino</th>
                         <th style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, color: D.muted, fontSize: 11 }}>Material (kg)</th>
-                        <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: D.muted, fontSize: 11 }}>Data</th>
+                        <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: D.muted, fontSize: 11 }}>Aberto</th>
+                        <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: D.muted, fontSize: 11 }}>Reaproveitado</th>
                         <th style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 600, color: D.muted, fontSize: 11 }}>Status</th>
                       </tr>
                     </thead>
@@ -1080,18 +918,10 @@ export default function PainelAnaliseReaproveitamento() {
                           <td style={{ padding: "0.5rem 0.75rem", color: D.text, fontSize: 12 }}>{r.produto_destino}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{formatKg(totalKgSDR(r))}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", color: D.muted }}>{fmtDate(r.criado_em)}</td>
+                          <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", color: D.muted }}>{fmtDate(r.utilizado_em)}</td>
                           <td style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>
-                            <span style={{
-                              display: "inline-block",
-                              padding: "0.1rem 0.5rem",
-                              borderRadius: 999,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              background: r.status === "utilizado" ? `${D.emerald}22` : `${D.amber}22`,
-                              color: r.status === "utilizado" ? D.emerald : D.amber,
-                              textTransform: "uppercase",
-                            }}>
-                              {r.status === "utilizado" ? "Utilizado" : "Pendente"}
+                            <span style={{ display: "inline-block", padding: "0.1rem 0.5rem", borderRadius: 999, fontSize: 10, fontWeight: 700, background: r.status === "utilizado" ? `${D.emerald}22` : `${D.amber}22`, color: r.status === "utilizado" ? D.emerald : D.amber, textTransform: "uppercase" }}>
+                              {r.status === "utilizado" ? "Executado" : "Pendente"}
                             </span>
                           </td>
                         </tr>
