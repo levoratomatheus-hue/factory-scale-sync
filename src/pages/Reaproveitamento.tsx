@@ -4,7 +4,7 @@ import {
 } from "react";
 import {
   Loader2, Download, AlertTriangle, X, Recycle, Plus, Trash2,
-  ChevronLeft, Check, RotateCcw, Search, Edit2,
+  ChevronLeft, Check, RotateCcw, Search, Edit2, BookmarkPlus,
 } from "lucide-react";
 import { formatKg } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -1102,6 +1102,69 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
     setView("form");
   }
 
+  // ── Save draft ───────────────────────────────────────────────────────────────
+  async function handleSalvarRascunho() {
+    const materiaisOrigem = fMateriais.filter((m) => m.produto_origem.trim());
+    if (materiaisOrigem.length === 0) {
+      toast({ title: "Informe pelo menos o material de origem", variant: "destructive" });
+      return;
+    }
+    const firstMat = materiaisOrigem[0];
+    const headerPayload = {
+      produto_destino: fProdutoDestino.trim() || "A definir",
+      formula_id_destino: fFormulaIdDestino ?? null,
+      produto_origem: firstMat.produto_origem.trim() || null,
+      formula_id_origem: firstMat.formula_id_origem ?? null,
+      quantidade_material: 0,
+      quantidade_utilizada: null,
+      percentual_reaproveitado: null,
+      tipo_erro: fTipoErro ?? null,
+      observacao: fObs.trim() || null,
+    };
+    const buildMateriaisRascunho = (reaprovId: string) =>
+      materiaisOrigem.map((m, idx) => ({
+        reaproveitamento_id: reaprovId,
+        sequencia: idx + 1,
+        produto_origem: m.produto_origem.trim(),
+        formula_id_origem: m.formula_id_origem ?? null,
+        quantidade_material: parseFloat(m.quantidade_material) || null,
+        quantidade_utilizada: m.uso_opcao === "parte" ? (parseFloat(m.quantidade_utilizada) || null) : null,
+        percentual_reaproveitado: parseFloat(m.percentual_reaproveitado) || null,
+      }));
+
+    setFormSaving(true);
+
+    if (editando) {
+      const { error: errH } = await (supabase as any)
+        .from("reaproveitamentos").update(headerPayload).eq("id", editando.id);
+      if (errH) { setFormSaving(false); toast({ title: "Erro ao salvar rascunho", description: errH.message, variant: "destructive" }); return; }
+      await (supabase as any).from("reaproveitamentos_materiais").delete().eq("reaproveitamento_id", editando.id);
+      await (supabase as any).from("reaproveitamentos_itens").delete().eq("reaproveitamento_id", editando.id);
+      const { error: errM } = await (supabase as any)
+        .from("reaproveitamentos_materiais").insert(buildMateriaisRascunho(editando.id));
+      setFormSaving(false);
+      if (errM) { toast({ title: "Cabeçalho salvo mas erro nos materiais", description: errM.message, variant: "destructive" }); return; }
+      toast({ title: `${editando.codigo} salvo como rascunho` });
+      setView("list");
+      fetchLista();
+      return;
+    }
+
+    const { data: newRec, error: errH } = await (supabase as any)
+      .from("reaproveitamentos")
+      .insert({ ...headerPayload, criado_por: perfilNome })
+      .select("id, codigo")
+      .single();
+    if (errH) { setFormSaving(false); toast({ title: "Erro ao criar rascunho", description: errH.message, variant: "destructive" }); return; }
+    const { error: errM } = await (supabase as any)
+      .from("reaproveitamentos_materiais").insert(buildMateriaisRascunho(newRec.id));
+    setFormSaving(false);
+    if (errM) { toast({ title: "Rascunho criado, mas erro nos materiais", description: errM.message, variant: "destructive" }); return; }
+    toast({ title: `Rascunho ${newRec.codigo} criado`, description: "Complete depois para reaproveitar." });
+    setView("list");
+    fetchLista();
+  }
+
   // ── Save form ────────────────────────────────────────────────────────────────
   async function handleSalvar() {
     if (!fProdutoDestino.trim()) { toast({ title: "Informe o produto de destino", variant: "destructive" }); return; }
@@ -1618,7 +1681,7 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
               </div>
 
               {/* Actions */}
-              <div style={{ display: "flex", gap: "0.5rem", paddingBottom: "1rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", paddingBottom: "1rem", flexWrap: "wrap" }}>
                 <button
                   onClick={handleSalvar}
                   disabled={formSaving}
@@ -1628,8 +1691,16 @@ export default function Reaproveitamento({ perfilNome }: { perfilNome: string })
                   {isUtilizadoEdit ? "Salvar observação" : editando ? "Salvar alterações" : "Criar SDR"}
                 </button>
                 <button
+                  onClick={handleSalvarRascunho}
+                  disabled={formSaving}
+                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 1rem", background: D.cardAlt, color: D.text, border: `1px solid ${D.border}`, borderRadius: "0.5rem", fontSize: 13, fontWeight: 600, cursor: formSaving ? "not-allowed" : "pointer", opacity: formSaving ? 0.6 : 1 }}
+                >
+                  <BookmarkPlus size={13} />
+                  Salvar rascunho
+                </button>
+                <button
                   onClick={() => setView("list")}
-                  style={{ padding: "0.5rem 1rem", background: D.cardAlt, color: D.text, border: `1px solid ${D.border}`, borderRadius: "0.5rem", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  style={{ padding: "0.5rem 1rem", background: "transparent", color: D.muted, border: `1px solid ${D.border}`, borderRadius: "0.5rem", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
                 >
                   Cancelar
                 </button>
