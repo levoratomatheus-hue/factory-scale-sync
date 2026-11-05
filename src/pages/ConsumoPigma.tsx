@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatKg } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -7,202 +7,1391 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Search, X, Trash2, Boxes } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Loader2, Trash2, Download, Search, FlaskConical, BarChart3, X, Pencil, Save, BookOpen, Eye, Wrench } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { StatusBadge } from '@/components/StatusBadge';
 
-interface MpPg { cod_pg: string; materia_prima: string; saldo_kg: number }
-interface MovPg {
-  id: string; cod_pg: string; materia_prima: string; tipo: string;
-  quantidade_kg: number; saldo_apos: number; observacao: string | null;
-  criado_por: string; criado_em: string;
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Setor = 'laboratorio' | 'producao';
+type FiltroSetor = Setor | 'ambos';
+type FiltroSetorLista = Setor | 'ambos' | 'sem_setor';
+
+interface MpPg {
+  cod_pg: string;
+  materia_prima: string;
+}
+
+interface ConsumoRow {
+  id: string;
+  cod_pg: string;
+  materia_prima: string;
+  quantidade_kg: number;
+  data_retirada: string;
+  observacao: string | null;
+  retirado_por: string;
+  criado_em: string;
+  setor: Setor | null;
+  eh_acerto?: boolean;
+  acerto_lote?: string | null;
+  acerto_formula_id?: string | null;
+}
+
+interface OrdemBusca {
+  id: string;
+  lote: string;
+  produto: string;
+  formula_id: string | null;
+  status: string;
+  quantidade: number | null;
+}
+
+interface FormulaItemMatch {
+  cod_mp: string;
+  materia_prima: string;
+  percentual: number;
+}
+
+interface TotalPorMp {
+  cod_pg: string;
+  materia_prima: string;
+  total_kg: number;
+  kg_lab: number;
+  kg_prod: number;
+  num_retiradas: number;
+  pct: number;
+}
+
+interface RelatorioSalvo {
+  id: string;
+  titulo: string | null;
+  data_inicio: string;
+  data_fim: string;
+  setor: string;
+  total_kg: number;
+  num_mps: number;
+  criado_por: string;
+  criado_em: string;
+}
+
+interface RelatorioSalvoItem {
+  id: string;
+  relatorio_id: string;
+  materia_prima: string;
+  cod_pg: string;
+  total_kg: number;
+  percentual: number;
+  setor: string;
+}
+
+interface RelatorioSalvoItemDisplay {
+  cod_pg: string;
+  materia_prima: string;
+  total_kg: number;
+  kg_lab: number;
+  kg_prod: number;
+  percentual: number;
+}
+
+interface Props {
+  perfilNome: string;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtPct(v: number): string {
+  if (v === 0) return '0,000%';
+  if (v < 0.0005) return '<0,001%';
+  return v.toFixed(3).replace('.', ',') + '%';
+}
+
+function fmt(d: string) {
+  const [y, m, dd] = d.split('-');
+  return `${dd}/${m}/${y}`;
+}
+
+function toInputDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function startOfWeek(d: Date) {
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const r = new Date(d);
+  r.setDate(d.getDate() + diff);
+  return r;
+}
+function endOfWeek(d: Date) {
+  const sw = startOfWeek(d);
+  const r = new Date(sw);
+  r.setDate(sw.getDate() + 6);
+  return r;
+}
+
+function parseUtc(iso: string): Date {
+  return new Date(/[Z+]/.test(iso) ? iso : iso + 'Z');
 }
 
 function fmtDatetime(iso: string) {
-  const d = new Date(/[Z+]/.test(iso) ? iso : iso + 'Z');
-  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' });
+  return parseUtc(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' });
 }
 
-export default function ConsumoPigma({ perfilNome }: { perfilNome: string }) {
+const SETOR_LABEL: Record<string, string> = {
+  laboratorio: 'Laboratório',
+  producao: 'Produção',
+  ambos: 'Ambos',
+};
+
+// ── Inline setor selector ─────────────────────────────────────────────────────
+
+function SetorInline({ rowId, setor, atualizando, onChange }: {
+  rowId: string; setor: Setor | null; atualizando: boolean; onChange: (s: Setor) => void;
+}) {
+  return (
+    <div className="flex gap-0.5">
+      {atualizando ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground my-auto mx-1" />
+      ) : (
+        (['laboratorio', 'producao'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => { if (setor !== s) onChange(s); }}
+            title={SETOR_LABEL[s]}
+            className={cn(
+              'px-1.5 py-0.5 text-[10px] font-semibold rounded transition-colors',
+              setor === s
+                ? s === 'laboratorio'
+                  ? 'bg-blue-600 text-white dark:bg-blue-500'
+                  : 'bg-orange-500 text-white dark:bg-orange-500'
+                : 'bg-muted text-muted-foreground hover:bg-muted/60',
+            )}
+          >
+            {s === 'laboratorio' ? 'Lab' : 'Prod'}
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Paginação ─────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE_RET = 50;
+const PAGE_SIZE_REL = 100;
+
+const PaginacaoBar = memo(function PaginacaoBar({ page, pageSize, total, onChange }: { page: number; pageSize: number; total: number; onChange: (p: number) => void }) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between mt-2 px-1 text-xs text-muted-foreground">
+      <span>{page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} de {total}</span>
+      <div className="flex gap-1">
+        <button onClick={() => onChange(page - 1)} disabled={page === 0}
+          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">‹ Ant.</button>
+        <button onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}
+          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">Próx. ›</button>
+      </div>
+    </div>
+  );
+});
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+export default function ConsumoPigma({ perfilNome }: Props) {
+
   const [busca, setBusca] = useState('');
   const [sugestoes, setSugestoes] = useState<MpPg[]>([]);
-  const [showSug, setShowSug] = useState(false);
-  const [mpSel, setMpSel] = useState<MpPg | null>(null);
+  const [showSugestoes, setShowSugestoes] = useState(false);
+  const [mpSelecionada, setMpSelecionada] = useState<MpPg | null>(null);
   const [quantidade, setQuantidade] = useState('');
+  const [data, setData] = useState(toInputDate(new Date()));
   const [observacao, setObservacao] = useState('');
+  const [setor, setSetor] = useState<Setor>('laboratorio');
   const [salvando, setSalvando] = useState(false);
-  const [movs, setMovs] = useState<MovPg[]>([]);
-  const [carregando, setCarregando] = useState(false);
-  const buscaRef = useRef<HTMLInputElement>(null);
-  const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retiradas, setRetiradas] = useState<ConsumoRow[]>([]);
+  const [carregandoRetiradas, setCarregandoRetiradas] = useState(false);
 
+  const [ehAcerto, setEhAcerto] = useState(false);
+  const [acertoLoteBusca, setAcertoLoteBusca] = useState('');
+  const [acertoOpSugestoes, setAcertoOpSugestoes] = useState<OrdemBusca[]>([]);
+  const [showAcertoSugestoes, setShowAcertoSugestoes] = useState(false);
+  const [acertoOpSelecionada, setAcertoOpSelecionada] = useState<OrdemBusca | null>(null);
+  const [acertoFormulaItem, setAcertoFormulaItem] = useState<FormulaItemMatch | null | 'nao_encontrado'>(null);
+  const acertoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buscaRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [filtroSetorLista, setFiltroSetorLista] = useState<FiltroSetorLista>('ambos');
+  const [dataInicioLista, setDataInicioLista] = useState('');
+  const [dataFimLista, setDataFimLista] = useState('');
+
+  const [editRow, setEditRow] = useState<ConsumoRow | null>(null);
+  const [editSetor, setEditSetor] = useState<Setor>('laboratorio');
+  const [editBusca, setEditBusca] = useState('');
+  const [editSugestoes, setEditSugestoes] = useState<MpPg[]>([]);
+  const [editShowSugestoes, setEditShowSugestoes] = useState(false);
+  const [editMp, setEditMp] = useState<MpPg | null>(null);
+  const [editQtd, setEditQtd] = useState('');
+  const [editData, setEditData] = useState('');
+  const [editObs, setEditObs] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [atualizandoSetorId, setAtualizandoSetorId] = useState<string | null>(null);
+  const editDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hoje = new Date();
+  const [dataInicio, setDataInicio] = useState(toInputDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)));
+  const [dataFim, setDataFim] = useState(toInputDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)));
+  const [filtroSetor, setFiltroSetor] = useState<FiltroSetor>('ambos');
+  const [relatorio, setRelatorio] = useState<ConsumoRow[]>([]);
+  const [carregandoRel, setCarregandoRel] = useState(false);
+
+  const [showSalvarDialog, setShowSalvarDialog] = useState(false);
+  const [tituloRelatorio, setTituloRelatorio] = useState('');
+  const [salvandoRelatorio, setSalvandoRelatorio] = useState(false);
+
+  const [relatoriosSalvos, setRelatoriosSalvos] = useState<RelatorioSalvo[]>([]);
+  const [carregandoSalvos, setCarregandoSalvos] = useState(false);
+  const [filtroSalvosSetor, setFiltroSalvosSetor] = useState<string>('todos');
+  const [filtroSalvosInicio, setFiltroSalvosInicio] = useState('');
+  const [filtroSalvosFim, setFiltroSalvosFim] = useState('');
+  const [relatorioAberto, setRelatorioAberto] = useState<RelatorioSalvo | null>(null);
+  const [itensAbertos, setItensAbertos] = useState<RelatorioSalvoItem[]>([]);
+  const [carregandoItens, setCarregandoItens] = useState(false);
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
+
+  // ── Autocomplete MP ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (debRef.current) clearTimeout(debRef.current);
-    if (busca.length < 2) { setSugestoes([]); setShowSug(false); return; }
-    debRef.current = setTimeout(async () => {
-      const { data } = await (supabase as any)
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (busca.length < 2) { setSugestoes([]); setShowSugestoes(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      const { data: rows } = await (supabase as any)
         .from('estoque_mp_pg')
-        .select('cod_pg, materia_prima, saldo_kg')
+        .select('cod_pg, materia_prima')
         .or(`materia_prima.ilike.%${busca}%,cod_pg.ilike.%${busca}%`)
         .order('materia_prima')
         .limit(20);
-      setSugestoes((data ?? []) as MpPg[]);
-      setShowSug(true);
+      setSugestoes((rows ?? []) as MpPg[]);
+      setShowSugestoes(true);
     }, 250);
-    return () => { if (debRef.current) clearTimeout(debRef.current); };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [busca]);
 
-  const fetchMovs = useCallback(async () => {
-    setCarregando(true);
-    const { data } = await (supabase as any)
-      .from('estoque_movimentacoes_pg')
-      .select('id, cod_pg, materia_prima, tipo, quantidade_kg, saldo_apos, observacao, criado_por, criado_em')
-      .eq('tipo', 'saida')
-      .order('criado_em', { ascending: false })
-      .limit(50);
-    setMovs((data ?? []) as MovPg[]);
-    setCarregando(false);
-  }, []);
-  useEffect(() => { fetchMovs(); }, [fetchMovs]);
+  // ── Autocomplete OP acerto ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (acertoDebounceRef.current) clearTimeout(acertoDebounceRef.current);
+    if (acertoLoteBusca.length < 1) { setAcertoOpSugestoes([]); setShowAcertoSugestoes(false); return; }
+    acertoDebounceRef.current = setTimeout(async () => {
+      const { data: rows } = await supabase
+        .from('ordens')
+        .select('id, lote, produto, formula_id, status, quantidade')
+        .neq('status', 'concluido')
+        .or(`lote.ilike.%${acertoLoteBusca}%,produto.ilike.%${acertoLoteBusca}%`)
+        .order('criado_em', { ascending: false })
+        .limit(15);
+      setAcertoOpSugestoes((rows ?? []) as OrdemBusca[]);
+      setShowAcertoSugestoes(true);
+    }, 250);
+    return () => { if (acertoDebounceRef.current) clearTimeout(acertoDebounceRef.current); };
+  }, [acertoLoteBusca]);
 
-  async function registrar() {
-    if (!mpSel) { toast({ title: 'Selecione uma matéria-prima Pigma', variant: 'destructive' }); return; }
+  // ── Buscar item da fórmula quando OP + MP selecionados ───────────────────────
+  useEffect(() => {
+    if (!acertoOpSelecionada?.formula_id || !mpSelecionada) { setAcertoFormulaItem(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: itens } = await supabase
+        .from('formulas')
+        .select('cod_mp, materia_prima, percentual')
+        .eq('formula_id', acertoOpSelecionada.formula_id!);
+      if (cancelled) return;
+      const formulaItens = (itens ?? []) as FormulaItemMatch[];
+      let matched: FormulaItemMatch | undefined;
+      matched = formulaItens.find(i => i.cod_mp === mpSelecionada.cod_pg);
+      if (!matched) {
+        const desc = mpSelecionada.materia_prima.toLowerCase().trim();
+        matched = formulaItens.find(i => i.materia_prima.toLowerCase().trim() === desc)
+               ?? formulaItens.find(i => {
+                 const fm = i.materia_prima.toLowerCase().trim();
+                 return fm.includes(desc.slice(0, 8)) || desc.includes(fm.slice(0, 8));
+               });
+      }
+      setAcertoFormulaItem(matched ?? 'nao_encontrado');
+    })();
+    return () => { cancelled = true; };
+  }, [acertoOpSelecionada, mpSelecionada]);
+
+  // ── Autocomplete (edit dialog) ───────────────────────────────────────────────
+  useEffect(() => {
+    if (editDebounceRef.current) clearTimeout(editDebounceRef.current);
+    if (editBusca.length < 2) { setEditSugestoes([]); setEditShowSugestoes(false); return; }
+    editDebounceRef.current = setTimeout(async () => {
+      const { data: rows } = await (supabase as any)
+        .from('estoque_mp_pg')
+        .select('cod_pg, materia_prima')
+        .or(`materia_prima.ilike.%${editBusca}%,cod_pg.ilike.%${editBusca}%`)
+        .order('materia_prima')
+        .limit(20);
+      setEditSugestoes((rows ?? []) as MpPg[]);
+      setEditShowSugestoes(true);
+    }, 250);
+    return () => { if (editDebounceRef.current) clearTimeout(editDebounceRef.current); };
+  }, [editBusca]);
+
+  // ── Últimas retiradas ────────────────────────────────────────────────────────
+  const fetchRetiradas = useCallback(async () => {
+    setCarregandoRetiradas(true);
+    let q = (supabase as any)
+      .from('consumo_mp_pg')
+      .select('id, cod_pg, materia_prima, quantidade_kg, data_retirada, observacao, retirado_por, criado_em, setor, eh_acerto, acerto_lote, acerto_formula_id')
+      .order('criado_em', { ascending: false })
+      .limit(500);
+    if (dataInicioLista) q = q.gte('data_retirada', dataInicioLista);
+    if (dataFimLista) q = q.lte('data_retirada', dataFimLista);
+    const { data: rows } = await q;
+    setRetiradas((rows ?? []) as ConsumoRow[]);
+    setCarregandoRetiradas(false);
+  }, [dataInicioLista, dataFimLista]);
+
+  useEffect(() => { fetchRetiradas(); }, [fetchRetiradas]);
+
+  const retiradasFiltradas = useMemo(() => {
+    if (filtroSetorLista === 'ambos') return retiradas;
+    if (filtroSetorLista === 'sem_setor') return retiradas.filter((r) => r.setor === null);
+    return retiradas.filter((r) => r.setor === filtroSetorLista);
+  }, [retiradas, filtroSetorLista]);
+
+  const contSemSetor = useMemo(() => retiradas.filter((r) => r.setor === null).length, [retiradas]);
+
+  const [pageRet, setPageRet] = useState(0);
+  const [pageTotais, setPageTotais] = useState(0);
+  const [pageRelHist, setPageRelHist] = useState(0);
+
+  // ── Registrar retirada ───────────────────────────────────────────────────────
+  const handleRegistrar = async () => {
+    if (!mpSelecionada) { toast({ title: 'Selecione uma matéria-prima', variant: 'destructive' }); return; }
     const qtd = parseFloat(quantidade.replace(',', '.'));
     if (!quantidade || isNaN(qtd) || qtd <= 0) { toast({ title: 'Informe uma quantidade válida (> 0)', variant: 'destructive' }); return; }
+    if (!data) { toast({ title: 'Informe a data', variant: 'destructive' }); return; }
+    if (ehAcerto && !acertoOpSelecionada) { toast({ title: 'Selecione a OP que está sendo acertada', variant: 'destructive' }); return; }
+
     setSalvando(true);
-    const agora = new Date().toISOString();
-    const { data: row } = await (supabase as any)
-      .from('estoque_mp_pg').select('saldo_kg').eq('cod_pg', mpSel.cod_pg).maybeSingle();
-    const novoSaldo = (row?.saldo_kg ?? 0) - qtd;
-    const { error } = await (supabase as any).from('estoque_movimentacoes_pg').insert({
-      cod_pg: mpSel.cod_pg,
-      materia_prima: mpSel.materia_prima,
-      tipo: 'saida',
-      quantidade_kg: -qtd,
-      saldo_apos: novoSaldo,
-      observacao: observacao.trim() || 'Retirada manual Pigma',
-      criado_por: perfilNome,
-      criado_em: agora,
+    const { error } = await (supabase as any).from('consumo_mp_pg').insert({
+      cod_pg: mpSelecionada.cod_pg,
+      materia_prima: mpSelecionada.materia_prima,
+      quantidade_kg: qtd,
+      data_retirada: data,
+      observacao: observacao.trim() || null,
+      retirado_por: perfilNome,
+      setor,
+      eh_acerto: ehAcerto,
+      acerto_lote: ehAcerto ? acertoOpSelecionada!.lote : null,
+      acerto_formula_id: ehAcerto ? acertoOpSelecionada!.formula_id : null,
     });
+
     if (error) { setSalvando(false); toast({ title: 'Erro ao registrar', description: error.message, variant: 'destructive' }); return; }
-    await (supabase as any).from('estoque_mp_pg').update({ saldo_kg: novoSaldo, atualizado_em: agora }).eq('cod_pg', mpSel.cod_pg);
-    setSalvando(false);
-    toast(novoSaldo < 0
-      ? { title: 'Retirada registrada', description: `Atenção: saldo de ${mpSel.materia_prima} ficou negativo (${formatKg(novoSaldo)} kg).` }
-      : { title: 'Retirada registrada com sucesso!' });
-    setBusca(''); setMpSel(null); setQuantidade(''); setObservacao(''); setSugestoes([]); setShowSug(false);
-    fetchMovs();
-    setTimeout(() => buscaRef.current?.focus(), 100);
-  }
 
-  async function excluir(m: MovPg) {
-    if (!confirm('Excluir esta retirada e devolver o saldo?')) return;
+    // Atualizar estoque_mp_pg e gravar em estoque_movimentacoes_pg
     const agora = new Date().toISOString();
-    const { error } = await (supabase as any).from('estoque_movimentacoes_pg').delete().eq('id', m.id);
-    if (error) { toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' }); return; }
-    const { data: row } = await (supabase as any).from('estoque_mp_pg').select('saldo_kg').eq('cod_pg', m.cod_pg).maybeSingle();
-    if (row) {
-      const novoSaldo = (row.saldo_kg ?? 0) - m.quantidade_kg; // quantidade_kg é negativo → devolve
-      await (supabase as any).from('estoque_mp_pg').update({ saldo_kg: novoSaldo, atualizado_em: agora }).eq('cod_pg', m.cod_pg);
-    }
-    toast({ title: 'Retirada excluída e saldo devolvido' });
-    fetchMovs();
-  }
+    const { data: estoqueRow } = await (supabase as any)
+      .from('estoque_mp_pg')
+      .select('saldo_kg')
+      .eq('cod_pg', mpSelecionada.cod_pg)
+      .maybeSingle();
 
+    if (estoqueRow !== null) {
+      const novoSaldo = (estoqueRow.saldo_kg ?? 0) - qtd;
+      const obsTexto = [
+        ehAcerto ? `Acerto OP Lote ${acertoOpSelecionada!.lote}` : 'Retirada manual',
+        setor === 'laboratorio' ? '(Laboratório)' : setor === 'producao' ? '(Produção)' : null,
+        observacao.trim() || null,
+      ].filter(Boolean).join(' — ');
+
+      await Promise.all([
+        (supabase as any)
+          .from('estoque_mp_pg')
+          .update({ saldo_kg: novoSaldo, atualizado_em: agora })
+          .eq('cod_pg', mpSelecionada.cod_pg),
+        (supabase as any)
+          .from('estoque_movimentacoes_pg')
+          .insert({
+            cod_pg: mpSelecionada.cod_pg,
+            materia_prima: mpSelecionada.materia_prima,
+            tipo: 'saida',
+            quantidade_kg: -qtd,
+            saldo_apos: novoSaldo,
+            observacao: obsTexto,
+            criado_por: perfilNome,
+            criado_em: agora,
+          }),
+      ]);
+    }
+
+    setSalvando(false);
+    toast({ title: 'Retirada registrada com sucesso!' });
+    setBusca(''); setMpSelecionada(null); setQuantidade('');
+    setData(toInputDate(new Date())); setObservacao('');
+    setSugestoes([]); setShowSugestoes(false);
+    setEhAcerto(false); setAcertoLoteBusca('');
+    setAcertoOpSugestoes([]); setAcertoOpSelecionada(null); setAcertoFormulaItem(null);
+    fetchRetiradas();
+    setTimeout(() => buscaRef.current?.focus(), 100);
+  };
+
+  // ── Excluir retirada ─────────────────────────────────────────────────────────
+  const handleExcluir = async (id: string) => {
+    if (!confirm('Excluir este lançamento?')) return;
+
+    const { data: consumoRow, error: fetchErr } = await (supabase as any)
+      .from('consumo_mp_pg')
+      .select('cod_pg, materia_prima, quantidade_kg, setor')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) { toast({ title: 'Erro ao excluir', description: fetchErr.message, variant: 'destructive' }); return; }
+
+    const { error } = await (supabase as any).from('consumo_mp_pg').delete().eq('id', id);
+    if (error) { toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' }); return; }
+
+    if (consumoRow) {
+      const agora = new Date().toISOString();
+      const { data: estoqueRow } = await (supabase as any)
+        .from('estoque_mp_pg')
+        .select('saldo_kg')
+        .eq('cod_pg', consumoRow.cod_pg)
+        .maybeSingle();
+
+      if (estoqueRow !== null) {
+        const novoSaldo = (estoqueRow.saldo_kg ?? 0) + consumoRow.quantidade_kg;
+        await Promise.all([
+          (supabase as any)
+            .from('estoque_mp_pg')
+            .update({ saldo_kg: novoSaldo, atualizado_em: agora })
+            .eq('cod_pg', consumoRow.cod_pg),
+          (supabase as any)
+            .from('estoque_movimentacoes_pg')
+            .insert({
+              cod_pg: consumoRow.cod_pg,
+              materia_prima: consumoRow.materia_prima,
+              tipo: 'estorno',
+              quantidade_kg: consumoRow.quantidade_kg,
+              saldo_apos: novoSaldo,
+              observacao: 'Estorno — retirada manual excluída',
+              criado_por: perfilNome,
+              criado_em: agora,
+            }),
+        ]);
+      }
+    }
+
+    toast({ title: 'Lançamento excluído' });
+    fetchRetiradas();
+    fetchRelatorio();
+  };
+
+  // ── Atualizar setor inline ───────────────────────────────────────────────────
+  const handleAtualizarSetor = useCallback(async (id: string, novoSetor: Setor) => {
+    setAtualizandoSetorId(id);
+    const { error } = await (supabase as any)
+      .from('consumo_mp_pg')
+      .update({ setor: novoSetor })
+      .eq('id', id);
+    setAtualizandoSetorId(null);
+    if (error) { toast({ title: 'Erro ao atualizar setor', variant: 'destructive' }); return; }
+    toast({ title: `Setor → ${SETOR_LABEL[novoSetor]}` });
+    setRetiradas((prev) => prev.map((r) => r.id === id ? { ...r, setor: novoSetor } : r));
+    setRelatorio((prev) => prev.map((r) => r.id === id ? { ...r, setor: novoSetor } : r));
+  }, []);
+
+  // ── Abrir edição ─────────────────────────────────────────────────────────────
+  const abrirEdicao = useCallback((row: ConsumoRow) => {
+    setEditRow(row);
+    setEditSetor(row.setor ?? 'laboratorio');
+    setEditQtd(String(row.quantidade_kg).replace('.', ','));
+    setEditData(row.data_retirada);
+    setEditObs(row.observacao ?? '');
+    setEditMp({ cod_pg: row.cod_pg, materia_prima: row.materia_prima });
+    setEditBusca('');
+    setEditSugestoes([]);
+    setEditShowSugestoes(false);
+  }, []);
+
+  // ── Salvar edição ────────────────────────────────────────────────────────────
+  const handleSalvarEdicao = async () => {
+    if (!editRow) return;
+    if (!editMp) { toast({ title: 'Selecione uma matéria-prima', variant: 'destructive' }); return; }
+    const qtd = parseFloat(editQtd.replace(',', '.'));
+    if (isNaN(qtd) || qtd <= 0) { toast({ title: 'Quantidade inválida', variant: 'destructive' }); return; }
+    if (!editData) { toast({ title: 'Informe a data', variant: 'destructive' }); return; }
+    setSalvandoEdicao(true);
+    const { error } = await (supabase as any).from('consumo_mp_pg').update({
+      setor: editSetor,
+      cod_pg: editMp.cod_pg,
+      materia_prima: editMp.materia_prima,
+      quantidade_kg: qtd,
+      data_retirada: editData,
+      observacao: editObs.trim() || null,
+    }).eq('id', editRow.id);
+    setSalvandoEdicao(false);
+    if (error) { toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Lançamento atualizado com sucesso!' });
+    setEditRow(null);
+    fetchRetiradas();
+    fetchRelatorio();
+  };
+
+  // ── Relatório ────────────────────────────────────────────────────────────────
+  const fetchRelatorio = useCallback(async () => {
+    setCarregandoRel(true);
+    const { data: rows } = await (supabase as any)
+      .from('consumo_mp_pg')
+      .select('id, cod_pg, materia_prima, quantidade_kg, data_retirada, observacao, retirado_por, criado_em, setor, eh_acerto, acerto_lote, acerto_formula_id')
+      .gte('data_retirada', dataInicio)
+      .lte('data_retirada', dataFim)
+      .order('data_retirada', { ascending: false })
+      .limit(5000);
+    setRelatorio((rows ?? []) as ConsumoRow[]);
+    setCarregandoRel(false);
+  }, [dataInicio, dataFim]);
+
+  useEffect(() => { fetchRelatorio(); }, [fetchRelatorio]);
+
+  const relatorioFiltrado = useMemo(() => {
+    if (filtroSetor === 'ambos') return relatorio;
+    return relatorio.filter((r) => r.setor === filtroSetor);
+  }, [relatorio, filtroSetor]);
+
+  const totaisPorMp: TotalPorMp[] = useMemo(() => {
+    const map = new Map<string, TotalPorMp>();
+    for (const r of relatorioFiltrado) {
+      const key = r.cod_pg;
+      if (!map.has(key)) {
+        map.set(key, { cod_pg: r.cod_pg, materia_prima: r.materia_prima, total_kg: 0, kg_lab: 0, kg_prod: 0, num_retiradas: 0, pct: 0 });
+      }
+      const entry = map.get(key)!;
+      entry.total_kg += r.quantidade_kg;
+      entry.num_retiradas += 1;
+      if (r.setor === 'laboratorio') entry.kg_lab += r.quantidade_kg;
+      else if (r.setor === 'producao') entry.kg_prod += r.quantidade_kg;
+    }
+    const arr = Array.from(map.values()).sort((a, b) => b.total_kg - a.total_kg);
+    const total = arr.reduce((s, t) => s + t.total_kg, 0);
+    arr.forEach((t) => { t.pct = total > 0 ? (t.total_kg / total) * 100 : 0; });
+    return arr;
+  }, [relatorioFiltrado]);
+
+  useEffect(() => { setPageRet(0); }, [filtroSetorLista, dataInicioLista, dataFimLista]);
+  useEffect(() => { setPageTotais(0); setPageRelHist(0); }, [dataInicio, dataFim, filtroSetor]);
+
+  const paginaRet = useMemo(() => retiradasFiltradas.slice(pageRet * PAGE_SIZE_RET, (pageRet + 1) * PAGE_SIZE_RET), [retiradasFiltradas, pageRet]);
+  const paginaTotais = useMemo(() => totaisPorMp.slice(pageTotais * PAGE_SIZE_REL, (pageTotais + 1) * PAGE_SIZE_REL), [totaisPorMp, pageTotais]);
+  const paginaRelHist = useMemo(() => relatorioFiltrado.slice(pageRelHist * PAGE_SIZE_REL, (pageRelHist + 1) * PAGE_SIZE_REL), [relatorioFiltrado, pageRelHist]);
+
+  const totalGeralKg = useMemo(() => totaisPorMp.reduce((s, t) => s + t.total_kg, 0), [totaisPorMp]);
+  const numMpDistintas = totaisPorMp.length;
+  const totalLabKg = useMemo(() => relatorioFiltrado.filter((r) => r.setor === 'laboratorio').reduce((s, r) => s + r.quantidade_kg, 0), [relatorioFiltrado]);
+  const totalProdKg = useMemo(() => relatorioFiltrado.filter((r) => r.setor === 'producao').reduce((s, r) => s + r.quantidade_kg, 0), [relatorioFiltrado]);
+
+  const aplicarAtalho = (atalho: 'hoje' | 'semana' | 'mes' | 'ano') => {
+    const h = new Date();
+    if (atalho === 'hoje') { setDataInicio(toInputDate(h)); setDataFim(toInputDate(h)); }
+    else if (atalho === 'semana') { setDataInicio(toInputDate(startOfWeek(h))); setDataFim(toInputDate(endOfWeek(h))); }
+    else if (atalho === 'mes') { setDataInicio(toInputDate(new Date(h.getFullYear(), h.getMonth(), 1))); setDataFim(toInputDate(new Date(h.getFullYear(), h.getMonth() + 1, 0))); }
+    else if (atalho === 'ano') { setDataInicio(toInputDate(new Date(h.getFullYear(), 0, 1))); setDataFim(toInputDate(new Date(h.getFullYear(), 11, 31))); }
+  };
+
+  const exportarCSV = () => {
+    const totalRows = [
+      ['Matéria-Prima', 'Cód. PG', 'Total (kg)', '% do total',
+        ...(filtroSetor === 'ambos' ? ['Kg Laboratório', 'Kg Produção'] : [])],
+      ...totaisPorMp.map((t) => [
+        t.materia_prima, t.cod_pg,
+        t.total_kg.toFixed(3).replace('.', ','),
+        fmtPct(t.pct),
+        ...(filtroSetor === 'ambos' ? [t.kg_lab.toFixed(3).replace('.', ','), t.kg_prod.toFixed(3).replace('.', ',')] : []),
+      ]),
+    ];
+    const detailRows = [
+      [], ['--- Histórico Detalhado ---'],
+      ['Data', 'Setor', 'Cód. PG', 'Matéria-Prima', 'Quantidade (kg)', 'Retirado por', 'Observação'],
+      ...relatorioFiltrado.map((r) => [
+        fmt(r.data_retirada), r.setor ? SETOR_LABEL[r.setor] : '',
+        r.cod_pg, r.materia_prima,
+        String(r.quantidade_kg).replace('.', ','),
+        r.retirado_por, r.observacao ?? '',
+      ]),
+    ];
+    downloadCsv([...totalRows, ...detailRows], `consumo_mp_pg_${filtroSetor}_${dataInicio}_${dataFim}.csv`);
+  };
+
+  // ── Salvar relatório ─────────────────────────────────────────────────────────
+  const handleSalvarRelatorio = async () => {
+    if (totaisPorMp.length === 0) { toast({ title: 'Não há dados para salvar', variant: 'destructive' }); return; }
+    setSalvandoRelatorio(true);
+
+    const { data: cab, error: errCab } = await (supabase as any)
+      .from('relatorios_consumo_mp_pg')
+      .insert({ titulo: tituloRelatorio.trim() || null, data_inicio: dataInicio, data_fim: dataFim, setor: filtroSetor, total_kg: totalGeralKg, num_mps: numMpDistintas, criado_por: perfilNome })
+      .select('id').single();
+
+    if (errCab || !cab) { setSalvandoRelatorio(false); toast({ title: 'Erro ao salvar relatório', description: errCab?.message, variant: 'destructive' }); return; }
+
+    const itens: object[] = [];
+    for (const t of totaisPorMp) {
+      if (filtroSetor === 'ambos') {
+        if (t.kg_lab > 0) itens.push({ relatorio_id: cab.id, materia_prima: t.materia_prima, cod_pg: t.cod_pg, total_kg: t.kg_lab, percentual: totalGeralKg > 0 ? (t.kg_lab / totalGeralKg) * 100 : 0, setor: 'laboratorio' });
+        if (t.kg_prod > 0) itens.push({ relatorio_id: cab.id, materia_prima: t.materia_prima, cod_pg: t.cod_pg, total_kg: t.kg_prod, percentual: totalGeralKg > 0 ? (t.kg_prod / totalGeralKg) * 100 : 0, setor: 'producao' });
+        if (t.kg_lab === 0 && t.kg_prod === 0) itens.push({ relatorio_id: cab.id, materia_prima: t.materia_prima, cod_pg: t.cod_pg, total_kg: t.total_kg, percentual: t.pct, setor: 'ambos' });
+      } else {
+        itens.push({ relatorio_id: cab.id, materia_prima: t.materia_prima, cod_pg: t.cod_pg, total_kg: t.total_kg, percentual: t.pct, setor: filtroSetor });
+      }
+    }
+
+    const { error: errItens } = await (supabase as any).from('relatorios_consumo_mp_pg_itens').insert(itens);
+    setSalvandoRelatorio(false);
+    if (errItens) { toast({ title: 'Relatório salvo, mas houve erro nos itens', description: errItens.message, variant: 'destructive' }); return; }
+    toast({ title: 'Relatório salvo com sucesso!' });
+    setShowSalvarDialog(false); setTituloRelatorio('');
+    fetchRelatoriosSalvos();
+  };
+
+  // ── Relatórios salvos ────────────────────────────────────────────────────────
+  const fetchRelatoriosSalvos = useCallback(async () => {
+    setCarregandoSalvos(true);
+    let q = (supabase as any)
+      .from('relatorios_consumo_mp_pg')
+      .select('id, titulo, data_inicio, data_fim, setor, total_kg, num_mps, criado_por, criado_em')
+      .order('criado_em', { ascending: false })
+      .limit(100);
+    if (filtroSalvosSetor !== 'todos') q = q.eq('setor', filtroSalvosSetor);
+    if (filtroSalvosInicio) q = q.gte('criado_em', filtroSalvosInicio);
+    if (filtroSalvosFim) q = q.lte('criado_em', filtroSalvosFim + 'T23:59:59');
+    const { data: rows } = await q;
+    setRelatoriosSalvos((rows ?? []) as RelatorioSalvo[]);
+    setCarregandoSalvos(false);
+  }, [filtroSalvosSetor, filtroSalvosInicio, filtroSalvosFim]);
+
+  useEffect(() => { fetchRelatoriosSalvos(); }, [fetchRelatoriosSalvos]);
+
+  const abrirRelatorioSalvo = async (rel: RelatorioSalvo) => {
+    setRelatorioAberto(rel);
+    setCarregandoItens(true);
+    const { data: rows } = await (supabase as any)
+      .from('relatorios_consumo_mp_pg_itens')
+      .select('id, relatorio_id, materia_prima, cod_pg, total_kg, percentual, setor')
+      .eq('relatorio_id', rel.id)
+      .order('total_kg', { ascending: false })
+      .limit(5000);
+    setItensAbertos((rows ?? []) as RelatorioSalvoItem[]);
+    setCarregandoItens(false);
+  };
+
+  const handleExcluirRelatorio = async (id: string) => {
+    if (!confirm('Excluir este relatório salvo?')) return;
+    setExcluindoId(id);
+    const { error } = await (supabase as any).from('relatorios_consumo_mp_pg').delete().eq('id', id);
+    setExcluindoId(null);
+    if (error) { toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Relatório excluído' });
+    fetchRelatoriosSalvos();
+  };
+
+  const exportarRelatorioSalvoCSV = (rel: RelatorioSalvo, itens: RelatorioSalvoItem[]) => {
+    const mostrarSetores = rel.setor === 'ambos';
+    const linhas = mostrarSetores ? pivotarItens(itens) : itens.map((t) => ({ cod_pg: t.cod_pg, materia_prima: t.materia_prima, total_kg: t.total_kg, kg_lab: 0, kg_prod: 0, percentual: t.percentual } as RelatorioSalvoItemDisplay));
+    const rows = [
+      ['Matéria-Prima', 'Cód. PG', 'Total (kg)', '% do total', ...(mostrarSetores ? ['Kg Laboratório', 'Kg Produção'] : [])],
+      ...linhas.map((t) => [t.materia_prima, t.cod_pg, t.total_kg.toFixed(3).replace('.', ','), fmtPct(t.percentual), ...(mostrarSetores ? [t.kg_lab.toFixed(3).replace('.', ','), t.kg_prod.toFixed(3).replace('.', ',')] : [])]),
+    ];
+    const setor_label = SETOR_LABEL[rel.setor] ?? rel.setor;
+    downloadCsv(rows, `relatorio_pg_${setor_label}_${rel.data_inicio}_${rel.data_fim}.csv`);
+  };
+
+  const mostrarColunaSetor = filtroSetor === 'ambos';
+
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Boxes className="h-4 w-4" /> Retirada de MP — Pigma</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5 relative">
-            <Label>Matéria-Prima (Pigma) *</Label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                ref={buscaRef}
-                placeholder="Buscar por código ou descrição…"
-                value={mpSel ? `${mpSel.cod_pg} – ${mpSel.materia_prima}` : busca}
-                onChange={e => { if (mpSel) setMpSel(null); setBusca(e.target.value); }}
-                onFocus={() => { if (busca.length >= 2 && !mpSel) setShowSug(true); }}
-                onBlur={() => setTimeout(() => setShowSug(false), 150)}
-                className="pl-8 pr-8"
-              />
-              {(busca || mpSel) && (
-                <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => { setBusca(''); setMpSel(null); setSugestoes([]); setShowSug(false); buscaRef.current?.focus(); }}>
-                  <X className="h-3.5 w-3.5" />
-                </button>
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <Tabs defaultValue="lancar">
+        <TabsList className="mb-4">
+          <TabsTrigger value="lancar" className="gap-1.5">
+            <FlaskConical className="h-4 w-4" />
+            Lançar Retirada
+          </TabsTrigger>
+          <TabsTrigger value="relatorio" className="gap-1.5">
+            <BarChart3 className="h-4 w-4" />
+            Relatório por Período
+          </TabsTrigger>
+          <TabsTrigger value="salvos" className="gap-1.5">
+            <BookOpen className="h-4 w-4" />
+            Relatórios Salvos
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── ABA 1 – LANÇAR RETIRADA ── */}
+        <TabsContent value="lancar" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Nova Retirada de MP — Pigma</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5 relative">
+                <Label>Matéria-Prima Pigma *</Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    ref={buscaRef}
+                    placeholder="Buscar por código ou descrição…"
+                    value={mpSelecionada ? `${mpSelecionada.cod_pg} – ${mpSelecionada.materia_prima}` : busca}
+                    onChange={e => { if (mpSelecionada) setMpSelecionada(null); setBusca(e.target.value); }}
+                    onFocus={() => { if (busca.length >= 2 && !mpSelecionada) setShowSugestoes(true); }}
+                    onBlur={() => setTimeout(() => setShowSugestoes(false), 150)}
+                    className="pl-8 pr-8"
+                  />
+                  {(busca || mpSelecionada) && (
+                    <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => { setBusca(''); setMpSelecionada(null); setSugestoes([]); setShowSugestoes(false); buscaRef.current?.focus(); }}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {showSugestoes && sugestoes.length > 0 && (
+                  <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-56 overflow-y-auto">
+                    {sugestoes.map(mp => (
+                      <button key={mp.cod_pg}
+                        className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { setMpSelecionada(mp); setBusca(''); setShowSugestoes(false); }}>
+                        <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_pg}</span>
+                        <span className="leading-tight">{mp.materia_prima}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showSugestoes && busca.length >= 2 && sugestoes.length === 0 && (
+                  <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
+                    Nenhuma MP Pigma encontrada para "{busca}"
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Quantidade (kg) *</Label>
+                  <Input type="text" inputMode="decimal" placeholder="0,000" value={quantidade} onChange={e => setQuantidade(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Data *</Label>
+                  <Input type="date" value={data} onChange={e => setData(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Setor *</Label>
+                  <div className="flex rounded-md border overflow-hidden h-10">
+                    {(['laboratorio', 'producao'] as const).map((s) => (
+                      <button key={s} type="button" onClick={() => setSetor(s)}
+                        className={cn('flex-1 px-3 text-sm transition-colors', s === 'producao' && 'border-l',
+                          setor === s ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                        {SETOR_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Observação (opcional)</Label>
+                <Textarea placeholder="Finalidade, experimento, etc." value={observacao} onChange={e => setObservacao(e.target.value)} rows={2} />
+              </div>
+
+              {/* Acerto */}
+              <div className="space-y-2">
+                <div className={cn('flex items-center gap-3 px-3 py-2.5 rounded-md border transition-colors',
+                  ehAcerto ? 'bg-amber-50 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700' : 'bg-background border-input')}>
+                  <Wrench className={cn('h-4 w-4 shrink-0', ehAcerto ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')} />
+                  <span className={cn('flex-1 text-sm font-medium', ehAcerto ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
+                    É acerto de material?
+                  </span>
+                  <Switch checked={ehAcerto} onCheckedChange={(checked) => {
+                    setEhAcerto(checked);
+                    if (!checked) { setAcertoLoteBusca(''); setAcertoOpSugestoes([]); setAcertoOpSelecionada(null); setAcertoFormulaItem(null); }
+                  }} />
+                </div>
+
+                {ehAcerto && (
+                  <div className="space-y-1.5 relative">
+                    <Label className="text-sm text-amber-700 dark:text-amber-300">OP que está sendo acertada *</Label>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="Buscar por lote ou nome do produto…"
+                        value={acertoOpSelecionada ? `Lote ${acertoOpSelecionada.lote} – ${acertoOpSelecionada.produto}` : acertoLoteBusca}
+                        onChange={e => { if (acertoOpSelecionada) setAcertoOpSelecionada(null); setAcertoLoteBusca(e.target.value); }}
+                        onFocus={() => { if (acertoLoteBusca.length >= 1 && !acertoOpSelecionada) setShowAcertoSugestoes(true); }}
+                        onBlur={() => setTimeout(() => setShowAcertoSugestoes(false), 150)}
+                        className="pl-8 pr-8 border-amber-300 focus-visible:ring-amber-400"
+                      />
+                      {(acertoLoteBusca || acertoOpSelecionada) && (
+                        <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => { setAcertoLoteBusca(''); setAcertoOpSelecionada(null); setAcertoOpSugestoes([]); setShowAcertoSugestoes(false); }}>
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {showAcertoSugestoes && acertoOpSugestoes.length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                        {acertoOpSugestoes.map(op => (
+                          <button key={op.id}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { setAcertoOpSelecionada(op); setAcertoLoteBusca(''); setShowAcertoSugestoes(false); }}>
+                            <span className="font-mono text-xs text-muted-foreground shrink-0">Lote {op.lote}</span>
+                            <span className="flex-1 min-w-0 truncate">{op.produto}</span>
+                            <StatusBadge status={op.status} className="ml-auto shrink-0 text-[10px]" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showAcertoSugestoes && acertoLoteBusca.length >= 1 && acertoOpSugestoes.length === 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
+                        Nenhuma OP encontrada para "{acertoLoteBusca}"
+                      </div>
+                    )}
+                    {acertoOpSelecionada && (() => {
+                      const opQtd = acertoOpSelecionada.quantidade;
+                      const qtdAcerto = parseFloat(quantidade.replace(',', '.'));
+                      const podeCalc = !!opQtd && opQtd > 0 && !isNaN(qtdAcerto) && qtdAcerto > 0;
+                      const linhaOp = (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Acerto vinculado ao lote <strong>{acertoOpSelecionada.lote}</strong> — {acertoOpSelecionada.produto}
+                          {opQtd ? <span className="text-amber-500/80"> (OP de {formatKg(opQtd)} kg)</span> : null}
+                        </p>
+                      );
+                      if (!mpSelecionada || acertoFormulaItem === null) return linhaOp;
+                      if (acertoFormulaItem === 'nao_encontrado') return (<>{linhaOp}<p className="text-xs text-muted-foreground">{mpSelecionada.materia_prima} não consta na fórmula base — o acerto será registrado sem impacto em %.</p></>);
+                      const pct_base = acertoFormulaItem.percentual;
+                      const kg_base = opQtd ? (pct_base / 100) * opQtd : 0;
+                      if (!podeCalc || kg_base <= 0) return (<>{linhaOp}{pct_base > 0 && opQtd && (<p className="text-xs text-amber-700 dark:text-amber-300">Previsto na fórmula: <strong>{pct_base.toFixed(2)}%</strong> ({formatKg(kg_base)} kg)</p>)}</>);
+                      const pct_a_mais = (qtdAcerto / kg_base) * 100;
+                      return (<>{linhaOp}<p className="text-xs text-amber-700 dark:text-amber-300">adicionado <strong>+{pct_a_mais.toFixed(2)}%</strong> a mais deste item</p></>);
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              <Button onClick={handleRegistrar} disabled={salvando} className="w-full sm:w-auto">
+                {salvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Registrar Retirada
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Retiradas registradas */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base">Retiradas Registradas</CardTitle>
+                {contSemSetor > 0 && (
+                  <button onClick={() => setFiltroSetorLista('sem_setor')} className="text-xs text-amber-600 dark:text-amber-400 font-medium hover:underline">
+                    {contSemSetor} sem setor definido
+                  </button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-end gap-3 pb-3 border-b">
+                <div className="space-y-1">
+                  <Label className="text-xs">De</Label>
+                  <Input type="date" value={dataInicioLista} onChange={e => setDataInicioLista(e.target.value)} className="w-32 h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Até</Label>
+                  <Input type="date" value={dataFimLista} onChange={e => setDataFimLista(e.target.value)} className="w-32 h-8 text-sm" />
+                </div>
+                {(dataInicioLista || dataFimLista) && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs self-end" onClick={() => { setDataInicioLista(''); setDataFimLista(''); }}>
+                    <X className="h-3 w-3 mr-1" />Limpar datas
+                  </Button>
+                )}
+                <div className="flex rounded-md border overflow-hidden self-end">
+                  {([{ id: 'laboratorio', label: 'Lab' }, { id: 'producao', label: 'Prod' }, { id: 'ambos', label: 'Ambos' }, { id: 'sem_setor', label: 'Sem setor' }] as const).map(({ id, label }) => (
+                    <button key={id} type="button" onClick={() => setFiltroSetorLista(id)}
+                      className={cn('px-2.5 py-1.5 text-xs font-medium transition-colors border-l first:border-l-0',
+                        filtroSetorLista === id ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground self-end ml-auto">{retiradasFiltradas.length} registro{retiradasFiltradas.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {carregandoRetiradas ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : retiradasFiltradas.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  {retiradas.length === 0 ? 'Nenhuma retirada registrada ainda.' : 'Nenhuma retirada para os filtros selecionados.'}
+                </p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-muted-foreground text-xs">
+                          <th className="text-left pb-2 pr-3 font-medium">Data</th>
+                          <th className="text-left pb-2 pr-3 font-medium">Setor</th>
+                          <th className="text-left pb-2 pr-3 font-medium">Cód.</th>
+                          <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                          <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
+                          <th className="text-left pb-2 pr-3 font-medium">Retirado por</th>
+                          <th className="text-left pb-2 pr-3 font-medium">Obs.</th>
+                          <th className="pb-2 text-right pr-1 font-medium">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginaRet.map(r => (
+                          <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
+                            <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
+                            <td className="py-2 pr-3"><SetorInline rowId={r.id} setor={r.setor} atualizando={atualizandoSetorId === r.id} onChange={(s) => handleAtualizarSetor(r.id, s)} /></td>
+                            <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_pg}</td>
+                            <td className="py-2 pr-3">{r.materia_prima}</td>
+                            <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
+                            <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
+                            <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[140px] truncate">{r.observacao ?? '—'}</td>
+                            <td className="py-2 text-right">
+                              <div className="flex gap-0.5 justify-end">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => abrirEdicao(r)} title="Editar"><Pencil className="h-3.5 w-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleExcluir(r.id)} title="Excluir"><Trash2 className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginacaoBar page={pageRet} pageSize={PAGE_SIZE_RET} total={retiradasFiltradas.length} onChange={setPageRet} />
+                </>
               )}
-            </div>
-            {showSug && sugestoes.length > 0 && (
-              <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-56 overflow-y-auto">
-                {sugestoes.map(mp => (
-                  <button key={mp.cod_pg}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => { setMpSel(mp); setBusca(''); setShowSug(false); }}>
-                    <span className="font-mono text-xs text-muted-foreground shrink-0">{mp.cod_pg}</span>
-                    <span className="flex-1 min-w-0 truncate">{mp.materia_prima}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{formatKg(mp.saldo_kg ?? 0)} kg</span>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── ABA 2 – RELATÓRIO POR PERÍODO ── */}
+        <TabsContent value="relatorio" className="space-y-4">
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1.5"><Label>De</Label><Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="w-36" /></div>
+                <div className="space-y-1.5"><Label>Até</Label><Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-36" /></div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['hoje', 'semana', 'mes', 'ano'] as const).map(a => (
+                    <Button key={a} variant="outline" size="sm" onClick={() => aplicarAtalho(a)}>
+                      {a === 'hoje' ? 'Hoje' : a === 'semana' ? 'Esta semana' : a === 'mes' ? 'Este mês' : 'Este ano'}
+                    </Button>
+                  ))}
+                </div>
+                <div className="space-y-1.5 ml-2">
+                  <Label>Setor</Label>
+                  <div className="flex rounded-md border overflow-hidden">
+                    {(['laboratorio', 'producao', 'ambos'] as const).map((s) => (
+                      <button key={s} type="button" onClick={() => setFiltroSetor(s)}
+                        className={cn('px-3 py-1.5 text-xs font-medium transition-colors border-l first:border-l-0',
+                          filtroSetor === s ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                        {s === 'laboratorio' ? 'Laboratório' : s === 'producao' ? 'Produção' : 'Ambos'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2 ml-auto">
+                  <Button variant="outline" size="sm" onClick={exportarCSV} className="gap-1.5" disabled={totaisPorMp.length === 0}><Download className="h-4 w-4" />Exportar CSV</Button>
+                  <Button size="sm" onClick={() => setShowSalvarDialog(true)} className="gap-1.5" disabled={totaisPorMp.length === 0}><Save className="h-4 w-4" />Salvar relatório</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {carregandoRel ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Card className="col-span-2">
+                  <CardContent className="pt-4 pb-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total no período</p>
+                    <p className="text-2xl font-bold">{formatKg(totalGeralKg)} <span className="text-sm font-normal text-muted-foreground">kg</span></p>
+                    {filtroSetor === 'ambos' && (totalLabKg > 0 || totalProdKg > 0) && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <span className="text-blue-600 dark:text-blue-400 font-medium">Lab: {formatKg(totalLabKg)} kg</span>
+                        <span className="mx-1.5">·</span>
+                        <span className="text-orange-600 dark:text-orange-400 font-medium">Prod: {formatKg(totalProdKg)} kg</span>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">MPs distintas</p><p className="text-2xl font-bold">{numMpDistintas}</p></CardContent></Card>
+                <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Nº de retiradas</p><p className="text-2xl font-bold">{relatorioFiltrado.length}</p></CardContent></Card>
+              </div>
+
+              {relatorioFiltrado.length === 0 ? (
+                <Card><CardContent className="py-10 text-center text-muted-foreground text-sm">Nenhuma retirada no período selecionado{filtroSetor !== 'ambos' && ` para o setor ${SETOR_LABEL[filtroSetor]}`}.</CardContent></Card>
+              ) : (
+                <>
+                  <Card>
+                    <CardHeader className="pb-3"><CardTitle className="text-base">Totais por Matéria-Prima</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-muted-foreground text-xs">
+                              <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Cód. PG</th>
+                              <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
+                              {mostrarColunaSetor && <><th className="text-right pb-2 pr-3 font-medium text-blue-600 dark:text-blue-400">Lab (kg)</th><th className="text-right pb-2 pr-3 font-medium text-orange-600 dark:text-orange-400">Prod (kg)</th></>}
+                              <th className="text-right pb-2 font-medium">% do total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginaTotais.map((t, i) => (
+                              <tr key={t.cod_pg} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
+                                <td className="py-2 pr-3">{t.materia_prima}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_pg}</td>
+                                <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
+                                {mostrarColunaSetor && <><td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">{t.kg_lab > 0 ? formatKg(t.kg_lab) : <span className="text-muted-foreground">—</span>}</td><td className="py-2 pr-3 text-right font-mono text-xs text-orange-600 dark:text-orange-400">{t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}</td></>}
+                                <td className="py-2 text-right text-muted-foreground text-xs font-mono">{fmtPct(t.pct)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t font-semibold text-xs">
+                              <td colSpan={2} className="py-2 pr-3 text-muted-foreground">Total</td>
+                              <td className="py-2 pr-3 text-right font-mono">{formatKg(totalGeralKg)}</td>
+                              {mostrarColunaSetor && <><td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">{formatKg(totalLabKg)}</td><td className="py-2 pr-3 text-right font-mono text-orange-600 dark:text-orange-400">{formatKg(totalProdKg)}</td></>}
+                              <td className="py-2 text-right text-muted-foreground">100%</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                      <PaginacaoBar page={pageTotais} pageSize={PAGE_SIZE_REL} total={totaisPorMp.length} onChange={setPageTotais} />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3"><CardTitle className="text-base">Histórico Detalhado</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-muted-foreground text-xs">
+                              <th className="text-left pb-2 pr-3 font-medium">Data</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Setor</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Cód. PG</th>
+                              <th className="text-right pb-2 pr-3 font-medium">Qtd (kg)</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Retirado por</th>
+                              <th className="text-left pb-2 pr-3 font-medium">Observação</th>
+                              <th className="pb-2 text-right pr-1 font-medium">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginaRelHist.map(r => (
+                              <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
+                                <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(r.data_retirada)}</td>
+                                <td className="py-2 pr-3"><SetorInline rowId={r.id} setor={r.setor} atualizando={atualizandoSetorId === r.id} onChange={(s) => handleAtualizarSetor(r.id, s)} /></td>
+                                <td className="py-2 pr-3">{r.materia_prima}</td>
+                                <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{r.cod_pg}</td>
+                                <td className="py-2 pr-3 text-right font-mono">{formatKg(r.quantidade_kg)}</td>
+                                <td className="py-2 pr-3 text-xs text-muted-foreground">{r.retirado_por}</td>
+                                <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[160px] truncate">{r.observacao ?? '—'}</td>
+                                <td className="py-2 text-right">
+                                  <div className="flex gap-0.5 justify-end">
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => abrirEdicao(r)} title="Editar"><Pencil className="h-3.5 w-3.5" /></Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleExcluir(r.id)} title="Excluir"><Trash2 className="h-3.5 w-3.5" /></Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <PaginacaoBar page={pageRelHist} pageSize={PAGE_SIZE_REL} total={relatorioFiltrado.length} onChange={setPageRelHist} />
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* ── ABA 3 – RELATÓRIOS SALVOS ── */}
+        <TabsContent value="salvos" className="space-y-4">
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1"><Label className="text-xs">Criado de</Label><Input type="date" value={filtroSalvosInicio} onChange={e => setFiltroSalvosInicio(e.target.value)} className="w-36 h-8 text-sm" /></div>
+                <div className="space-y-1"><Label className="text-xs">Criado até</Label><Input type="date" value={filtroSalvosFim} onChange={e => setFiltroSalvosFim(e.target.value)} className="w-36 h-8 text-sm" /></div>
+                {(filtroSalvosInicio || filtroSalvosFim) && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs self-end" onClick={() => { setFiltroSalvosInicio(''); setFiltroSalvosFim(''); }}>
+                    <X className="h-3 w-3 mr-1" />Limpar datas
+                  </Button>
+                )}
+                <div className="flex rounded-md border overflow-hidden self-end">
+                  {([{ id: 'todos', label: 'Todos' }, { id: 'laboratorio', label: 'Lab' }, { id: 'producao', label: 'Prod' }, { id: 'ambos', label: 'Ambos' }] as const).map(({ id, label }) => (
+                    <button key={id} type="button" onClick={() => setFiltroSalvosSetor(id)}
+                      className={cn('px-2.5 py-1.5 text-xs font-medium transition-colors border-l first:border-l-0',
+                        filtroSalvosSetor === id ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Histórico de Relatórios</CardTitle></CardHeader>
+            <CardContent>
+              {carregandoSalvos ? (
+                <div className="flex items-center justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : relatoriosSalvos.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhum relatório salvo ainda.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground text-xs">
+                        <th className="text-left pb-2 pr-3 font-medium">Título</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Período</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Setor</th>
+                        <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
+                        <th className="text-right pb-2 pr-3 font-medium">Nº MPs</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Criado por</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Criado em</th>
+                        <th className="pb-2 text-right font-medium">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {relatoriosSalvos.map((rel) => (
+                        <tr key={rel.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
+                          <td className="py-2 pr-3 max-w-[200px]"><span className="truncate block">{rel.titulo ?? <span className="text-muted-foreground italic">Sem título</span>}</span></td>
+                          <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted-foreground">{fmt(rel.data_inicio)} – {fmt(rel.data_fim)}</td>
+                          <td className="py-2 pr-3"><Badge variant="secondary" className="text-[10px]">{SETOR_LABEL[rel.setor] ?? rel.setor}</Badge></td>
+                          <td className="py-2 pr-3 text-right font-mono text-xs">{formatKg(rel.total_kg)}</td>
+                          <td className="py-2 pr-3 text-right text-xs">{rel.num_mps}</td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground">{rel.criado_por}</td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDatetime(rel.criado_em)}</td>
+                          <td className="py-2 text-right">
+                            <div className="flex gap-0.5 justify-end">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => abrirRelatorioSalvo(rel)} title="Abrir"><Eye className="h-3.5 w-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={async () => {
+                                  const { data: itens } = await (supabase as any).from('relatorios_consumo_mp_pg_itens').select('id, relatorio_id, materia_prima, cod_pg, total_kg, percentual, setor').eq('relatorio_id', rel.id).order('total_kg', { ascending: false }).limit(5000);
+                                  exportarRelatorioSalvoCSV(rel, (itens ?? []) as RelatorioSalvoItem[]);
+                                }} title="Exportar CSV"><Download className="h-3.5 w-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleExcluirRelatorio(rel.id)} disabled={excluindoId === rel.id} title="Excluir">
+                                {excluindoId === rel.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* ── MODAL DE EDIÇÃO ── */}
+      <Dialog open={!!editRow} onOpenChange={(open) => { if (!open) setEditRow(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Editar Lançamento</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Setor *</Label>
+              <div className="flex rounded-md border overflow-hidden h-10">
+                {(['laboratorio', 'producao'] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => setEditSetor(s)}
+                    className={cn('flex-1 px-3 text-sm transition-colors', s === 'producao' && 'border-l',
+                      editSetor === s ? 'bg-primary text-primary-foreground font-semibold' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                    {SETOR_LABEL[s]}
                   </button>
                 ))}
               </div>
-            )}
-            {showSug && busca.length >= 2 && sugestoes.length === 0 && (
-              <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
-                Nenhuma MP Pigma encontrada para "{busca}"
+            </div>
+
+            <div className="space-y-1.5 relative">
+              <Label>Matéria-Prima *</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Buscar por código ou descrição…"
+                  value={editMp ? `${editMp.cod_pg} – ${editMp.materia_prima}` : editBusca}
+                  onChange={e => { if (editMp) setEditMp(null); setEditBusca(e.target.value); }}
+                  onFocus={() => { if (editBusca.length >= 2 && !editMp) setEditShowSugestoes(true); }}
+                  onBlur={() => setTimeout(() => setEditShowSugestoes(false), 150)}
+                  className="pl-8 pr-8"
+                />
+                {(editBusca || editMp) && (
+                  <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => { setEditBusca(''); setEditMp(null); setEditSugestoes([]); setEditShowSugestoes(false); }}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-            )}
+              {editShowSugestoes && editSugestoes.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                  {editSugestoes.map(mp => (
+                    <button key={mp.cod_pg}
+                      className="flex items-start gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setEditMp(mp); setEditBusca(''); setEditShowSugestoes(false); }}>
+                      <span className="font-mono text-xs text-muted-foreground mt-0.5 shrink-0">{mp.cod_pg}</span>
+                      <span className="leading-tight">{mp.materia_prima}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {editShowSugestoes && editBusca.length >= 2 && editSugestoes.length === 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md px-3 py-2 text-sm text-muted-foreground">
+                  Nenhuma MP encontrada para "{editBusca}"
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>Quantidade (kg) *</Label><Input type="text" inputMode="decimal" placeholder="0,000" value={editQtd} onChange={e => setEditQtd(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Data *</Label><Input type="date" value={editData} onChange={e => setEditData(e.target.value)} /></div>
+            </div>
+            <div className="space-y-1.5"><Label>Observação (opcional)</Label><Textarea placeholder="Finalidade, experimento, etc." value={editObs} onChange={e => setEditObs(e.target.value)} rows={2} /></div>
           </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditRow(null)}>Cancelar</Button>
+            <Button onClick={handleSalvarEdicao} disabled={salvandoEdicao}>
+              {salvandoEdicao && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          {mpSel && <p className="text-xs text-muted-foreground">Saldo atual: <strong className="text-foreground">{formatKg(mpSel.saldo_kg ?? 0)} kg</strong></p>}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* ── MODAL SALVAR RELATÓRIO ── */}
+      <Dialog open={showSalvarDialog} onOpenChange={(open) => { if (!open) { setShowSalvarDialog(false); setTituloRelatorio(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Salvar Relatório</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-md bg-muted px-3 py-2 text-sm space-y-0.5">
+              <p><span className="text-muted-foreground">Período:</span> {fmt(dataInicio)} – {fmt(dataFim)}</p>
+              <p><span className="text-muted-foreground">Setor:</span> {SETOR_LABEL[filtroSetor] ?? filtroSetor}</p>
+              <p><span className="text-muted-foreground">Total:</span> {formatKg(totalGeralKg)} kg · {numMpDistintas} MPs</p>
+            </div>
             <div className="space-y-1.5">
-              <Label>Quantidade (kg) *</Label>
-              <Input type="text" inputMode="decimal" placeholder="0,000" value={quantidade} onChange={e => setQuantidade(e.target.value)} />
+              <Label>Título / descrição (opcional)</Label>
+              <Input placeholder="Ex.: Consumo Pigma laboratório julho" value={tituloRelatorio} onChange={e => setTituloRelatorio(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSalvarRelatorio(); }} autoFocus />
             </div>
           </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setShowSalvarDialog(false); setTituloRelatorio(''); }}>Cancelar</Button>
+            <Button onClick={handleSalvarRelatorio} disabled={salvandoRelatorio}>
+              {salvandoRelatorio && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          <div className="space-y-1.5">
-            <Label>Observação (opcional)</Label>
-            <Textarea placeholder="Finalidade, destino, etc." value={observacao} onChange={e => setObservacao(e.target.value)} rows={2} />
-          </div>
-
-          <Button onClick={registrar} disabled={salvando} className="w-full sm:w-auto">
-            {salvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Registrar Retirada Pigma
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Últimas retiradas — Pigma</CardTitle></CardHeader>
-        <CardContent>
-          {carregando ? (
-            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-          ) : movs.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhuma retirada registrada.</p>
-          ) : (
-            <div className="divide-y">
-              {movs.map(m => (
-                <div key={m.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{m.materia_prima} <span className="font-mono text-xs text-muted-foreground">{m.cod_pg}</span></div>
-                    <div className="text-[11px] text-muted-foreground truncate">
-                      {fmtDatetime(m.criado_em)} · {m.criado_por} · saldo após {formatKg(m.saldo_apos)} kg{m.observacao ? ` · ${m.observacao}` : ''}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-semibold text-red-600 dark:text-red-400 tabular-nums">-{formatKg(Math.abs(m.quantidade_kg))} kg</span>
-                    <button onClick={() => excluir(m)} title="Excluir e devolver saldo" className="p-1.5 rounded hover:bg-muted text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
-                  </div>
-                </div>
-              ))}
+      {/* ── MODAL VISUALIZAR RELATÓRIO SALVO ── */}
+      <Dialog open={!!relatorioAberto} onOpenChange={(open) => { if (!open) { setRelatorioAberto(null); setItensAbertos([]); } }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader><DialogTitle className="text-base">{relatorioAberto?.titulo ?? 'Relatório salvo'}</DialogTitle></DialogHeader>
+          {relatorioAberto && (
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground mb-2">
+              <span>Período: <strong className="text-foreground">{fmt(relatorioAberto.data_inicio)} – {fmt(relatorioAberto.data_fim)}</strong></span>
+              <span>Setor: <strong className="text-foreground">{SETOR_LABEL[relatorioAberto.setor] ?? relatorioAberto.setor}</strong></span>
+              <span>Total: <strong className="text-foreground">{formatKg(relatorioAberto.total_kg)} kg</strong></span>
+              <span>MPs: <strong className="text-foreground">{relatorioAberto.num_mps}</strong></span>
+              <span>Salvo por: <strong className="text-foreground">{relatorioAberto.criado_por}</strong> em {fmtDatetime(relatorioAberto.criado_em)}</span>
             </div>
           )}
-        </CardContent>
-      </Card>
+          <div className="overflow-y-auto flex-1">
+            {carregandoItens ? (
+              <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : (() => {
+              const isAmbos = relatorioAberto?.setor === 'ambos';
+              const linhasDisplay: RelatorioSalvoItemDisplay[] = isAmbos
+                ? pivotarItens(itensAbertos)
+                : itensAbertos.map((t) => ({ cod_pg: t.cod_pg, materia_prima: t.materia_prima, total_kg: t.total_kg, kg_lab: 0, kg_prod: 0, percentual: t.percentual }));
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background">
+                      <tr className="border-b text-muted-foreground text-xs">
+                        <th className="text-left pb-2 pr-3 font-medium">Matéria-Prima</th>
+                        <th className="text-left pb-2 pr-3 font-medium">Cód. PG</th>
+                        <th className="text-right pb-2 pr-3 font-medium">Total (kg)</th>
+                        {isAmbos && <><th className="text-right pb-2 pr-3 font-medium text-blue-600 dark:text-blue-400">Lab (kg)</th><th className="text-right pb-2 pr-3 font-medium text-orange-600 dark:text-orange-400">Prod (kg)</th></>}
+                        <th className="text-right pb-2 font-medium">% do total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linhasDisplay.map((t, i) => (
+                        <tr key={t.cod_pg} className={cn('border-b last:border-0 hover:bg-muted/40 transition-colors', i === 0 && 'font-medium')}>
+                          <td className="py-2 pr-3">{t.materia_prima}</td>
+                          <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.cod_pg}</td>
+                          <td className="py-2 pr-3 text-right font-mono">{formatKg(t.total_kg)}</td>
+                          {isAmbos && <><td className="py-2 pr-3 text-right font-mono text-xs text-blue-600 dark:text-blue-400">{t.kg_lab > 0 ? formatKg(t.kg_lab) : <span className="text-muted-foreground">—</span>}</td><td className="py-2 pr-3 text-right font-mono text-xs text-orange-600 dark:text-orange-400">{t.kg_prod > 0 ? formatKg(t.kg_prod) : <span className="text-muted-foreground">—</span>}</td></>}
+                          <td className="py-2 text-right text-muted-foreground text-xs font-mono">{fmtPct(t.percentual)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t font-semibold text-xs">
+                        <td colSpan={2} className="py-2 pr-3 text-muted-foreground">Total</td>
+                        <td className="py-2 pr-3 text-right font-mono">{formatKg(relatorioAberto?.total_kg ?? 0)}</td>
+                        {isAmbos && <><td className="py-2 pr-3 text-right font-mono text-blue-600 dark:text-blue-400">{formatKg(linhasDisplay.reduce((s, t) => s + t.kg_lab, 0))}</td><td className="py-2 pr-3 text-right font-mono text-orange-600 dark:text-orange-400">{formatKg(linhasDisplay.reduce((s, t) => s + t.kg_prod, 0))}</td></>}
+                        <td className="py-2 text-right text-muted-foreground">100%</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+          <DialogFooter className="gap-2 pt-2 border-t mt-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => relatorioAberto && exportarRelatorioSalvoCSV(relatorioAberto, itensAbertos)} disabled={carregandoItens || itensAbertos.length === 0}><Download className="h-4 w-4" />Exportar CSV</Button>
+            <Button variant="outline" size="sm" onClick={() => { setRelatorioAberto(null); setItensAbertos([]); }}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function pivotarItens(itens: RelatorioSalvoItem[]): RelatorioSalvoItemDisplay[] {
+  const map = new Map<string, RelatorioSalvoItemDisplay>();
+  for (const item of itens) {
+    const key = item.cod_pg;
+    if (!map.has(key)) map.set(key, { cod_pg: item.cod_pg, materia_prima: item.materia_prima, total_kg: 0, kg_lab: 0, kg_prod: 0, percentual: 0 });
+    const entry = map.get(key)!;
+    entry.total_kg += item.total_kg;
+    entry.percentual += item.percentual;
+    if (item.setor === 'laboratorio') entry.kg_lab += item.total_kg;
+    else if (item.setor === 'producao') entry.kg_prod += item.total_kg;
+  }
+  return Array.from(map.values()).sort((a, b) => b.total_kg - a.total_kg);
+}
+
+function downloadCsv(rows: (string | number)[][], filename: string) {
+  const csv = '\ufeff' + rows.map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
