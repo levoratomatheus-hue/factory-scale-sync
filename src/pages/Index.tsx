@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight, Search } from 'lucide-react';
+import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight, Search, Boxes } from 'lucide-react';
 import Login from './Login';
 
 const importPainelGestor             = () => import('./PainelGestor');
@@ -34,6 +34,7 @@ const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao'));
 const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
 const PreventivasManutencao     = lazy(() => import('./PreventivasManutencao'));
+const ConsumoPigma              = lazy(() => import('./ConsumoPigma'));
 const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
 const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
@@ -81,7 +82,7 @@ type TabGestorId =
   | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao' | 'preventivas_manutencao'
   | 'historico_paradas'
   | 'consumo_mp'
-  | 'compras_consumo' | 'compras_media_mensal'
+  | 'compras_consumo' | 'compras_media_mensal' | 'consumo_pigma'
   | 'reaproveitamento'
   | 'analise_reaproveitamento'
   | 'mp_testadas'
@@ -179,6 +180,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['consumo_mp' as TabGestorId, 'Consumo de MP'],
   ['compras_consumo' as TabGestorId, 'Consumo de MP'],
   ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
+  ['consumo_pigma' as TabGestorId, 'Retirada Pigma'],
   ['preventivas_manutencao' as TabGestorId, 'Preventivas'],
   ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
@@ -226,7 +228,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'painel_manutencao', 'analise_manutencao', 'preventivas_manutencao', 'cadastro_equipamentos',
   'estoque_manutencao',
   'consumo_mp',
-  'compras_consumo', 'compras_media_mensal',
+  'compras_consumo', 'compras_media_mensal', 'consumo_pigma',
   'reaproveitamento',
   'analise_reaproveitamento',
   'mp_testadas',
@@ -649,6 +651,17 @@ export default function Index() {
                         <span>Consumo Médio Mensal</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'consumo_pigma'}
+                        tooltip="Retirada Pigma"
+                        onClick={() => goToTab('consumo_pigma')}
+                        size="sm"
+                      >
+                        <Boxes className="h-3.5 w-3.5 shrink-0" />
+                        <span>Retirada Pigma</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -814,6 +827,7 @@ export default function Index() {
                 <Suspense fallback={TAB_LOADING}>
                   {activeTab === 'compras_consumo'     && <ComprasConsumo />}
                   {activeTab === 'compras_media_mensal' && <ComprasMediaMensal />}
+                  {activeTab === 'consumo_pigma'        && <ConsumoPigma perfilNome={perfil.nome} />}
                   {activeTab === 'comercial'           && <PainelComercial />}
                   {activeTab === 'mp_testadas'         && <ControleMPTestada perfilNome={perfil.nome} papel={perfil.papel} />}
                   {activeTab === 'estoque_mp'          && <EstoqueMP perfilNome={perfil.nome} papel={perfil.papel} />}
@@ -1249,6 +1263,17 @@ export default function Index() {
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={activeTab === 'consumo_pigma'}
+                    tooltip="Retirada Pigma"
+                    onClick={() => goToTab('consumo_pigma')}
+                    size="sm"
+                  >
+                    <Boxes className="h-3.5 w-3.5 shrink-0" />
+                    <span>Retirada Pigma</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={activeTab === 'conferencia_estoque'}
                     tooltip="Conferência de Estoque"
                     onClick={() => goToTab('conferencia_estoque')}
@@ -1464,6 +1489,11 @@ export default function Index() {
               {mountedTabs.has('compras_media_mensal') && (
                 <KeepAlive active={activeTab === 'compras_media_mensal'}>
                   <Suspense fallback={TAB_LOADING}><ComprasMediaMensal /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('consumo_pigma') && (
+                <KeepAlive active={activeTab === 'consumo_pigma'}>
+                  <Suspense fallback={TAB_LOADING}><ConsumoPigma perfilNome={perfil.nome} /></Suspense>
                 </KeepAlive>
               )}
               {mountedTabs.has('reaproveitamento') && (
