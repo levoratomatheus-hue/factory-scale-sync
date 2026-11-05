@@ -651,17 +651,6 @@ export default function Index() {
                         <span>Consumo Médio Mensal</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        isActive={activeTab === 'consumo_pigma'}
-                        tooltip="Retirada Pigma"
-                        onClick={() => goToTab('consumo_pigma')}
-                        size="sm"
-                      >
-                        <Boxes className="h-3.5 w-3.5 shrink-0" />
-                        <span>Retirada Pigma</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -762,7 +751,7 @@ export default function Index() {
               )}
             </SidebarGroup>
 
-            {/* ── Laboratório (apenas MP Testada) ── */}
+            {/* ── Laboratório ── */}
             <SidebarGroup>
               <button
                 onClick={() => toggleGroup('laboratorio')}
@@ -786,6 +775,17 @@ export default function Index() {
                       >
                         <FlaskConical className="h-3.5 w-3.5 shrink-0" />
                         <span>MP Testada</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeTab === 'consumo_pigma'}
+                        tooltip="Retirada Pigma"
+                        onClick={() => goToTab('consumo_pigma')}
+                        size="sm"
+                      >
+                        <Boxes className="h-3.5 w-3.5 shrink-0" />
+                        <span>Retirada Pigma</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   </SidebarMenu>
@@ -1178,6 +1178,17 @@ export default function Index() {
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={activeTab === 'consumo_pigma'}
+                    tooltip="Retirada Pigma"
+                    onClick={() => goToTab('consumo_pigma')}
+                    size="sm"
+                  >
+                    <Boxes className="h-3.5 w-3.5 shrink-0" />
+                    <span>Retirada Pigma</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={activeTab === 'controle_cor'}
                     tooltip="Controle de Cor (CIELAB)"
                     onClick={() => goToTab('controle_cor')}
@@ -1259,17 +1270,6 @@ export default function Index() {
                   >
                     <CalendarDays className="h-3.5 w-3.5 shrink-0" />
                     <span>Consumo Médio Mensal</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={activeTab === 'consumo_pigma'}
-                    tooltip="Retirada Pigma"
-                    onClick={() => goToTab('consumo_pigma')}
-                    size="sm"
-                  >
-                    <Boxes className="h-3.5 w-3.5 shrink-0" />
-                    <span>Retirada Pigma</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
