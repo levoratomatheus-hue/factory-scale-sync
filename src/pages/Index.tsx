@@ -33,6 +33,7 @@ const AbrirOS                 = lazy(() => import('./AbrirOS'));
 const PainelManutencao        = lazy(() => import('./PainelManutencao'));
 const PainelAnaliseManutencao   = lazy(() => import('./PainelAnaliseManutencao'));
 const FerramentasManutencao     = lazy(() => import('./FerramentasManutencao'));
+const PreventivasManutencao     = lazy(() => import('./PreventivasManutencao'));
 const HistoricoParadas          = lazy(() => import('./HistoricoParadas'));
 const ConsumoMP                 = lazy(() => import('./ConsumoMP'));
 const ComprasConsumo            = lazy(() => import('./ComprasConsumo'));
@@ -77,7 +78,7 @@ type TabGestorId =
   | 'consulta_formula'
   | 'consulta_producao_produto'
   | 'comercial'
-  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao'
+  | 'painel_manutencao' | 'cadastro_equipamentos' | 'abrir_os' | 'analise_manutencao' | 'estoque_manutencao' | 'ferramentas_manutencao' | 'preventivas_manutencao'
   | 'historico_paradas'
   | 'consumo_mp'
   | 'compras_consumo' | 'compras_media_mensal'
@@ -161,6 +162,7 @@ const gruposGestor = [
 const manutencaoItems = [
   { id: 'painel_manutencao'       as TabGestorId, label: 'Painel de Manutenção',    icon: Wrench    },
   { id: 'analise_manutencao'      as TabGestorId, label: 'Análise de Manutenção',   icon: BarChart2 },
+  { id: 'preventivas_manutencao'  as TabGestorId, label: 'Preventivas',             icon: CalendarDays },
   { id: 'cadastro_equipamentos'   as TabGestorId, label: 'Equipamentos',            icon: Settings  },
   { id: 'abrir_os'                as TabGestorId, label: 'Abrir OS',                icon: PlusCircle },
   { id: 'estoque_manutencao'      as TabGestorId, label: 'Estoque',                 icon: Package   },
@@ -177,6 +179,7 @@ const ALL_TAB_LABELS = new Map<TabGestorId, string>([
   ['consumo_mp' as TabGestorId, 'Consumo de MP'],
   ['compras_consumo' as TabGestorId, 'Consumo de MP'],
   ['compras_media_mensal' as TabGestorId, 'Consumo Médio Mensal'],
+  ['preventivas_manutencao' as TabGestorId, 'Preventivas'],
   ['reaproveitamento' as TabGestorId, 'Reaproveitamento'],
   ['analise_reaproveitamento' as TabGestorId, 'Análise de Reaproveitamento'],
   ['mp_testadas' as TabGestorId, 'Controle de MP Testada'],
@@ -220,7 +223,7 @@ const KEEP_ALIVE_TABS = new Set<TabGestorId>([
   'analises', 'comercial',
   'balanca1', 'balanca2', 'mistura',
   'linha1', 'linha2', 'linha3', 'linha4', 'linha5',
-  'painel_manutencao', 'analise_manutencao', 'cadastro_equipamentos',
+  'painel_manutencao', 'analise_manutencao', 'preventivas_manutencao', 'cadastro_equipamentos',
   'estoque_manutencao',
   'consumo_mp',
   'compras_consumo', 'compras_media_mensal',
@@ -447,6 +450,17 @@ export default function Index() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
+                      isActive={activeTab === 'preventivas_manutencao'}
+                      tooltip="Preventivas"
+                      onClick={() => goToTab('preventivas_manutencao')}
+                      size="sm"
+                    >
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <span>Preventivas</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
                       isActive={activeTab === 'abrir_os'}
                       tooltip="Abrir OS"
                       onClick={() => goToTab('abrir_os')}
@@ -500,6 +514,8 @@ export default function Index() {
                   ? <AbrirOS perfilNome={perfil.nome} onSuccess={() => goToTab('painel_manutencao')} />
                   : activeTab === 'ferramentas_manutencao'
                   ? <FerramentasManutencao papel={perfil.papel} perfilNome={perfil.nome} />
+                  : activeTab === 'preventivas_manutencao'
+                  ? <PreventivasManutencao />
                   : <PainelManutencao papel={perfil.papel} perfilId={perfil.id} perfilNome={perfil.nome} />}
               </Suspense>
             </ErrorBoundary>
@@ -1404,6 +1420,11 @@ export default function Index() {
               {mountedTabs.has('analise_manutencao') && (
                 <KeepAlive active={activeTab === 'analise_manutencao'}>
                   <Suspense fallback={TAB_LOADING}><PainelAnaliseManutencao /></Suspense>
+                </KeepAlive>
+              )}
+              {mountedTabs.has('preventivas_manutencao') && (
+                <KeepAlive active={activeTab === 'preventivas_manutencao'}>
+                  <Suspense fallback={TAB_LOADING}><PreventivasManutencao /></Suspense>
                 </KeepAlive>
               )}
               {mountedTabs.has('cadastro_equipamentos') && (
