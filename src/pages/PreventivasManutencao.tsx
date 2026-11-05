@@ -10,7 +10,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Loader2, Wrench, ChevronDown, CalendarClock, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Wrench, ChevronDown, X } from "lucide-react";
 
 type Equipamento = { id: string; nome: string; tag: string | null; linha: number | null; setor: string | null; status: string | null; tem_preventiva: boolean };
 
@@ -47,13 +47,23 @@ function fmt(iso: string | null): string {
 }
 
 function statusInfo(proxima: string | null) {
-  if (!proxima) return { label: "Sem data", vencida: false, cls: "bg-muted text-muted-foreground" };
+  if (!proxima) return { tipo: "sem" as const, label: "Sem data", dot: "bg-muted-foreground", text: "text-muted-foreground" };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const p = new Date(proxima + "T00:00:00");
   const dias = Math.floor((p.getTime() - hoje.getTime()) / 86400000);
-  if (dias < 0) return { label: `Vencida há ${Math.abs(dias)}d`, vencida: true, cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" };
-  if (dias <= 7) return { label: dias === 0 ? "Vence hoje" : `Vence em ${dias}d`, vencida: dias === 0, cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" };
-  return { label: `Em dia (${dias}d)`, vencida: false, cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" };
+  if (dias < 0) return { tipo: "vencida" as const, label: `Vencida há ${Math.abs(dias)}d`, dot: "bg-red-500", text: "text-red-600 dark:text-red-400" };
+  if (dias <= 7) return { tipo: "avencer" as const, label: dias === 0 ? "Vence hoje" : `Vence em ${dias}d`, dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" };
+  return { tipo: "emdia" as const, label: "Em dia", dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" };
+}
+
+function resumoStatus(itens: Preventiva[]) {
+  let vencidas = 0, avencer = 0;
+  itens.forEach((p) => {
+    const t = statusInfo(p.proxima_execucao).tipo;
+    if (t === "vencida") vencidas++;
+    else if (t === "avencer") avencer++;
+  });
+  return { vencidas, avencer };
 }
 
 const emptyForm = {
@@ -215,61 +225,71 @@ export default function PreventivasManutencao() {
       </div>
 
       {enrolled.length === 0 ? (
-        <div className="text-center text-muted-foreground py-16 border rounded-xl">
-          Nenhum equipamento nas preventivas. Clique em "Adicionar equipamento" para começar.
+        <div className="text-center text-muted-foreground py-16 border rounded-xl text-sm">
+          Nenhum equipamento nas preventivas. Clique em <span className="font-medium text-foreground">"Adicionar equipamento"</span> para começar.
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {enrolled.map((equip) => {
             const itens = planosPorEquip[equip.id] ?? [];
             const aberto = expandido[equip.id] ?? true;
-            const temVencida = itens.some((p) => statusInfo(p.proxima_execucao).vencida);
+            const resumo = resumoStatus(itens);
+            const accent = resumo.vencidas > 0 ? "border-l-red-500" : resumo.avencer > 0 ? "border-l-amber-500" : itens.length ? "border-l-emerald-500" : "border-l-transparent";
+            const meta = [equip.tag, equip.linha ? `Linha ${equip.linha}` : null, equip.setor].filter(Boolean).join(" · ");
             return (
-              <div key={equip.id} className="border rounded-xl overflow-hidden">
-                <div className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-muted/40">
-                  <button onClick={() => setExpandido((s) => ({ ...s, [equip.id]: !aberto }))} className="flex items-center gap-2 min-w-0 text-left hover:opacity-80">
-                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${aberto ? "" : "-rotate-90"}`} />
-                    <span className="font-semibold truncate">{labelEquip(equip)}</span>
-                    {temVencida && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white shrink-0">VENCIDA</span>}
+              <div key={equip.id} className={`rounded-lg border border-l-[3px] ${accent} bg-card overflow-hidden`}>
+                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                  <button onClick={() => setExpandido((s) => ({ ...s, [equip.id]: !aberto }))} className="flex items-center gap-2.5 min-w-0 text-left">
+                    <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${aberto ? "" : "-rotate-90"}`} />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm leading-tight truncate">{equip.nome}</div>
+                      {meta && <div className="text-[11px] text-muted-foreground truncate">{meta}</div>}
+                    </div>
                   </button>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-muted-foreground">{itens.length} manutenç{itens.length === 1 ? "ão" : "ões"}</span>
+                    {resumo.vencidas > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">{resumo.vencidas} vencida{resumo.vencidas > 1 ? "s" : ""}</span>}
+                    {resumo.avencer > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">{resumo.avencer} a vencer</span>}
+                    {itens.length > 0 && resumo.vencidas === 0 && resumo.avencer === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Em dia</span>}
+                    <span className="text-[11px] text-muted-foreground tabular-nums">{itens.length}</span>
                     {itens.length === 0 && (
-                      <Button variant="ghost" size="sm" title="Remover equipamento" onClick={() => removerEquipamento(equip, itens.length)}><X className="h-3.5 w-3.5 text-destructive" /></Button>
+                      <button onClick={() => removerEquipamento(equip, itens.length)} title="Remover equipamento" className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
                     )}
                   </div>
                 </div>
 
                 {aberto && (
-                  <div className="divide-y">
-                    {itens.length === 0 && (
-                      <div className="px-4 py-3 text-sm text-muted-foreground">Nenhuma manutenção ainda — adicione abaixo.</div>
-                    )}
-                    {itens.map((p) => {
+                  <div className="border-t border-border/60">
+                    {itens.length === 0 ? (
+                      <div className="px-3.5 py-2.5 text-xs text-muted-foreground">Nenhuma manutenção ainda.</div>
+                    ) : itens.map((p) => {
                       const st = statusInfo(p.proxima_execucao);
+                      const meta2 = [`a cada ${p.intervalo_valor} ${p.intervalo_unidade}`, `última ${fmt(p.ultima_execucao)}`, p.responsavel].filter(Boolean).join(" · ");
                       return (
-                        <div key={p.id} className="px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium">{p.nome}</span>
-                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                        <div key={p.id} className="group flex items-center justify-between gap-3 px-3.5 py-2 border-t border-border/40 first:border-t-0 hover:bg-muted/40">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${st.dot}`} />
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium leading-tight truncate">{p.nome}</div>
+                              <div className="text-[11px] text-muted-foreground truncate">{meta2}</div>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
-                              <CalendarClock className="h-3 w-3" />
-                              A cada {p.intervalo_valor} {p.intervalo_unidade} · última {fmt(p.ultima_execucao)} · próxima <strong className="text-foreground">{fmt(p.proxima_execucao)}</strong>
-                              {p.responsavel ? ` · ${p.responsavel}` : ""}
-                            </p>
-                            {p.tarefas && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{p.tarefas}</p>}
                           </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button variant="ghost" size="sm" onClick={() => abrirEditar(p)}><Pencil className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => setExcluir(p)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right leading-tight">
+                              <div className={`text-xs font-semibold ${st.text}`}>{st.label}</div>
+                              <div className="text-[11px] text-muted-foreground">{fmt(p.proxima_execucao)}</div>
+                            </div>
+                            <div className="flex gap-0.5 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"><Pencil className="h-3.5 w-3.5" /></button>
+                              <button onClick={() => setExcluir(p)} className="p-1.5 rounded-md hover:bg-muted text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
-                    <div className="px-4 py-2">
-                      <Button variant="outline" size="sm" onClick={() => abrirNovaManutencao(equip.id)}><Plus className="h-3.5 w-3.5 mr-1" /> Adicionar manutenção</Button>
+                    <div className="px-3.5 py-2 border-t border-border/40">
+                      <button onClick={() => abrirNovaManutencao(equip.id)} className="w-full text-xs font-medium text-muted-foreground hover:text-primary border border-dashed border-border rounded-md py-1.5 transition-colors flex items-center justify-center gap-1">
+                        <Plus className="h-3.5 w-3.5" /> Adicionar manutenção
+                      </button>
                     </div>
                   </div>
                 )}
