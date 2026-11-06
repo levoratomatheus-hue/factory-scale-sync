@@ -499,7 +499,9 @@ export default function PainelProgramacaoBalanca() {
       if (activeId === overId) return;
       const colOrdens = ordensParaBalanca(activeOrdem.balanca!);
       const oldIndex = colOrdens.findIndex((o) => o.id === activeId);
-      const newIndex = colOrdens.findIndex((o) => o.id === overId);
+      const newIndex = overId.startsWith("balanca-")
+        ? colOrdens.length - 1               // soltou na área vazia da coluna → vai pro fim
+        : colOrdens.findIndex((o) => o.id === overId);
       if (oldIndex !== -1 && newIndex !== -1) {
         await handleReorder(activeOrdem.balanca!, arrayMove(colOrdens, oldIndex, newIndex));
       }
