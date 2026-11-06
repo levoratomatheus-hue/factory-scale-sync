@@ -7,7 +7,7 @@ import { parseObsLinhaItems, formatObsLinha, parseObsItems, formatObsLine } from
 import { formatKg } from "@/lib/utils";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Printer, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ShieldCheck, Pencil, Plus, Printer, Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { gerarZplLiberacao } from "@/lib/printZpl";
@@ -589,6 +589,41 @@ export default function PainelLiberacao() {
     setMotivoReprovacao("");
   };
 
+  const voltarParaLinha = async (ordem: any) => {
+    if (!window.confirm(`Voltar a OP ${ordem.lote} para a linha? Ela sai da liberação.`)) return;
+    const regs = registrosPorOrdem[ordem.id] ?? [];
+    const ultimaData = regs.length > 0
+      ? regs.reduce((max: string, r: any) => (r.data && r.data > max ? r.data : max), regs[0].data)
+      : (ordem.data_programacao ?? new Date().toISOString().split("T")[0]);
+
+    const { error } = await supabase
+      .from("ordens")
+      .update({
+        status: "aguardando_linha",
+        data_programacao: ultimaData,
+        data_conclusao: null,
+      } as any)
+      .eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao voltar para linha", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    supabase.from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: "aguardando_liberacao",
+      status_novo: "aguardando_linha",
+    });
+
+    toast({ title: "OP voltou para a linha", description: `Reprogramada para ${ultimaData.split("-").reverse().join("/")}` });
+    setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
+    setRegistrosPorOrdem((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setQtdReal((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraInicioEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setHoraFimEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+    setProdItemsEdit((prev) => { const n = { ...prev }; delete n[ordem.id]; return n; });
+  };
+
   // Reprovar contando volume: OP conclui (não volta pra linha), kg conta no volume total
   // mas NÃO no kg/h (o tempo vira parada de problema_processo, como na reprovação normal).
   const reprovarContandoVolume = async (ordem: any) => {
@@ -1004,6 +1039,13 @@ export default function PainelLiberacao() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-1 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => voltarParaLinha(ordem)}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" /> Voltar para linha
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
