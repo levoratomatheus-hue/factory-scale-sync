@@ -401,7 +401,7 @@ export default function PainelProgramacaoBalanca() {
     let novoStatus = "";
 
     if (ordem.status === "pendente") {
-      novoStatus = "em_pesagem";
+      novoStatus = ordem.requer_mistura ? "aguardando_mistura" : "aguardando_linha";
     } else if (ordem.status === "em_pesagem") {
       novoStatus = ordem.requer_mistura ? "aguardando_mistura" : "aguardando_linha";
     }
