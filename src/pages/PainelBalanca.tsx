@@ -5,7 +5,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Eye, FlaskConical, Loader2, PauseCircle, Play, Printer, Scale } from "lucide-react";
+import { CheckCircle2, Eye, FlaskConical, Loader2, PauseCircle, Play, Printer, RefreshCw, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -54,6 +54,8 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
   const [pausarOpen, setPausarOpen] = useState(false);
   const [pausaObs, setPausaObs] = useState('');
   const [pausando, setPausando] = useState(false);
+  const [atualizando, setAtualizando] = useState(false);
+  const handleAtualizar = async () => { setAtualizando(true); await fetchOrdens(); setAtualizando(false); };
 
   const [operadores, setOperadores] = useState<{ id: string; nome: string }[]>([]);
   const [ordemParaIniciar, setOrdemParaIniciar] = useState<any>(null);
@@ -316,6 +318,12 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
 
   return (
     <div className="space-y-4 w-full pb-16">
+      <div className="flex justify-end px-1">
+        <Button size="sm" variant="outline" onClick={handleAtualizar} disabled={atualizando}>
+          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${atualizando ? "animate-spin" : ""}`} />
+          Atualizar
+        </Button>
+      </div>
       {/* Ordem atual em pesagem */}
       {emPesagem ? (
         <>
