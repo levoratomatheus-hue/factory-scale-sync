@@ -766,7 +766,7 @@ function BarrasOperadores({ rows, titulo }: { rows: RowAnalise[]; titulo: string
                 </span>
               </div>
               <p className="hidden sm:block text-[10px] text-muted-foreground mt-0.5 pl-[172px]">
-                Produção {formatKg(r.kgNominal)} kg
+                Produção {formatKg(r.kgNominal)} kg · {r.nOps} OP{r.nOps !== 1 ? 's' : ''}
               </p>
 
               {/* Mobile */}
@@ -801,7 +801,7 @@ function BarrasOperadores({ rows, titulo }: { rows: RowAnalise[]; titulo: string
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] text-muted-foreground">Produção {formatKg(r.kgNominal)} kg</p>
+                <p className="text-[10px] text-muted-foreground">Produção {formatKg(r.kgNominal)} kg · {r.nOps} OP{r.nOps !== 1 ? 's' : ''}</p>
               </div>
             </div>
           );
