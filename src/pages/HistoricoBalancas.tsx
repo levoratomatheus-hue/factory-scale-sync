@@ -1153,7 +1153,8 @@ export default function HistoricoBalancas() {
     const ops          = new Set(fechadas.map((s) => s.ordem_id).filter(Boolean));
     const totalHoras   = totalMs / 3600000;
     const kgH          = totalHoras > 0 ? totalKg / totalHoras : 0;
-    return { totalKg, totalNominal, nOps: ops.size, kgH, totalHoras };
+    const pctPesado    = totalNominal > 0 ? (totalKg / totalNominal) * 100 : 0;
+    return { totalKg, totalNominal, nOps: ops.size, kgH, totalHoras, pctPesado };
   }, [sessoes]);
 
   // ── Render ──
@@ -1278,7 +1279,7 @@ export default function HistoricoBalancas() {
       ) : (
         /* ── Visão Análises ── */
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <KpiCard
               label="Real pesado"
               value={formatKg(kpiAnalises.totalKg)}
@@ -1302,6 +1303,12 @@ export default function HistoricoBalancas() {
               value={kpiAnalises.kgH > 0 ? formatKg(kpiAnalises.kgH) : '—'}
               unit={kpiAnalises.kgH > 0 ? 'kg/h' : undefined}
               legend={`${kpiAnalises.totalHoras.toFixed(1)}h pesando total`}
+            />
+            <KpiCard
+              label="% pesado"
+              value={kpiAnalises.pctPesado > 0 ? kpiAnalises.pctPesado.toFixed(1).replace('.', ',') : '—'}
+              unit={kpiAnalises.pctPesado > 0 ? '%' : undefined}
+              legend="real pesado ÷ produção total"
             />
           </div>
 
