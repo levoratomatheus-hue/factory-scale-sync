@@ -16,6 +16,10 @@ import { ComparatorPanel } from '@/components/ComparatorPanel';
 import { verificarEstoqueOP, inferirMarcaFormula, type MpFaltante } from '@/lib/estoqueUtils';
 import { isLoteBloqueado } from '@/lib/lotesBloqueados';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface LoteDisponivel {
   lote: number;
@@ -99,6 +103,8 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [tipoOp, setTipoOp] = useState<'venda' | 'estoque'>('venda');
   const [requerMistura, setRequerMistura] = useState(true);
   const [controlaEstoque, setControlaEstoque] = useState(true);
+  const [confirmSemBaixaOpen, setConfirmSemBaixaOpen] = useState(false);
+  const [valuesSemBaixa, setValuesSemBaixa] = useState<OrdemFormValues | null>(null);
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
   const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
@@ -536,30 +542,33 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
   };
 
   const onSubmit = async (values: OrdemFormValues) => {
-    // Guard síncrono: state update é async, ref é imediato — evita double-submit
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    setSaving(true);
-
-    try {
-      if (formulaId && controlaEstoque) {
-        try {
-          const faltantes = await verificarEstoqueOP(formulaId, values.quantidade, itensSdrId);
-          if (faltantes.length > 0) {
-            setSaving(false);
-            submittingRef.current = false;
-            setMpsFaltantes(faltantes);
-            setValuesParaForcar(values);
-            return; // não cria — abre o dialog
-          }
-        } catch (e) {
-          console.error('Falha ao verificar estoque', e); // fail-open
-        }
-      }
-      await criarOrdem(values);
-    } finally {
-      submittingRef.current = false;
+    // OP sem baixa: não verifica estoque e pede confirmação antes de criar
+    if (!controlaEstoque) {
+      setValuesSemBaixa(values);
+      setConfirmSemBaixaOpen(true);
+      return;
     }
+    if (formulaId) {
+      try {
+        const faltantes = await verificarEstoqueOP(formulaId, values.quantidade);
+        if (faltantes.length > 0) {
+          setMpsFaltantes(faltantes);
+          setValuesParaForcar(values);
+          return; // não cria — abre o dialog
+        }
+      } catch (e) {
+        console.error('Falha ao verificar estoque', e); // fail-open
+      }
+    }
+    await criarOrdem(values);
+  };
+
+  const confirmarSemBaixa = async () => {
+    if (!valuesSemBaixa) return;
+    setConfirmSemBaixaOpen(false);
+    const v = valuesSemBaixa;
+    setValuesSemBaixa(null);
+    await criarOrdem(v);
   };
 
   const forcarCriacao = async () => {
@@ -697,19 +706,6 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                   </button>
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2 rounded-md border p-2.5">
-              <input
-                id="controla-estoque"
-                type="checkbox"
-                checked={!controlaEstoque}
-                onChange={(e) => setControlaEstoque(!e.target.checked)}
-                className="h-4 w-4 accent-primary"
-              />
-              <label htmlFor="controla-estoque" className="text-sm cursor-pointer">
-                Não dar baixa no estoque (amostra, teste, retrabalho)
-              </label>
             </div>
 
             {/* Fórmula */}
@@ -911,6 +907,22 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
               </div>
             </div>
 
+            <div className={`rounded-lg border-2 p-3 transition-colors ${!controlaEstoque ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-dashed border-input'}`}>
+              <label htmlFor="controla-estoque" className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  id="controla-estoque"
+                  type="checkbox"
+                  checked={!controlaEstoque}
+                  onChange={(e) => setControlaEstoque(!e.target.checked)}
+                  className="h-4 w-4 mt-0.5 accent-amber-600"
+                />
+                <span className="text-sm">
+                  <span className="font-medium">Não dar baixa no estoque</span>
+                  <span className="block text-xs text-muted-foreground">Para amostra, teste, retrabalho ou material que veio de fora. A OP não consome MP (nem na liberação).</span>
+                </span>
+              </label>
+            </div>
+
             <div className="flex justify-end">
               <Button type="submit" className="px-6 text-sm" disabled={saving}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -1047,6 +1059,23 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
           </div>
         </div>
       )}
+
+      <AlertDialog open={confirmSemBaixaOpen} onOpenChange={(o) => { if (!o) { setConfirmSemBaixaOpen(false); setValuesSemBaixa(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Criar OP sem baixar estoque?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta OP está marcada como <strong>sem baixa</strong>. Nenhuma matéria-prima será consumida do estoque (nem na liberação). Tem certeza?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={saving} onClick={async (e) => { e.preventDefault(); await confirmarSemBaixa(); }}>
+              Sim, criar sem baixa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
