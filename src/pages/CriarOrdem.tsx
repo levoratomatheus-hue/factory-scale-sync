@@ -98,6 +98,7 @@ export default function CriarOrdem({ prefillLote, onPrefillConsumed }: CriarOrde
   const [nomes, setNomes] = useState<Record<string, string>>({});
   const [tipoOp, setTipoOp] = useState<'venda' | 'estoque'>('venda');
   const [requerMistura, setRequerMistura] = useState(true);
+  const [controlaEstoque, setControlaEstoque] = useState(true);
   const [orientacoes, setOrientacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState<string>(new Date().toISOString().split("T")[0]);
   const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
@@ -474,6 +475,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
         orientacoes: orientacoes.trim() || null,
         data_emissao: dataEmissao || null,
         reaproveitamento_id: itensSdrId ?? null,
+        controla_estoque: controlaEstoque,
       } as any)
       .select()
       .single();
@@ -530,6 +532,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     setDataEmissao(new Date().toISOString().split("T")[0]);
     setItensSdrId(null); // garante que itensSdrId não vaza para a próxima OP
     setAcertosEnriquecidos([]);
+    setControlaEstoque(true);
   };
 
   const onSubmit = async (values: OrdemFormValues) => {
@@ -539,7 +542,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     setSaving(true);
 
     try {
-      if (formulaId) {
+      if (formulaId && controlaEstoque) {
         try {
           const faltantes = await verificarEstoqueOP(formulaId, values.quantidade, itensSdrId);
           if (faltantes.length > 0) {
@@ -694,6 +697,19 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-md border p-2.5">
+              <input
+                id="controla-estoque"
+                type="checkbox"
+                checked={!controlaEstoque}
+                onChange={(e) => setControlaEstoque(!e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              <label htmlFor="controla-estoque" className="text-sm cursor-pointer">
+                Não dar baixa no estoque (amostra, teste, retrabalho)
+              </label>
             </div>
 
             {/* Fórmula */}

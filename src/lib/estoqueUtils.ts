@@ -1,5 +1,14 @@
 import { supabase } from '@/integrations/supabase/client';
 
+async function opControlaEstoque(ordemId: string): Promise<boolean> {
+  const { data } = await (supabase as any)
+    .from('ordens')
+    .select('controla_estoque')
+    .eq('id', ordemId)
+    .maybeSingle();
+  return data?.controla_estoque !== false; // default: controla (true) quando null/ausente
+}
+
 // ── Helpers internos ──────────────────────────────────────────────────────────
 //
 // CÓDIGO TID + DUAS MARCAS (ZC e PG):
@@ -145,6 +154,8 @@ export async function baixarEstoqueOP(
   criadoPor?: string,
   reaproveitamentoId?: string | null,
 ): Promise<void> {
+  if (!(await opControlaEstoque(ordemId))) return;
+
   let rawItens: { cod: string | null; materia_prima: string; percentual: number }[];
 
   if (reaproveitamentoId) {
@@ -203,6 +214,8 @@ export async function ajustarEstoqueOP(
   lote: string,
   criadoPor?: string,
 ): Promise<void> {
+  if (!(await opControlaEstoque(ordemId))) return;
+
   const diferenca = qtdNova - qtdAntiga;
   if (diferenca === 0) return;
 
@@ -256,6 +269,8 @@ export async function estornarEstoqueOP(
   ordemId: string,
   criadoPor?: string,
 ): Promise<void> {
+  if (!(await opControlaEstoque(ordemId))) return;
+
   // Bug A fix: inclui ordem_lote no select para que rep.ordem_lote tenha valor ao gravar o estorno
   const { data: movimentos, error: errLeitura } = await (supabase as any)
     .from('estoque_movimentacoes')
