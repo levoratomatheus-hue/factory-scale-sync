@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, Search, AlertTriangle, PackageSearch, Copy, Info } from 'lucide-react';
+import { Save, Loader2, Search, AlertTriangle, PackageSearch, Copy, Info, Sparkles } from 'lucide-react';
 import { useFormula } from '@/hooks/useFormula';
 import { formatKg, cn } from '@/lib/utils';
 import { compararFormulas, type ResultadoComparacao } from '@/lib/compararFormulas';
@@ -585,6 +585,27 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
     }
   };
 
+  const sugerirMistura = () => {
+    const novasMistura: { qty: string; mp: string }[] = [];
+    const novosItens = itens.map((it) => {
+      const kg = it.quantidade_kg ?? 0;
+      if (kg >= 25) {
+        const blocos = Math.floor(kg / 25);
+        const resto = parseFloat((kg - blocos * 25).toFixed(3));
+        novasMistura.push({ qty: String(blocos), mp: (it.materia_prima ?? '').toUpperCase() });
+        return { ...it, quantidade_kg: resto };
+      }
+      return it;
+    });
+    // CARGA PESADA sempre no final
+    novasMistura.push({ qty: '1', mp: 'CARGA PESADA' });
+    const rows = [...novasMistura];
+    while (rows.length < 4) rows.push({ qty: '', mp: '' });
+    setItens(novosItens);
+    setObsItems(rows);
+    toast({ title: 'Mistura sugerida' });
+  };
+
   const lotesFiltrados = lotesDisponiveis.filter((l) =>
     !buscaLote.trim() ||
     l.produto.toLowerCase().includes(buscaLote.toLowerCase()) ||
@@ -890,6 +911,18 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
             {/* Adições para mistura */}
             <div>
               <label className="text-xs font-medium">Adições para Mistura</label>
+              <div className="flex justify-end mb-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={sugerirMistura}
+                  className="gap-1.5 rounded-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Sugerir mistura
+                </Button>
+              </div>
               <div className="mt-0.5 space-y-px">
                 {obsItems.map((row, i) => (
                   <div key={i} className="flex gap-1 items-center">
