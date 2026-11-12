@@ -162,9 +162,21 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
   // Etapa 2 — form inline de conclusão
   const [horaFim, setHoraFim] = useState("");
+  const [hhFim, setHhFim] = useState("");
+  const [mmFim, setMmFim] = useState("");
   const [prodItems, setProdItems] = useState([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [obsLinha, setObsLinha] = useState("");
   const [savingDia, setSavingDia] = useState(false);
+
+  useEffect(() => {
+    const h = parseInt(hhFim, 10);
+    const m = parseInt(mmFim, 10);
+    if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      setHoraFim(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    } else {
+      setHoraFim('');
+    }
+  }, [hhFim, mmFim]);
 
   // Temperaturas de Processo
   const [tempOpen, setTempOpen] = useState(false);
@@ -197,7 +209,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   useEffect(() => {
     setHhInicio("");
     setMmInicio("");
-    setHoraFim("");
+    setHhFim("");
+    setMmFim("");
     setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
     setObsLinha("");
     const t = emLinha?.temperaturas as Record<string, number | null> | null | undefined;
@@ -375,7 +388,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
     ));
 
     setSavingDia(false);
-    setHoraFim("");
+    setHhFim("");
+    setMmFim("");
     setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
     setObsLinha("");
     await Promise.all([fetchRegistros(), fetchOrdens()]);
@@ -715,12 +729,19 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               {/* Hora fim */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Hora Fim</label>
-                <input
-                  type="time"
-                  value={horaFim}
-                  onChange={(e) => setHoraFim(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <div className="flex items-center justify-center gap-2">
+                  <input
+                    type="text" inputMode="numeric" maxLength={2} placeholder="HH"
+                    value={hhFim} onChange={(e) => setHhFim(e.target.value)}
+                    className="w-24 rounded-md border-2 border-input bg-background py-4 text-4xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-4xl font-bold text-muted-foreground">:</span>
+                  <input
+                    type="text" inputMode="numeric" maxLength={2} placeholder="MM"
+                    value={mmFim} onChange={(e) => setMmFim(e.target.value)}
+                    className="w-24 rounded-md border-2 border-input bg-background py-4 text-4xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
               </div>
 
               {/* Registro de produção */}
