@@ -514,7 +514,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   }
 
   return (
-    <div className="space-y-4 w-full pb-16">
+    <div className="space-y-2.5 w-full pb-16">
 
       {/* Ordem atual em linha */}
       {emLinha ? (
@@ -544,13 +544,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             </div>
           </div>
 
-          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-line/40 p-3 sm:p-6 space-y-4">
+          <div className="max-w-2xl mx-auto w-full bg-card rounded-xl border-2 border-status-line/40 p-3 sm:p-4 space-y-2.5">
             <div className="flex items-baseline gap-3 flex-wrap">
               <div className="text-xl font-bold leading-tight">{emLinha.produto}</div>
               <MarcaBadge marca={emLinha.marca} />
             </div>
 
-          <div className="text-4xl font-extrabold text-primary">
+          <div className="text-3xl font-extrabold text-primary">
             {formatKg(emLinha.quantidade)}{" "}
             <span className="text-lg font-semibold text-muted-foreground">kg</span>
           </div>
@@ -569,7 +569,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           )}
 
           {emLinha.motivo_reprovacao && (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 space-y-1">
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 space-y-1">
               <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">✖ Reprovada anteriormente</p>
               <p className="text-sm text-red-900 whitespace-pre-wrap">{emLinha.motivo_reprovacao}</p>
             </div>
@@ -578,7 +578,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           {emLinha.obs && (() => {
             const items = parseObsItems(emLinha.obs);
             return (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
                 <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">⚠ Adições para Mistura</p>
                 {items ? (
                   <ul className="space-y-0.5">
@@ -596,7 +596,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           {(emLinha as any).obs_carga_extra && (() => {
             const items = parseObsItems((emLinha as any).obs_carga_extra);
             return (
-              <div className="rounded-md border border-orange-200 bg-orange-50 px-4 py-3 space-y-1">
+              <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 space-y-1">
                 <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">⚠ Mistura para carga extra</p>
                 {items ? (
                   <ul className="space-y-0.5">
@@ -612,7 +612,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           })()}
 
           {emLinha.orientacoes && (
-            <div className="rounded-lg border-2 border-green-700 bg-green-600 px-4 py-3 space-y-2 shadow-md">
+            <div className="rounded-lg border-2 border-green-700 bg-green-600 px-3 py-2 space-y-2 shadow-md">
               <p className="text-sm font-extrabold text-white uppercase tracking-widest">📋 ORIENTAÇÕES DE PRODUÇÃO</p>
               <p className="text-base font-bold text-white whitespace-pre-wrap">{emLinha.orientacoes}</p>
             </div>
@@ -628,20 +628,20 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           {itens.length > 0 && (
             <div className="space-y-2">
               <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-base">
+                <table className="w-full text-sm">
                   <thead className="bg-muted text-muted-foreground text-sm">
                     <tr>
-                      <th className="text-left px-3 py-2">Seq</th>
-                      <th className="text-left px-3 py-2">Matéria-Prima</th>
-                      <th className="text-right px-3 py-2">Qtd (kg)</th>
+                      <th className="text-left px-3 py-1.5">Seq</th>
+                      <th className="text-left px-3 py-1.5">Matéria-Prima</th>
+                      <th className="text-right px-3 py-1.5">Qtd (kg)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itens.map((item) => (
                       <tr key={item.id} className="border-t">
-                        <td className="px-3 py-2 text-muted-foreground">{item.sequencia ?? "-"}</td>
-                        <td className="px-3 py-2 font-medium">{item.materia_prima}</td>
-                        <td className="px-3 py-2 text-right font-bold text-lg">{formatKg(item.quantidade_kg)}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{item.sequencia ?? "-"}</td>
+                        <td className="px-3 py-1.5 font-medium">{item.materia_prima}</td>
+                        <td className="px-3 py-1.5 text-right font-bold text-base">{formatKg(item.quantidade_kg)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -664,7 +664,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               <ChevronDown className={`h-4 w-4 transition-transform ${tempOpen ? "rotate-180" : ""}`} />
             </button>
             {tempOpen && (
-              <div className="px-4 pb-4 pt-1 space-y-3 border-t border-blue-200">
+              <div className="px-4 pb-3 pt-1 space-y-2 border-t border-blue-200">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                   {(["zona1", "zona2", "zona3", "zona9", "zona10", "zona12"] as const).map((z) => (
                     <div key={z} className="space-y-1">
@@ -692,7 +692,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
           {/* ── Etapa 1: registrar hora início ── */}
           {!emLinha.hora_inicio && (
-            <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
+            <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-3 space-y-2">
               <p className="text-sm font-semibold text-primary">Registre o início da produção</p>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Hora Início</label>
@@ -700,13 +700,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   <input
                     type="text" inputMode="numeric" maxLength={2} placeholder="HH"
                     value={hhInicio} onChange={(e) => setHhInicio(e.target.value)}
-                    className="w-24 rounded-md border-2 border-input bg-background py-4 text-4xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-20 rounded-md border-2 border-input bg-background py-3 text-3xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
                   />
-                  <span className="text-4xl font-bold text-muted-foreground">:</span>
+                  <span className="text-3xl font-bold text-muted-foreground">:</span>
                   <input
                     type="text" inputMode="numeric" maxLength={2} placeholder="MM"
                     value={mmInicio} onChange={(e) => setMmInicio(e.target.value)}
-                    className="w-24 rounded-md border-2 border-input bg-background py-4 text-4xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-20 rounded-md border-2 border-input bg-background py-3 text-3xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
@@ -733,13 +733,13 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   <input
                     type="text" inputMode="numeric" maxLength={2} placeholder="HH"
                     value={hhFim} onChange={(e) => setHhFim(e.target.value)}
-                    className="w-24 rounded-md border-2 border-input bg-background py-4 text-4xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-20 rounded-md border-2 border-input bg-background py-3 text-3xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
                   />
-                  <span className="text-4xl font-bold text-muted-foreground">:</span>
+                  <span className="text-3xl font-bold text-muted-foreground">:</span>
                   <input
                     type="text" inputMode="numeric" maxLength={2} placeholder="MM"
                     value={mmFim} onChange={(e) => setMmFim(e.target.value)}
-                    className="w-24 rounded-md border-2 border-input bg-background py-4 text-4xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-20 rounded-md border-2 border-input bg-background py-3 text-3xl text-center font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
