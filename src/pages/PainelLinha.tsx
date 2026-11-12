@@ -240,9 +240,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       });
     }
 
-    const emLinhaFiltradas = (emLinhaData ?? []).filter(
-      (o: any) => o.hora_inicio !== null || !hasRegHoje.has(o.id)
-    );
+    const emLinhaFiltradas = (emLinhaData ?? []);
 
     const combinadas = [...emLinhaFiltradas, ...(aguardandoData ?? [])];
     const ordenadas = [...combinadas].sort((a: any, b: any) => {
