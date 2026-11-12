@@ -290,7 +290,12 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   }, []);
 
   const salvarInicio = async () => {
-    if (!emLinha || !horaInicioInput) {
+    if (!emLinha) return;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(horaInicioInput)) {
+      toast({ title: "Hora inválida", description: "Use HH:MM (ex.: 08:30)", variant: "destructive" });
+      return;
+    }
+    if (false) {
       toast({ title: "Informe a hora de início", variant: "destructive" });
       return;
     }
@@ -683,10 +688,16 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Hora Início</label>
                 <input
-                  type="time"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="HH:MM"
+                  maxLength={5}
                   value={horaInicioInput}
-                  onChange={(e) => setHoraInicioInput(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  onChange={(e) => {
+                    const d = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setHoraInicioInput(d.length <= 2 ? d : d.slice(0, 2) + ':' + d.slice(2));
+                  }}
+                  className="w-full rounded-md border border-input bg-background px-3 py-4 sm:py-2 text-2xl sm:text-base text-center font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <Button
