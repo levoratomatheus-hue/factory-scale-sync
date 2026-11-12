@@ -180,6 +180,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
   // Temperaturas de Processo
   const [tempOpen, setTempOpen] = useState(false);
+  const [formulaOpen, setFormulaOpen] = useState(false);
   const [tempValues, setTempValues] = useState({ zona1: "", zona2: "", zona3: "", zona9: "", zona10: "", zona12: "" });
   const [savingTemp, setSavingTemp] = useState(false);
 
@@ -626,27 +627,40 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           )}
 
           {itens.length > 0 && (
-            <div className="space-y-2">
-              <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted text-muted-foreground text-sm">
-                    <tr>
-                      <th className="text-left px-3 py-1.5">Seq</th>
-                      <th className="text-left px-3 py-1.5">Matéria-Prima</th>
-                      <th className="text-right px-3 py-1.5">Qtd (kg)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itens.map((item) => (
-                      <tr key={item.id} className="border-t">
-                        <td className="px-3 py-1.5 text-muted-foreground">{item.sequencia ?? "-"}</td>
-                        <td className="px-3 py-1.5 font-medium">{item.materia_prima}</td>
-                        <td className="px-3 py-1.5 text-right font-bold text-base">{formatKg(item.quantidade_kg)}</td>
+            <div className="rounded-md border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setFormulaOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold hover:bg-muted/60 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Fórmula de pesagem ({itens.length} {itens.length === 1 ? "item" : "itens"})
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${formulaOpen ? "rotate-180" : ""}`} />
+              </button>
+              {formulaOpen && (
+                <div className="overflow-x-auto border-t">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted text-muted-foreground text-sm">
+                      <tr>
+                        <th className="text-left px-3 py-1.5">Seq</th>
+                        <th className="text-left px-3 py-1.5">Matéria-Prima</th>
+                        <th className="text-right px-3 py-1.5">Qtd (kg)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {itens.map((item) => (
+                        <tr key={item.id} className="border-t">
+                          <td className="px-3 py-1.5 text-muted-foreground">{item.sequencia ?? "-"}</td>
+                          <td className="px-3 py-1.5 font-medium">{item.materia_prima}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-base">{formatKg(item.quantidade_kg)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
