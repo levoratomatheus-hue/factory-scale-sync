@@ -156,7 +156,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [kgHoje, setKgHoje] = useState<Record<string, number>>({});
 
   // Etapa 1 — registrar hora início
-  const [horaDigits, setHoraDigits] = useState("");
+  const [horaInicioInput, setHoraInicioInput] = useState("");
   const [savingInicio, setSavingInicio] = useState(false);
 
   // Etapa 2 — form inline de conclusão
@@ -194,7 +194,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
   // Reset inline form when order changes
   useEffect(() => {
-    setHoraDigits("");
+    setHoraInicioInput("");
     setHoraFim("");
     setProdItems([{ qty: "", peso: "" }, { qty: "", peso: "" }]);
     setObsLinha("");
@@ -291,17 +291,18 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
   const salvarInicio = async () => {
     if (!emLinha) return;
-    if (horaDigits.length !== 4) {
-      toast({ title: "Hora incompleta", description: "Toque HH e MM (4 dígitos).", variant: "destructive" });
+    const d = horaInicioInput.replace(/\D/g, '');
+    if (d.length < 3 || d.length > 4) {
+      toast({ title: "Hora inválida", description: "Digite a hora, ex.: 0830", variant: "destructive" });
       return;
     }
-    const h = parseInt(horaDigits.slice(0, 2), 10);
-    const m = parseInt(horaDigits.slice(2), 10);
+    const h = parseInt(d.length === 4 ? d.slice(0, 2) : d.slice(0, 1), 10);
+    const m = parseInt(d.length === 4 ? d.slice(2) : d.slice(1), 10);
     if (h > 23 || m > 59) {
       toast({ title: "Hora inválida", description: "Hora 00–23 e minuto 00–59.", variant: "destructive" });
       return;
     }
-    const hora = `${horaDigits.slice(0, 2)}:${horaDigits.slice(2)}`;
+    const hora = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     setSavingInicio(true);
     const { error } = await supabase.from("ordens").update({ hora_inicio: hora } as any).eq("id", emLinha.id);
     setSavingInicio(false);
@@ -682,38 +683,24 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
           {!emLinha.hora_inicio && (
             <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
               <p className="text-sm font-semibold text-primary">Registre o início da produção</p>
-
-              <div className="text-5xl font-mono text-center tabular-nums tracking-[0.15em] py-1 select-none">
-                {horaDigits.slice(0, 2).padEnd(2, '–')}:{horaDigits.slice(2).padEnd(2, '–')}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Hora Início</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="ex.: 0830"
+                  value={horaInicioInput}
+                  onChange={(e) => setHoraInicioInput(e.target.value)}
+                  onBlur={() => {
+                    const d = horaInicioInput.replace(/\D/g, '');
+                    if (d.length === 4) setHoraInicioInput(`${d.slice(0, 2)}:${d.slice(2)}`);
+                    else if (d.length === 3) setHoraInicioInput(`0${d[0]}:${d.slice(1)}`);
+                  }}
+                  className="w-full rounded-md border-2 border-input bg-background px-3 py-4 text-3xl text-center font-mono tabular-nums tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">Digite os 4 números (ex.: 0830 = 08:30).</p>
               </div>
-
-              <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
-                {['1','2','3','4','5','6','7','8','9'].map((n) => (
-                  <button key={n} type="button"
-                    onClick={() => setHoraDigits((d) => d.length < 4 ? d + n : d)}
-                    className="h-16 rounded-lg border bg-background text-3xl font-semibold active:bg-muted transition-colors">
-                    {n}
-                  </button>
-                ))}
-                <button type="button" onClick={() => setHoraDigits('')}
-                  className="h-16 rounded-lg border bg-background text-sm font-medium text-muted-foreground active:bg-muted">
-                  Limpar
-                </button>
-                <button type="button" onClick={() => setHoraDigits((d) => d.length < 4 ? d + '0' : d)}
-                  className="h-16 rounded-lg border bg-background text-3xl font-semibold active:bg-muted transition-colors">
-                  0
-                </button>
-                <button type="button" onClick={() => setHoraDigits((d) => d.slice(0, -1))}
-                  className="h-16 rounded-lg border bg-background text-2xl active:bg-muted">
-                  ⌫
-                </button>
-              </div>
-
-              <Button
-                disabled={horaDigits.length !== 4 || savingInicio}
-                onClick={salvarInicio}
-                className="w-full min-h-[44px] text-base"
-              >
+              <Button disabled={!horaInicioInput || savingInicio} onClick={salvarInicio} className="w-full min-h-[44px] text-base">
                 {savingInicio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar Início
               </Button>
