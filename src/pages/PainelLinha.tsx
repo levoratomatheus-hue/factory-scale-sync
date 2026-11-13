@@ -276,7 +276,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       .channel(`linha-${linha}-realtime`)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens", filter: `linha=eq.${linha}` }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdens(), 600);
+        debounceTimer = setTimeout(() => fetchOrdens(), 1500);
       })
       .subscribe();
     return () => {

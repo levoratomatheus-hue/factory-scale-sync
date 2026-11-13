@@ -33,7 +33,7 @@ export function useOrdens(date?: string) {
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchOrdensRef.current(), 600);
+        debounceTimer = setTimeout(() => fetchOrdensRef.current(), 1500);
       })
       .subscribe();
     return () => {
@@ -133,7 +133,7 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
       .channel(`historico-realtime-${dataInicio ?? "all"}-${dataFim ?? ""}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "ordens" }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchHistoricoRef.current(), 800);
+        debounceTimer = setTimeout(() => fetchHistoricoRef.current(), 1500);
       })
       .subscribe();
     return () => {
@@ -224,7 +224,7 @@ export function useParadasLinha(linha: number, data: string) {
       .channel(`paradas-linha-${linha}-${data}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "paradas", filter: `linha=eq.${linha}` }, () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchParadasRef.current(), 800);
+        debounceRef.current = setTimeout(() => fetchParadasRef.current(), 1500);
       })
       .subscribe();
     return () => {
@@ -293,7 +293,7 @@ export function useRegistrosDiariosOrdem(ordemId: string | null) {
       .channel(`reg-diarios-${ordemId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "registros_diarios", filter: `ordem_id=eq.${ordemId}` }, () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => fetchRegistrosRef.current(), 800);
+        debounceTimer = setTimeout(() => fetchRegistrosRef.current(), 1500);
       })
       .subscribe();
     return () => {
