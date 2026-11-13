@@ -802,7 +802,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                 />
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
+              <div className="flex flex-col sm:flex-row sm:justify-between items-stretch gap-4 sm:gap-10 pt-1">
                 <Button
                   variant="outline"
                   disabled={savingDia}
