@@ -249,7 +249,7 @@ export function useParadasAnalises(dataInicio: string | null, dataFim: string | 
     while (true) {
       const { data, error } = await supabase
         .from("paradas")
-        .select("linha, data, motivo, hora_inicio, hora_fim")
+        .select("linha, data, motivo, hora_inicio, hora_fim, ordem_id")
         .gte("data", dataInicio)
         .lte("data", dataFim)
         .range(from, from + PAGE - 1);

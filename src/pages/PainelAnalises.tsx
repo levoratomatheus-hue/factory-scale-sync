@@ -442,7 +442,11 @@ export default function PainelAnalises() {
       const h = parseHoras(r.hora_inicio, r.hora_fim);
       if (h !== null) {
         const paradasDoDia = (paradasIdx.get(`${linhaNum}-${r.data}`) ?? []);
-        const paradasSobrepostas = paradasDoDia.filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio));
+        const paradasSobrepostas = paradasDoDia.filter((p: any) =>
+          p.ordem_id
+            ? p.ordem_id === r.ordem_id
+            : (toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+        );
         const horasParadas = paradasSobrepostas.reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
         hMap[r.ordem_id] = (hMap[r.ordem_id] || 0) + Math.max(0, h - horasParadas);
       }
@@ -672,7 +676,11 @@ export default function PainelAnalises() {
           const h = parseHoras(r.hora_inicio, r.hora_fim);
           if (h === null) return s;
           const hp = (paradasIdx.get(`${linha}-${r.data}`) ?? [])
-            .filter((p: any) => toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+            .filter((p: any) =>
+              p.ordem_id
+                ? p.ordem_id === r.ordem_id
+                : (toH(p.hora_inicio) < toH(r.hora_fim) && toH(p.hora_fim) > toH(r.hora_inicio))
+            )
             .reduce((acc: number, p: any) => acc + Math.min(toH(p.hora_fim), toH(r.hora_fim)) - Math.max(toH(p.hora_inicio), toH(r.hora_inicio)), 0);
           return s + Math.max(0, h - hp);
         }, 0);

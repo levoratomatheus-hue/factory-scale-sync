@@ -540,6 +540,7 @@ export default function PainelLiberacao() {
           motivo: "problema_processo",
           hora_inicio: r.hora_inicio,
           hora_fim: r.hora_fim,
+          ordem_id: ordem.id,
         }));
       if (paradasPayload.length > 0) {
         await (supabase as any).from("paradas").insert(paradasPayload);
@@ -639,6 +640,7 @@ export default function PainelLiberacao() {
           motivo: "problema_processo",
           hora_inicio: r.hora_inicio,
           hora_fim: r.hora_fim,
+          ordem_id: ordem.id,
         }));
       if (paradasPayload.length > 0) {
         await (supabase as any).from("paradas").insert(paradasPayload);
