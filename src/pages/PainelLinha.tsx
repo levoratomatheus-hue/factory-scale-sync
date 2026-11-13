@@ -8,7 +8,7 @@ import { proximoDiaUtil } from "@/lib/diasUteis";
 import { avancarOPNaFrenteDoDia } from "@/lib/recalcularPosicoes";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -304,6 +304,24 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
     setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "em_linha" } : o));
   }, []);
+
+  const voltarInicioLinha = async (ordem: any) => {
+    const { error } = await supabase
+      .from("ordens")
+      .update({ status: "aguardando_linha" } as any)
+      .eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao voltar", description: error.message, variant: "destructive" });
+      return;
+    }
+    supabase.from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: "em_linha",
+      status_novo: "aguardando_linha",
+    });
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "aguardando_linha" } : o));
+    toast({ title: "OP voltou para a fila da linha" });
+  };
 
   const salvarInicio = async () => {
     if (!emLinha) return;
@@ -724,10 +742,21 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                   />
                 </div>
               </div>
-              <Button disabled={!hhInicio || !mmInicio || savingInicio} onClick={salvarInicio} className="w-full min-h-[44px] text-base">
-                {savingInicio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar Início
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => voltarInicioLinha(emLinha)}
+                  className="min-h-[44px] sm:min-h-0 sm:h-8 text-sm"
+                >
+                  <ArrowLeft className="mr-1 h-4 w-4" />
+                  Voltar
+                </Button>
+                <Button disabled={!hhInicio || !mmInicio || savingInicio} onClick={salvarInicio} className="flex-1 min-h-[44px] text-base">
+                  {savingInicio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Início
+                </Button>
+              </div>
             </div>
           )}
 
