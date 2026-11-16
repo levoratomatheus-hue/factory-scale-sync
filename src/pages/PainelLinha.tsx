@@ -8,7 +8,7 @@ import { proximoDiaUtil } from "@/lib/diasUteis";
 import { avancarOPNaFrenteDoDia } from "@/lib/recalcularPosicoes";
 import { MarcaBadge } from "@/components/MarcaBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowLeft, CalendarCheck2, CheckCircle2, ChevronDown, ClipboardList, Loader2, Factory, Layers, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarCheck2, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Loader2, Factory, Layers, PauseCircle, Play, Thermometer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -183,6 +183,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [formulaOpen, setFormulaOpen] = useState(false);
   const [tempValues, setTempValues] = useState({ zona1: "", zona2: "", zona3: "", zona9: "", zona10: "", zona12: "" });
   const [savingTemp, setSavingTemp] = useState(false);
+
+  const [opExpandida, setOpExpandida] = useState(true);
 
   const [ordemFormula, setOrdemFormula] = useState<any | null>(null);
   const handleVerFormula = useCallback((o: any) => setOrdemFormula(o), []);
@@ -567,6 +569,14 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             <div className="flex items-baseline gap-3 flex-wrap">
               <div className="text-xl font-bold leading-tight">{emLinha.produto}</div>
               <MarcaBadge marca={emLinha.marca} />
+              <button
+                type="button"
+                onClick={() => setOpExpandida((v) => !v)}
+                className="ml-auto flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground rounded-md border px-2 py-1 transition-colors shrink-0"
+              >
+                {opExpandida ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                {opExpandida ? "Minimizar" : "Expandir"}
+              </button>
             </div>
 
           <div className="text-3xl font-extrabold text-primary">
@@ -587,6 +597,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
             </div>
           )}
 
+          {opExpandida && (
+          <>
           {emLinha.motivo_reprovacao && (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 space-y-1">
               <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">✖ Reprovada anteriormente</p>
@@ -899,6 +911,9 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                 );
               })}
             </div>
+          )}
+
+          </>
           )}
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
