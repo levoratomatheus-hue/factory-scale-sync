@@ -181,7 +181,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   // Temperaturas de Processo
   const [tempOpen, setTempOpen] = useState(false);
   const [formulaOpen, setFormulaOpen] = useState(false);
-  const [tempValues, setTempValues] = useState({ zona1: "", zona2: "", zona3: "", zona9: "", zona10: "", zona12: "" });
+  const [tempValues, setTempValues] = useState({ zona1: "", zona2: "", zona3: "", zona9: "", zona10: "", zona12: "", rpm: "" });
   const [savingTemp, setSavingTemp] = useState(false);
 
   const [opExpandida, setOpExpandida] = useState(true);
@@ -224,6 +224,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       zona9: t?.zona9 != null ? String(t.zona9) : "",
       zona10: t?.zona10 != null ? String(t.zona10) : "",
       zona12: t?.zona12 != null ? String(t.zona12) : "",
+      rpm: t?.rpm != null ? String(t.rpm) : "",
     });
   }, [emLinha?.id]);
 
@@ -353,6 +354,7 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
       zona9: parse(tempValues.zona9),
       zona10: parse(tempValues.zona10),
       zona12: parse(tempValues.zona12),
+      rpm: parse(tempValues.rpm),
     };
     const { error } = await (supabase as any).from("ordens").update({ temperaturas: payload }).eq("id", emLinha.id);
     setSavingTemp(false);
@@ -725,6 +727,17 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                       />
                     </div>
                   ))}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-blue-700">RPM da rosca</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={tempValues.rpm}
+                    onChange={(e) => setTempValues((prev) => ({ ...prev, rpm: e.target.value.replace(/[^0-9]/g, "") }))}
+                    placeholder="—"
+                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
                 </div>
                 <Button size="sm" disabled={savingTemp} onClick={salvarTemperaturas} className="w-full">
                   {savingTemp && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
