@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { StatusBadge } from '@/components/StatusBadge';
 import { MarcaBadge } from '@/components/MarcaBadge';
 import { cn, formatKg, parseHoras } from '@/lib/utils';
+import { parseObsItems } from '@/lib/obsUtils';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ interface Ordem {
   motivo_reprovacao: string | null;
   data_reprovacao: string | null;
   tipo_op: string | null;
+  temperaturas: Record<string, number | null> | null;
 }
 
 interface RegistroDiario {
@@ -352,7 +354,17 @@ function OrdemCard({ ordem }: { ordem: Ordem }) {
             </dl>
 
             {/* Obs */}
-            {ordem.obs            && <ObsRow label="Obs. geral"  text={ordem.obs} />}
+            {ordem.obs && (() => {
+              const itensObs = parseObsItems(ordem.obs);
+              return itensObs
+                ? (
+                  <p className="text-xs">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Adições p/ mistura: </span>
+                    <span className="text-foreground font-mono">{itensObs.map((i) => `${i.qty}× ${i.mp}`).join('  ·  ')}</span>
+                  </p>
+                )
+                : <ObsRow label="Obs. geral" text={ordem.obs} />;
+            })()}
             {ordem.obs_linha      && <ObsRow label="Obs. linha"  text={ordem.obs_linha} />}
             {ordem.obs_laboratorio && <ObsRow label="Obs. lab"   text={ordem.obs_laboratorio} />}
 
@@ -362,6 +374,31 @@ function OrdemCard({ ordem }: { ordem: Ordem }) {
                 <span className="font-semibold">Reprovado:</span> {ordem.motivo_reprovacao}
               </div>
             )}
+
+            {ordem.temperaturas && (() => {
+              const t = ordem.temperaturas as Record<string, number | null>;
+              const zonas = ['zona1','zona2','zona3','zona9','zona10','zona12'] as const;
+              const temZona = zonas.some((z) => t[z] != null);
+              const temRpm = t.rpm != null;
+              if (!temZona && !temRpm) return null;
+              return (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1">Processo (linha)</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {zonas.filter((z) => t[z] != null).map((z) => (
+                      <span key={z} className="text-[11px] rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 px-1.5 py-0.5">
+                        Z{z.replace('zona','')}: <strong className="tabular-nums">{t[z]}°</strong>
+                      </span>
+                    ))}
+                    {temRpm && (
+                      <span className="text-[11px] rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 px-1.5 py-0.5">
+                        RPM: <strong className="tabular-nums">{t.rpm}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Divisor + detalhes sob demanda ── */}
             <div className="border-t border-black/5 dark:border-white/10 pt-2">
@@ -387,7 +424,7 @@ const FIELDS =
   'id, produto, lote, quantidade, quantidade_real, status, linha, balanca, ' +
   'formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, ' +
   'data_programacao, data_emissao, programacao_confirmada, criado_em, ' +
-  'motivo_reprovacao, data_reprovacao, tipo_op';
+  'motivo_reprovacao, data_reprovacao, tipo_op, temperaturas';
 
 // ── Página principal ─────────────────────────────────────────────────────────
 
