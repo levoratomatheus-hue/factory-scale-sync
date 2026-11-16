@@ -677,6 +677,38 @@ export default function PainelLiberacao() {
       return;
     }
 
+    // Baixa estoque (igual à liberação — quantidade planejada)
+    if (ordem.formula_id) {
+      try {
+        const faltantes = await verificarEstoqueOP(
+          ordem.formula_id,
+          ordem.quantidade,
+          (ordem as any).reaproveitamento_id ?? null
+        );
+        await baixarEstoqueOP(
+          ordem.id,
+          ordem.formula_id,
+          ordem.quantidade,
+          ordem.lote,
+          (perfil as any)?.nome ?? null,
+          (ordem as any).reaproveitamento_id ?? null
+        );
+        if (faltantes.length > 0) {
+          toast({
+            title: 'Estoque insuficiente — OP concluída mesmo assim',
+            description: faltantes.map(f => `${f.materia_prima}: faltam ${Math.abs(f.saldoApos).toFixed(1)} kg`).join(' · '),
+            variant: 'destructive',
+          });
+        }
+      } catch (err: any) {
+        toast({
+          title: 'Aviso: falha ao baixar estoque na conclusão',
+          description: err?.message,
+          variant: 'destructive',
+        });
+      }
+    }
+
     supabase.from("historico").insert({
       ordem_id: ordem.id,
       status_anterior: "aguardando_liberacao",
