@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ConsumoMP from './ConsumoMP';
 import ConsumoPigma from './ConsumoPigma';
+import NovoAcerto from '@/components/NovoAcerto';
 
 export default function ConsumoMPTabs({ perfilNome }: { perfilNome: string }) {
   return (
@@ -26,12 +27,25 @@ export default function ConsumoMPTabs({ perfilNome }: { perfilNome: string }) {
         >
           🌸 Pigma
         </TabsTrigger>
+        <TabsTrigger
+          value="acerto"
+          className="
+            h-10 px-6 text-base font-bold tracking-wide rounded-md transition-all
+            data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md
+            data-[state=inactive]:text-orange-500 data-[state=inactive]:hover:bg-orange-50
+          "
+        >
+          🔧 Novo Acerto
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="zancollor">
         <ConsumoMP perfilNome={perfilNome} />
       </TabsContent>
       <TabsContent value="pigma">
         <ConsumoPigma perfilNome={perfilNome} />
+      </TabsContent>
+      <TabsContent value="acerto">
+        <NovoAcerto perfilNome={perfilNome} />
       </TabsContent>
     </Tabs>
   );
