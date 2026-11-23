@@ -487,7 +487,6 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
       .single();
 
     if (error || !novaOrdem) {
-      setSaving(false);
       toast({ title: 'Erro ao salvar', description: error?.message, variant: 'destructive' });
       return;
     }
@@ -520,7 +519,6 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
         : Promise.resolve(),
     ]);
 
-    setSaving(false);
     toast({ title: 'Ordem criada com sucesso! Acesse Pré-Programação para datá-la.' });
     fetchLotesDisponiveis();
     form.reset({ lote: '', produto: '', quantidade: 0, marca: '' });
@@ -542,33 +540,48 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
   };
 
   const onSubmit = async (values: OrdemFormValues) => {
+    if (submittingRef.current) return;
     // OP sem baixa: não verifica estoque e pede confirmação antes de criar
     if (!controlaEstoque) {
       setValuesSemBaixa(values);
       setConfirmSemBaixaOpen(true);
       return;
     }
-    if (formulaId) {
-      try {
-        const faltantes = await verificarEstoqueOP(formulaId, values.quantidade);
-        if (faltantes.length > 0) {
-          setMpsFaltantes(faltantes);
-          setValuesParaForcar(values);
-          return; // não cria — abre o dialog
+    submittingRef.current = true;
+    setSaving(true);
+    try {
+      if (formulaId) {
+        try {
+          const faltantes = await verificarEstoqueOP(formulaId, values.quantidade);
+          if (faltantes.length > 0) {
+            setMpsFaltantes(faltantes);
+            setValuesParaForcar(values);
+            return; // não cria — abre o dialog (finally libera o guard)
+          }
+        } catch (e) {
+          console.error('Falha ao verificar estoque', e); // fail-open
         }
-      } catch (e) {
-        console.error('Falha ao verificar estoque', e); // fail-open
       }
+      await criarOrdem(values);
+    } finally {
+      submittingRef.current = false;
+      setSaving(false);
     }
-    await criarOrdem(values);
   };
 
   const confirmarSemBaixa = async () => {
-    if (!valuesSemBaixa) return;
+    if (!valuesSemBaixa || submittingRef.current) return;
+    submittingRef.current = true;
+    setSaving(true);
     setConfirmSemBaixaOpen(false);
     const v = valuesSemBaixa;
     setValuesSemBaixa(null);
-    await criarOrdem(v);
+    try {
+      await criarOrdem(v);
+    } finally {
+      submittingRef.current = false;
+      setSaving(false);
+    }
   };
 
   const forcarCriacao = async () => {
@@ -582,6 +595,7 @@ toast({ title: 'Lote não encontrado no cadastro', variant: 'destructive' });
       await criarOrdem(v);
     } finally {
       submittingRef.current = false;
+      setSaving(false);
     }
   };
 
