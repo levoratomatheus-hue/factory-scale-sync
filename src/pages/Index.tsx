@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, memo, ReactNode, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { supabase } from '@/integrations/supabase/client';
 import { LayoutDashboard, Scale, PlusCircle, History, FileUp, LogOut, Loader2, FlaskConical, Factory, ShieldCheck, CalendarDays, BarChart2, ChevronDown, Package, Briefcase, ClipboardList, Wrench, Settings, Home, Hammer, Sun, Moon, PauseCircle, Sheet, TestTube2, ShoppingCart, Recycle, Palette, Inbox, ArrowLeftRight, Search, Boxes } from 'lucide-react';
 import Login from './Login';
 
@@ -1546,6 +1547,20 @@ interface OperadorLayoutProps {
 
 function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayoutProps) {
   const { theme, toggle: toggleTheme } = useTheme();
+  const [view, setView] = useState<'painel' | 'reunioes'>('painel');
+  const [temReuniao, setTemReuniao] = useState(false);
+  useEffect(() => {
+    let ativo = true;
+    const checar = async () => {
+      const { count } = await (supabase as any)
+        .from('reunioes').select('id', { count: 'exact', head: true }).eq('status', 'aberta');
+      if (ativo) setTemReuniao((count ?? 0) > 0);
+    };
+    checar();
+    const t = setInterval(checar, 60000);
+    return () => { ativo = false; clearInterval(t); };
+  }, []);
+  useEffect(() => { if (!temReuniao && view === 'reunioes') setView('painel'); }, [temReuniao, view]);
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
@@ -1566,7 +1581,28 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
           </div>
         </SidebarHeader>
 
-        <SidebarContent />
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive={view === 'painel'} tooltip={titulo} onClick={() => setView('painel')} size="sm">
+                    {icon}
+                    <span>{titulo}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                {temReuniao && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton isActive={view === 'reunioes'} tooltip="Reuniões" onClick={() => setView('reunioes')} size="sm">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <span>Reuniões</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
         <SidebarFooter className="border-t">
           <SidebarMenu>
@@ -1591,7 +1627,13 @@ function OperadorLayout({ nome, titulo, icon, onLogout, children }: OperadorLayo
           <SidebarTrigger />
         </div>
         <main className="p-3 sm:p-6">
-          {children}
+          {view === 'painel' ? children : (
+            <ErrorBoundary>
+              <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+                <ReunioesOperador />
+              </Suspense>
+            </ErrorBoundary>
+          )}
         </main>
       </SidebarInset>
     </SidebarProvider>
