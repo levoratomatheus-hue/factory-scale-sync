@@ -22,14 +22,14 @@ export default function Login() {
       });
 
       if (error) {
-        const msg = error.message || error.name || JSON.stringify(error);
-        console.error('[Login] erro supabase:', error);
-        setErro(msg);
+        const raw = error.message || '';
+        const isCredentials = raw.toLowerCase().includes('invalid') || raw.toLowerCase().includes('credentials');
+        setErro(isCredentials
+          ? 'Email ou senha incorretos.'
+          : 'Serviço temporariamente indisponível. Tente novamente em alguns minutos.');
       }
     } catch (err: any) {
-      const msg = err?.message || err?.name || String(err) || 'Erro inesperado ao fazer login';
-      console.error('[Login] exceção:', err);
-      setErro(msg);
+      setErro('Serviço temporariamente indisponível. Tente novamente em alguns minutos.');
     } finally {
       setLoading(false);
     }
