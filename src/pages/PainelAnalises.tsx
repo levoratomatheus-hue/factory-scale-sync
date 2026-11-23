@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, memo, createContext, useContext } from "react";
 import { useAnalises, useParadasAnalises, useRegistrosDiariosAnalises } from "@/hooks/useOrdens";
-import { parseHoras } from "@/lib/utils";
+import { parseHoras, cn } from "@/lib/utils";
+import { OrdemCard, FIELDS as ORDEM_FIELDS } from '@/pages/ConsultaProducaoProduto';
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, TrendingUp, Gauge, Factory, BarChart2, CalendarRange, Clock, Search, X, XCircle as XCircleIcon, FileDown, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
@@ -402,6 +403,22 @@ export default function PainelAnalises() {
   );
 
   const ordensAnuaisIds = useMemo(() => new Set(ordensAnuais.map((o) => o.id)), [ordensAnuais]);
+
+  const [opsListaAberta, setOpsListaAberta] = useState(false);
+  const [opsDetalhadas, setOpsDetalhadas] = useState<any[]>([]);
+  const [loadingOpsLista, setLoadingOpsLista] = useState(false);
+  const idsPeriodo = useMemo(() => ordens.map((o: any) => o.id), [ordens]);
+
+  useEffect(() => {
+    if (!opsListaAberta || idsPeriodo.length === 0) { setOpsDetalhadas([]); return; }
+    setLoadingOpsLista(true);
+    (supabase as any)
+      .from('ordens')
+      .select(ORDEM_FIELDS)
+      .in('id', idsPeriodo)
+      .order('criado_em', { ascending: false })
+      .then(({ data }: any) => { setOpsDetalhadas(data ?? []); setLoadingOpsLista(false); });
+  }, [opsListaAberta, idsPeriodo]);
 
   // Version without class filter — used for "Por Classe" comparison section
   const ordensAnuaisNoClasse = useMemo(
@@ -1266,6 +1283,31 @@ export default function PainelAnalises() {
               <X size={12} />
             </button>
           </span>
+        </div>
+      )}
+
+      {materialFiltro && (
+        <div className="rounded-xl border bg-card mx-6 mb-2">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+            onClick={() => setOpsListaAberta((v) => !v)}
+          >
+            <span className="text-sm font-semibold">OPs do período ({ordens.length})</span>
+            <ChevronDown className={cn('h-4 w-4 transition-transform', opsListaAberta && 'rotate-180')} />
+          </button>
+          {opsListaAberta && (
+            <div className="px-3 pb-3 space-y-2">
+              {loadingOpsLista ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground px-1 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando OPs…
+                </div>
+              ) : opsDetalhadas.length === 0 ? (
+                <p className="text-sm text-muted-foreground px-1 py-2">Nenhuma OP no período.</p>
+              ) : (
+                opsDetalhadas.map((o) => <OrdemCard key={o.id} ordem={o} />)
+              )}
+            </div>
+          )}
         </div>
       )}
 

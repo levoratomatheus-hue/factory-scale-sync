@@ -9,7 +9,7 @@ import { parseObsItems } from '@/lib/obsUtils';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
-interface Ordem {
+export interface Ordem {
   id: string;
   produto: string;
   lote: string;
@@ -207,7 +207,7 @@ function DetalhesCard({ detalhes }: { detalhes: Detalhes }) {
 
 // ── Card de OP ───────────────────────────────────────────────────────────────
 
-function OrdemCard({ ordem }: { ordem: Ordem }) {
+export function OrdemCard({ ordem }: { ordem: Ordem }) {
   const [open, setOpen]             = useState(false);
   const [detalhes, setDetalhes]     = useState<Detalhes | null>(null);
   const [loadingDet, setLoadingDet] = useState(false);
@@ -420,7 +420,7 @@ function OrdemCard({ ordem }: { ordem: Ordem }) {
 
 // ── Campos de busca na tabela ordens ─────────────────────────────────────────
 
-const FIELDS =
+export const FIELDS =
   'id, produto, lote, quantidade, quantidade_real, status, linha, balanca, ' +
   'formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, ' +
   'data_programacao, data_emissao, programacao_confirmada, criado_em, ' +
