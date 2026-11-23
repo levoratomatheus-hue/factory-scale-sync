@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Search, X, Plus, Trash2, Wrench } from 'lucide-react';
 import { StatusBadge } from '@/components/StatusBadge';
 
-interface OrdemBusca { id: string; lote: string; produto: string; formula_id: string | null; status: string }
+interface OrdemBusca { id: string; lote: string; produto: string; formula_id: string | null; status: string; marca: string | null }
 interface MpSug { cod: string; nome: string; marca: 'ZC' | 'PG' }
 interface AcertoItem { cod: string; materia_prima: string; qty: number; marca: 'ZC' | 'PG' }
 
@@ -42,7 +42,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
     opDeb.current = setTimeout(async () => {
       const q = opBusca.trim();
       const { data } = await supabase.from('ordens')
-        .select('id, lote, produto, formula_id, status')
+        .select('id, lote, produto, formula_id, status, marca')
         .or(`lote.ilike.%${q}%,produto.ilike.%${q}%`)
         .order('criado_em', { ascending: false }).limit(15);
       setOpSug((data ?? []) as OrdemBusca[]); setShowOpSug(true);
@@ -55,18 +55,19 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
     if (matSel || matBusca.trim().length < 2) { setMatSug([]); setShowMatSug(false); return; }
     matDeb.current = setTimeout(async () => {
       const q = matBusca.trim();
-      const [zc, pg] = await Promise.all([
-        (supabase as any).from('estoque_mp').select('cod_tid, materia_prima').or(`materia_prima.ilike.%${q}%,cod_tid.ilike.%${q}%`).order('materia_prima').limit(10),
-        (supabase as any).from('estoque_mp_pg').select('cod_pg, materia_prima').or(`materia_prima.ilike.%${q}%,cod_pg.ilike.%${q}%`).order('materia_prima').limit(10),
-      ]);
-      const sug: MpSug[] = [
-        ...((zc.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_tid), nome: r.materia_prima, marca: 'ZC' as const })),
-        ...((pg.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_pg), nome: r.materia_prima, marca: 'PG' as const })),
-      ];
+      const ehPigma = op?.marca === 'Pigma';
+      let sug: MpSug[] = [];
+      if (ehPigma) {
+        const pg = await (supabase as any).from('estoque_mp_pg').select('cod_pg, materia_prima').or(`materia_prima.ilike.%${q}%,cod_pg.ilike.%${q}%`).order('materia_prima').limit(15);
+        sug = ((pg.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_pg), nome: r.materia_prima, marca: 'PG' as const }));
+      } else {
+        const zc = await (supabase as any).from('estoque_mp').select('cod_tid, materia_prima').or(`materia_prima.ilike.%${q}%,cod_tid.ilike.%${q}%`).order('materia_prima').limit(15);
+        sug = ((zc.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_tid), nome: r.materia_prima, marca: 'ZC' as const }));
+      }
       setMatSug(sug); setShowMatSug(true);
     }, 250);
     return () => { if (matDeb.current) clearTimeout(matDeb.current); };
-  }, [matBusca, matSel]);
+  }, [matBusca, matSel, op]);
 
   const adicionarItem = () => {
     if (!matSel) { toast({ title: 'Selecione o material', variant: 'destructive' }); return; }
@@ -164,7 +165,8 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
                     onClick={() => { setOp(o); setOpBusca(''); setShowOpSug(false); }}>
                     <span className="font-mono text-xs text-muted-foreground shrink-0">Lote {o.lote}</span>
                     <span className="flex-1 min-w-0 truncate">{o.produto}</span>
-                    <StatusBadge status={o.status} className="ml-auto shrink-0 text-[10px]" />
+                    {o.marca && <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${o.marca === 'Pigma' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{o.marca}</span>}
+                    <StatusBadge status={o.status} className="shrink-0 text-[10px]" />
                   </button>
                 ))}
               </div>
