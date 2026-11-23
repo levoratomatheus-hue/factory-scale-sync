@@ -109,7 +109,7 @@ export default function PainelLiberacao() {
   const fetchOrdens = async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao, reaproveitamento_id, eh_acerto, acerto_lote, acerto_formula_id")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao, reaproveitamento_id, eh_acerto, acerto_lote, acerto_formula_id, tamanho_batelada")
       .eq("status", "aguardando_liberacao")
       .order("posicao", { ascending: true, nullsFirst: false });
 
@@ -822,25 +822,30 @@ export default function PainelLiberacao() {
                   <MarcaBadge marca={ordem.marca} />
                 </div>
 
-                {ordem.eh_acerto && (
+                {ordem.eh_acerto && (() => {
+                  const nBat = ordem.tamanho_batelada ? Math.max(1, Math.round(ordem.quantidade / ordem.tamanho_batelada)) : 1;
+                  const its = acertoItens[ordem.id] ?? [];
+                  return (
                   <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 overflow-hidden">
-                    <div className="px-4 py-2 bg-red-100/60 dark:bg-red-900/30">
+                    <div className="px-4 py-2 bg-red-100/60 dark:bg-red-900/30 flex items-center justify-between">
                       <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">Materiais pesados (acerto)</p>
+                      <span className="text-xs font-semibold text-red-700 dark:text-red-400">{nBat} batelada{nBat !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="divide-y divide-red-100 dark:divide-red-800">
-                      {(acertoItens[ordem.id] ?? []).map((it, i) => (
+                      {its.map((it, i) => (
                         <div key={i} className="px-4 py-2 flex items-center justify-between gap-3 text-sm">
                           <span className="font-medium">{it.materia_prima}</span>
-                          <span className="font-semibold tabular-nums shrink-0">{formatKg(it.quantidade_kg)} kg</span>
+                          <span className="font-semibold tabular-nums shrink-0">{formatKg(it.quantidade_kg * nBat)} kg</span>
                         </div>
                       ))}
                       <div className="px-4 py-2 flex items-center justify-between gap-3 text-sm font-semibold bg-red-100/40 dark:bg-red-900/20">
                         <span>Total</span>
-                        <span className="tabular-nums">{formatKg((acertoItens[ordem.id] ?? []).reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg</span>
+                        <span className="tabular-nums">{formatKg(its.reduce((s, i) => s + (i.quantidade_kg || 0), 0) * nBat)} kg</span>
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Registros diários */}
                 {!ordem.eh_acerto && (regs.length > 0 ? (

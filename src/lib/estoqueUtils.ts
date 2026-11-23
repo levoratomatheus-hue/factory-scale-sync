@@ -211,6 +211,11 @@ export async function baixarEstoqueAcerto(
   acertoFormulaId: string | null,
   criadoPor?: string,
 ): Promise<void> {
+  const { data: ordemRow } = await (supabase as any)
+    .from('ordens').select('quantidade, tamanho_batelada').eq('id', ordemId).single();
+  const tb = Number(ordemRow?.tamanho_batelada) || 0;
+  const nBat = tb > 0 ? Math.max(1, Math.round(Number(ordemRow?.quantidade) / tb)) : 1;
+
   const { data: itensData } = await (supabase as any)
     .from('ordens_formula')
     .select('cod_mp, materia_prima, quantidade_kg')
@@ -219,7 +224,7 @@ export async function baixarEstoqueAcerto(
   const itens = (itensData ?? []) as { cod_mp: string | null; materia_prima: string; quantidade_kg: number }[];
   const mps = itens
     .filter((i) => i.cod_mp && Number(i.quantidade_kg) > 0)
-    .map((i) => ({ cod: String(i.cod_mp), materia_prima: i.materia_prima, qty: Number(i.quantidade_kg) }));
+    .map((i) => ({ cod: String(i.cod_mp), materia_prima: i.materia_prima, qty: Number(i.quantidade_kg) * nBat }));
   if (mps.length === 0) return;
 
   const refMap = await localizarEstoque(mps.map((m) => m.cod));
@@ -233,7 +238,7 @@ export async function baixarEstoqueAcerto(
 
   for (const { cod, materia_prima, qty } of mps) {
     const ref = refMap.get(cod);
-    if (!ref) continue; // MP sem cadastro -> ignora
+    if (!ref) continue;
     const novoSaldo = ref.saldo - qty;
     const row = { [ref.coluna]: cod, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora };
     if (ref.tabela === 'estoque_mp') updatesZC.push(row); else updatesPG.push(row);

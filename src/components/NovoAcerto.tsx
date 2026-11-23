@@ -30,6 +30,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
   const [itens, setItens] = useState<AcertoItem[]>([]);
   const [requerMistura, setRequerMistura] = useState(false);
   const [balanca, setBalanca] = useState('1');
+  const [bateladas, setBateladas] = useState('1');
   const [salvando, setSalvando] = useState(false);
   const salvandoRef = useRef(false);
 
@@ -86,7 +87,9 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
     setSalvando(true);
     try {
       const balNum = parseInt(balanca);
-      const totalKg = itens.reduce((s, i) => s + i.qty, 0);
+      const nBat = Math.max(1, parseInt(bateladas) || 1);
+      const somaBatelada = itens.reduce((s, i) => s + i.qty, 0);
+      const totalKg = somaBatelada * nBat;
       const hoje = new Date().toISOString().split('T')[0];
 
       const { data: ult } = await (supabase as any).from('ordens')
@@ -107,7 +110,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
         acerto_lote: op.lote,
         acerto_formula_id: op.formula_id,
         formula_id: null,
-        tamanho_batelada: null,
+        tamanho_batelada: somaBatelada,
         data_programacao: hoje,
       }).select('id').single();
 
@@ -126,7 +129,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
       }
 
       toast({ title: 'Ordem de acerto criada!', description: `Enviada para a balança ${balNum}.` });
-      setOp(null); setOpBusca(''); setItens([]); setRequerMistura(false); setMatSel(null); setMatBusca(''); setMatQty('');
+      setOp(null); setOpBusca(''); setItens([]); setRequerMistura(false); setBateladas('1'); setMatSel(null); setMatBusca(''); setMatQty('');
     } finally {
       salvandoRef.current = false;
       setSalvando(false);
@@ -232,11 +235,19 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
                   </div>
                 ))}
                 <div className="flex justify-between px-3 py-2 text-sm font-semibold bg-muted/40">
-                  <span>Total</span>
+                  <span>Por batelada</span>
                   <span className="tabular-nums">{formatKg(itens.reduce((s, i) => s + i.qty, 0))} kg</span>
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Nº de bateladas</Label>
+            <Input type="text" inputMode="numeric" value={bateladas}
+              onChange={(e) => setBateladas(e.target.value.replace(/[^0-9]/g, ''))}
+              className="w-32" />
+            <p className="text-xs text-muted-foreground">As quantidades dos materiais são por batelada. Total = soma × nº de bateladas.</p>
           </div>
 
           {/* Mistura + Balança */}
