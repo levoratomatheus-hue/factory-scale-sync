@@ -9,7 +9,7 @@ export function useOrdens(date?: string) {
   const instanceId = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const fetchOrdens = useCallback(async () => {
-    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, posicao_balanca, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
+    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, posicao_balanca, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa, eh_acerto").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -48,7 +48,7 @@ export function useOrdens(date?: string) {
     if (!ordem) return `Ordem ${ordemId} não encontrada no estado local`;
 
     const proximoStatus = ordem.requer_mistura === false
-      ? "aguardando_linha"
+      ? ((ordem as any).eh_acerto ? "aguardando_liberacao" : "aguardando_linha")
       : "aguardando_mistura";
 
     const { error } = await supabase
