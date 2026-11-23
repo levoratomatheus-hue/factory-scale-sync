@@ -15,16 +15,20 @@ export default function Login() {
     setLoading(true);
     setErro("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password: senha.trim(),
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: senha.trim(),
+      });
 
-    if (error) {
-      setErro(error.message);
+      if (error) {
+        setErro(error.message);
+      }
+    } catch (err: any) {
+      setErro(err?.message ?? 'Erro inesperado ao fazer login');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">

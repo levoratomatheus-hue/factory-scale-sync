@@ -21,12 +21,15 @@ export function useAuth() {
 
         setEmail(user.email ?? null);
 
-        const { data, error } = await supabase
+        const { data, error: perfilError } = await supabase
           .from('perfis')
           .select('id, nome, papel, balanca')
           .eq('id', user.id)
           .maybeSingle();
 
+        if (perfilError) {
+          console.error('[useAuth] erro ao buscar perfil:', perfilError.message);
+        }
         if (data) setPerfil(data as Perfil);
         setLoading(false);
       } catch {
