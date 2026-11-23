@@ -12,8 +12,8 @@ import { Loader2, Search, X, Plus, Trash2, Wrench } from 'lucide-react';
 import { StatusBadge } from '@/components/StatusBadge';
 
 interface OrdemBusca { id: string; lote: string; produto: string; formula_id: string | null; status: string }
-interface MpSug { cod: string; nome: string }
-interface AcertoItem { cod: string; materia_prima: string; qty: number }
+interface MpSug { cod: string; nome: string; marca: 'ZC' | 'PG' }
+interface AcertoItem { cod: string; materia_prima: string; qty: number; marca: 'ZC' | 'PG' }
 
 export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
   const [opBusca, setOpBusca] = useState('');
@@ -60,8 +60,8 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
         (supabase as any).from('estoque_mp_pg').select('cod_pg, materia_prima').or(`materia_prima.ilike.%${q}%,cod_pg.ilike.%${q}%`).order('materia_prima').limit(10),
       ]);
       const sug: MpSug[] = [
-        ...((zc.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_tid), nome: r.materia_prima })),
-        ...((pg.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_pg), nome: r.materia_prima })),
+        ...((zc.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_tid), nome: r.materia_prima, marca: 'ZC' as const })),
+        ...((pg.data ?? []) as any[]).map((r) => ({ cod: String(r.cod_pg), nome: r.materia_prima, marca: 'PG' as const })),
       ];
       setMatSug(sug); setShowMatSug(true);
     }, 250);
@@ -72,7 +72,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
     if (!matSel) { toast({ title: 'Selecione o material', variant: 'destructive' }); return; }
     const q = parseFloat(matQty.replace(',', '.'));
     if (!matQty || isNaN(q) || q <= 0) { toast({ title: 'Informe o kg', variant: 'destructive' }); return; }
-    setItens((prev) => [...prev, { cod: matSel.cod, materia_prima: matSel.nome, qty: q }]);
+    setItens((prev) => [...prev, { cod: matSel.cod, materia_prima: matSel.nome, qty: q, marca: matSel.marca }]);
     setMatSel(null); setMatBusca(''); setMatQty(''); setMatSug([]); setShowMatSug(false);
   };
 
@@ -115,7 +115,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
       }
 
       const { error: errItens } = await (supabase as any).from('ordens_formula').insert(
-        itens.map((it, idx) => ({ ordem_id: nova.id, sequencia: idx + 1, materia_prima: it.materia_prima, quantidade_kg: it.qty, cod_mp: it.cod }))
+        itens.map((it, idx) => ({ ordem_id: nova.id, sequencia: idx + 1, materia_prima: it.materia_prima, quantidade_kg: it.qty, cod_mp: it.cod, marca: it.marca }))
       );
 
       if (errItens) {
@@ -194,9 +194,10 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
               {showMatSug && matSug.length > 0 && (
                 <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
                   {matSug.map((m) => (
-                    <button key={m.cod} className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                    <button key={`${m.marca}-${m.cod}`} className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => { setMatSel(m); setMatBusca(''); setShowMatSug(false); }}>
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${m.marca === 'ZC' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{m.marca}</span>
                       <span className="font-mono text-xs text-muted-foreground shrink-0">{m.cod}</span>
                       <span className="flex-1 min-w-0 truncate">{m.nome}</span>
                     </button>
@@ -216,9 +217,10 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
               <div className="divide-y border rounded-md">
                 {itens.map((it, i) => (
                   <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                    <div className="min-w-0 truncate">
-                      <span className="font-medium">{it.materia_prima}</span>
-                      <span className="font-mono text-xs text-muted-foreground ml-2">{it.cod}</span>
+                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${it.marca === 'ZC' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{it.marca}</span>
+                      <span className="font-medium truncate">{it.materia_prima}</span>
+                      <span className="font-mono text-xs text-muted-foreground shrink-0">{it.cod}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-semibold tabular-nums">{formatKg(it.qty)} kg</span>
