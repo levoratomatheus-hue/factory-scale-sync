@@ -50,6 +50,7 @@ const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoe
 const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'));
 const ConsultaProducaoProduto       = lazy(() => import('./ConsultaProducaoProduto'));
 const ReunioesOperador              = lazy(() => import('./ReunioesOperador'));
+const GestaoReunioes                = lazy(() => import('./GestaoReunioes'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { AlertaRelatorioMP } from '@/components/AlertaRelatorioMP';
@@ -91,7 +92,8 @@ type TabGestorId =
   | 'estoque_mp'
   | 'estoque_mp_pg'
   | 'historico_mov_mp'
-  | 'conferencia_estoque';
+  | 'conferencia_estoque'
+  | 'reunioes_gestao';
 
 const gruposGestor = [
   {
@@ -153,6 +155,7 @@ const gruposGestor = [
       { id: 'programacao_balanca' as TabGestorId, label: 'Programação Balanças',  icon: CalendarDays },
       { id: 'criar'               as TabGestorId, label: 'Nova Ordem',            icon: PlusCircle },
       { id: 'historico'   as TabGestorId, label: 'Histórico',        icon: History },
+      { id: 'reunioes_gestao' as TabGestorId, label: 'Reuniões', icon: CalendarDays },
       { id: 'consulta_formula'          as TabGestorId, label: 'Consulta por Fórmula',  icon: ClipboardList },
       { id: 'consulta_producao_produto' as TabGestorId, label: 'Consulta por Produto',   icon: Search },
       { id: 'reunioes_operador'         as TabGestorId, label: 'Reuniões',               icon: CalendarDays },
@@ -1406,6 +1409,9 @@ export default function Index() {
               )}
               {activeTab === 'reunioes_operador' && (
                 <Suspense fallback={TAB_LOADING}><ReunioesOperador /></Suspense>
+              )}
+              {activeTab === 'reunioes_gestao' && (
+                <Suspense fallback={TAB_LOADING}><GestaoReunioes perfilNome={perfil.nome} /></Suspense>
               )}
               {mountedTabs.has('analises') && (
                 <KeepAlive active={activeTab === 'analises'}>
