@@ -90,6 +90,21 @@ export default function PainelLiberacao() {
   const [novoRegHoraFim, setNovoRegHoraFim] = useState("");
   const [novoRegItems, setNovoRegItems] = useState<Array<{ qty: string; peso: string }>>(() => [{ qty: "", peso: "" }, { qty: "", peso: "" }]);
   const [novoRegSaving, setNovoRegSaving] = useState(false);
+  const [acertoItens, setAcertoItens] = useState<Record<string, { materia_prima: string; quantidade_kg: number }[]>>({});
+  useEffect(() => {
+    const acertoIds = ordens.filter((o: any) => o.eh_acerto).map((o) => o.id);
+    if (acertoIds.length === 0) { setAcertoItens({}); return; }
+    (supabase as any)
+      .from('ordens_formula')
+      .select('ordem_id, materia_prima, quantidade_kg, sequencia')
+      .in('ordem_id', acertoIds)
+      .order('sequencia', { ascending: true })
+      .then(({ data }: any) => {
+        const map: Record<string, any[]> = {};
+        for (const r of (data ?? [])) { (map[r.ordem_id] ??= []).push(r); }
+        setAcertoItens(map);
+      });
+  }, [ordens]);
 
   const fetchOrdens = async () => {
     const { data } = await supabase
@@ -807,8 +822,28 @@ export default function PainelLiberacao() {
                   <MarcaBadge marca={ordem.marca} />
                 </div>
 
+                {ordem.eh_acerto && (
+                  <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 overflow-hidden">
+                    <div className="px-4 py-2 bg-red-100/60 dark:bg-red-900/30">
+                      <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">Materiais pesados (acerto)</p>
+                    </div>
+                    <div className="divide-y divide-red-100 dark:divide-red-800">
+                      {(acertoItens[ordem.id] ?? []).map((it, i) => (
+                        <div key={i} className="px-4 py-2 flex items-center justify-between gap-3 text-sm">
+                          <span className="font-medium">{it.materia_prima}</span>
+                          <span className="font-semibold tabular-nums shrink-0">{formatKg(it.quantidade_kg)} kg</span>
+                        </div>
+                      ))}
+                      <div className="px-4 py-2 flex items-center justify-between gap-3 text-sm font-semibold bg-red-100/40 dark:bg-red-900/20">
+                        <span>Total</span>
+                        <span className="tabular-nums">{formatKg((acertoItens[ordem.id] ?? []).reduce((s, i) => s + (i.quantidade_kg || 0), 0))} kg</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Registros diários */}
-                {regs.length > 0 ? (
+                {!ordem.eh_acerto && (regs.length > 0 ? (
                   <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 overflow-hidden">
                     <div className="px-4 py-2.5 bg-blue-100/60 dark:bg-blue-900/30 flex items-center justify-between">
                       <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
@@ -947,7 +982,7 @@ export default function PainelLiberacao() {
                       <Plus className="h-3.5 w-3.5" /> Adicionar Registro
                     </Button>
                   </>
-                )}
+                ))}
 
                 {/* Paradas associadas à OP */}
                 {(paradasPorOrdem[ordem.id] ?? []).length > 0 && (
@@ -984,7 +1019,7 @@ export default function PainelLiberacao() {
                 )}
 
                 {/* Campos inline para gestor preencher quando dados estão vazios */}
-                {!ordem.hora_inicio && !ordem.hora_fim && regs.length === 0 && !ordem.obs_linha && (
+                {!ordem.eh_acerto && !ordem.hora_inicio && !ordem.hora_fim && regs.length === 0 && !ordem.obs_linha && (
                   <div className="rounded-md border border-dashed border-orange-300 dark:border-orange-700 bg-orange-50/60 dark:bg-orange-900/10 p-3 space-y-3">
                     <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wide">
                       Dados de produção (opcional — preencha antes de liberar)
@@ -1051,6 +1086,7 @@ export default function PainelLiberacao() {
                 )}
 
                 {/* Quantidade real */}
+                {!ordem.eh_acerto && (
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium shrink-0">Quantidade Real (kg)</label>
                   <input
@@ -1068,6 +1104,7 @@ export default function PainelLiberacao() {
                     <span className="text-xs text-muted-foreground">calculado automaticamente</span>
                   )}
                 </div>
+                )}
 
                 {ordem.obs && (() => {
                   const items = parseObsItems(ordem.obs);
@@ -1095,6 +1132,7 @@ export default function PainelLiberacao() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-1 flex-wrap">
+                  {!ordem.eh_acerto && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1102,6 +1140,7 @@ export default function PainelLiberacao() {
                   >
                     <RotateCcw className="h-4 w-4 mr-1" /> Voltar para linha
                   </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
