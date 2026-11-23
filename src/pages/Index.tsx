@@ -48,6 +48,7 @@ const EstoqueMPPG                   = lazy(() => import('./EstoqueMPPG'));
 const HistoricoMovimentacoesMP      = lazy(() => import('./HistoricoMovimentacoesMP'));
 const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'));
 const ConsultaProducaoProduto       = lazy(() => import('./ConsultaProducaoProduto'));
+const ReunioesOperador              = lazy(() => import('./ReunioesOperador'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { AlertaRelatorioMP } from '@/components/AlertaRelatorioMP';
@@ -153,6 +154,7 @@ const gruposGestor = [
       { id: 'historico'   as TabGestorId, label: 'Histórico',        icon: History },
       { id: 'consulta_formula'          as TabGestorId, label: 'Consulta por Fórmula',  icon: ClipboardList },
       { id: 'consulta_producao_produto' as TabGestorId, label: 'Consulta por Produto',   icon: Search },
+      { id: 'reunioes_operador'         as TabGestorId, label: 'Reuniões',               icon: CalendarDays },
       { id: 'importar'                  as TabGestorId, label: 'Importar',               icon: FileUp },
       { id: 'importar_excel' as TabGestorId, label: 'Importar Excel Lab', icon: Sheet  },
     ],
@@ -1400,6 +1402,9 @@ export default function Index() {
               )}
               {activeTab === 'consulta_producao_produto' && (
                 <Suspense fallback={TAB_LOADING}><ConsultaProducaoProduto /></Suspense>
+              )}
+              {activeTab === 'reunioes_operador' && (
+                <Suspense fallback={TAB_LOADING}><ReunioesOperador /></Suspense>
               )}
               {mountedTabs.has('analises') && (
                 <KeepAlive active={activeTab === 'analises'}>
