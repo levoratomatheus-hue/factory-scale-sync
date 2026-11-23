@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { baixarEstoqueOP, verificarEstoqueOP } from "@/lib/estoqueUtils";
+import { baixarEstoqueOP, verificarEstoqueOP, baixarEstoqueAcerto } from "@/lib/estoqueUtils";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { parseObsLinhaItems, formatObsLinha, parseObsItems, formatObsLine } from "@/lib/obsUtils";
@@ -94,7 +94,7 @@ export default function PainelLiberacao() {
   const fetchOrdens = async () => {
     const { data } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao, reaproveitamento_id")
+      .select("id, produto, lote, quantidade, status, posicao, linha, balanca, data_programacao, marca, hora_inicio, hora_fim, obs_linha, obs, motivo_reprovacao, formula_id, data_reprovacao, reaproveitamento_id, eh_acerto, acerto_lote, acerto_formula_id")
       .eq("status", "aguardando_liberacao")
       .order("posicao", { ascending: true, nullsFirst: false });
 
@@ -512,6 +512,17 @@ export default function PainelLiberacao() {
           variant: 'destructive',
         });
       }
+    } else if ((ordem as any).eh_acerto) {
+      try {
+        await baixarEstoqueAcerto(
+          ordem.id,
+          ordem.lote,
+          (ordem as any).acerto_formula_id ?? null,
+          (perfil as any)?.nome ?? null,
+        );
+      } catch (err: any) {
+        toast({ title: 'Aviso: falha ao baixar estoque do acerto', description: err?.message, variant: 'destructive' });
+      }
     }
 
     setOrdens((prev) => prev.filter((o) => o.id !== ordem.id));
@@ -706,6 +717,17 @@ export default function PainelLiberacao() {
           description: err?.message,
           variant: 'destructive',
         });
+      }
+    } else if ((ordem as any).eh_acerto) {
+      try {
+        await baixarEstoqueAcerto(
+          ordem.id,
+          ordem.lote,
+          (ordem as any).acerto_formula_id ?? null,
+          (perfil as any)?.nome ?? null,
+        );
+      } catch (err: any) {
+        toast({ title: 'Aviso: falha ao baixar estoque do acerto', description: err?.message, variant: 'destructive' });
       }
     }
 

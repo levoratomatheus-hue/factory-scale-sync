@@ -204,6 +204,62 @@ export async function baixarEstoqueOP(
   await Promise.all(ops);
 }
 
+// ── Baixar estoque de uma ORDEM DE ACERTO (itens custom em ordens_formula) ──
+export async function baixarEstoqueAcerto(
+  ordemId: string,
+  lote: string,
+  acertoFormulaId: string | null,
+  criadoPor?: string,
+): Promise<void> {
+  const { data: itensData } = await (supabase as any)
+    .from('ordens_formula')
+    .select('cod_mp, materia_prima, quantidade_kg')
+    .eq('ordem_id', ordemId);
+
+  const itens = (itensData ?? []) as { cod_mp: string | null; materia_prima: string; quantidade_kg: number }[];
+  const mps = itens
+    .filter((i) => i.cod_mp && Number(i.quantidade_kg) > 0)
+    .map((i) => ({ cod: String(i.cod_mp), materia_prima: i.materia_prima, qty: Number(i.quantidade_kg) }));
+  if (mps.length === 0) return;
+
+  const refMap = await localizarEstoque(mps.map((m) => m.cod));
+  const agora = new Date().toISOString();
+  const hoje = agora.split('T')[0];
+
+  const updatesZC: any[] = [];
+  const updatesPG: any[] = [];
+  const movimentacoes: any[] = [];
+  const consumos: any[] = [];
+
+  for (const { cod, materia_prima, qty } of mps) {
+    const ref = refMap.get(cod);
+    if (!ref) continue; // MP sem cadastro -> ignora
+    const novoSaldo = ref.saldo - qty;
+    const row = { [ref.coluna]: cod, materia_prima, saldo_kg: novoSaldo, atualizado_em: agora };
+    if (ref.tabela === 'estoque_mp') updatesZC.push(row); else updatesPG.push(row);
+    movimentacoes.push({
+      cod_tid: cod, materia_prima, tipo: 'saida',
+      quantidade_kg: -qty, saldo_apos: novoSaldo,
+      ordem_id: ordemId, ordem_lote: lote,
+      observacao: `Acerto — OP Lote ${lote}`,
+      criado_por: criadoPor ?? null,
+    });
+    consumos.push({
+      cod_tid: cod, materia_prima, quantidade_kg: qty,
+      data_retirada: hoje, observacao: `Acerto — OP Lote ${lote}`,
+      retirado_por: criadoPor ?? null, setor: 'producao',
+      eh_acerto: true, acerto_lote: lote, acerto_formula_id: acertoFormulaId,
+    });
+  }
+
+  const ops: Promise<any>[] = [];
+  if (updatesZC.length) ops.push((supabase as any).from('estoque_mp').upsert(updatesZC, { onConflict: 'cod_tid' }));
+  if (updatesPG.length) ops.push((supabase as any).from('estoque_mp_pg').upsert(updatesPG, { onConflict: 'cod_pg' }));
+  if (movimentacoes.length) ops.push((supabase as any).from('estoque_movimentacoes').insert(movimentacoes));
+  if (consumos.length) ops.push((supabase as any).from('consumo_mp').insert(consumos));
+  await Promise.all(ops);
+}
+
 // ── Ajustar estoque ───────────────────────────────────────────────────────────
 
 export async function ajustarEstoqueOP(
