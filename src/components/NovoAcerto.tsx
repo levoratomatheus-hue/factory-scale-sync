@@ -183,7 +183,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
                   onChange={(e) => { if (matSel) setMatSel(null); setMatBusca(e.target.value); }}
                   onFocus={() => { if (matBusca.length >= 2 && !matSel) setShowMatSug(true); }}
                   onBlur={() => setTimeout(() => setShowMatSug(false), 150)}
-                  className="pl-8 pr-8" />
+                  className={`pl-8 pr-8 ${matSel?.marca === 'PG' ? 'text-red-600 font-medium' : ''}`} />
                 {(matBusca || matSel) && (
                   <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     onClick={() => { setMatBusca(''); setMatSel(null); setMatSug([]); setShowMatSug(false); }}>
@@ -194,12 +194,12 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
               {showMatSug && matSug.length > 0 && (
                 <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
                   {matSug.map((m) => (
-                    <button key={`${m.marca}-${m.cod}`} className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                    <button key={m.cod} className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors ${m.marca === 'PG' ? 'text-red-600' : ''}`}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => { setMatSel(m); setMatBusca(''); setShowMatSug(false); }}>
-                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${m.marca === 'ZC' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{m.marca}</span>
-                      <span className="font-mono text-xs text-muted-foreground shrink-0">{m.cod}</span>
+                      <span className={`font-mono text-xs shrink-0 ${m.marca === 'PG' ? 'text-red-500' : 'text-muted-foreground'}`}>{m.cod}</span>
                       <span className="flex-1 min-w-0 truncate">{m.nome}</span>
+                      {m.marca === 'PG' && <span className="ml-auto shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">PG</span>}
                     </button>
                   ))}
                 </div>
@@ -217,10 +217,10 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
               <div className="divide-y border rounded-md">
                 {itens.map((it, i) => (
                   <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                    <div className="flex items-center gap-1.5 min-w-0 truncate">
-                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${it.marca === 'ZC' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{it.marca}</span>
-                      <span className="font-medium truncate">{it.materia_prima}</span>
-                      <span className="font-mono text-xs text-muted-foreground shrink-0">{it.cod}</span>
+                    <div className="min-w-0 truncate">
+                      <span className={`font-medium ${it.marca === 'PG' ? 'text-red-600' : ''}`}>{it.materia_prima}</span>
+                      <span className={`font-mono text-xs ml-2 ${it.marca === 'PG' ? 'text-red-500' : 'text-muted-foreground'}`}>{it.cod}</span>
+                      {it.marca === 'PG' && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">PG</span>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-semibold tabular-nums">{formatKg(it.qty)} kg</span>
