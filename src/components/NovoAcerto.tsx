@@ -116,7 +116,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
       }
 
       const { error: errItens } = await (supabase as any).from('ordens_formula').insert(
-        itens.map((it, idx) => ({ ordem_id: nova.id, sequencia: idx + 1, materia_prima: it.materia_prima, quantidade_kg: it.qty, cod_mp: it.cod, marca: it.marca }))
+        itens.map((it, idx) => ({ ordem_id: nova.id, sequencia: idx + 1, materia_prima: it.materia_prima, quantidade_kg: it.qty, cod_mp: it.cod }))
       );
 
       if (errItens) {
