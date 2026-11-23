@@ -22,10 +22,14 @@ export default function Login() {
       });
 
       if (error) {
-        setErro(error.message);
+        const msg = error.message || error.name || JSON.stringify(error);
+        console.error('[Login] erro supabase:', error);
+        setErro(msg);
       }
     } catch (err: any) {
-      setErro(err?.message ?? 'Erro inesperado ao fazer login');
+      const msg = err?.message || err?.name || String(err) || 'Erro inesperado ao fazer login';
+      console.error('[Login] exceção:', err);
+      setErro(msg);
     } finally {
       setLoading(false);
     }
