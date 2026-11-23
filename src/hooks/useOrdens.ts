@@ -112,6 +112,7 @@ export function useHistorico(dataInicio?: string, dataFim?: string) {
       .from("ordens")
       .select("id, lote, produto, quantidade, hora_inicio, hora_fim, quantidade_real, linha, balanca, data_programacao, status, marca, data_conclusao, formula_id, obs, obs_laboratorio, obs_linha, motivo_reprovacao, data_reprovacao, temperaturas, conclusao_direta")
       .eq("status", "concluido")
+      .neq("eh_acerto", true)
       .order("data_conclusao", { ascending: false })
       .limit(500);
 
@@ -160,6 +161,7 @@ export function useAnalises(dataInicio: string, dataFim: string) {
         .from("ordens")
         .select("id, quantidade, quantidade_real, conclusao_direta, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
         .eq("status", "concluido")
+        .neq("eh_acerto", true)
         .eq("conclusao_direta", false)
         .gte("data_programacao", dataInicio)
         .lte("data_programacao", dataFim)
@@ -177,6 +179,7 @@ export function useAnalises(dataInicio: string, dataFim: string) {
         .from("ordens")
         .select("id, quantidade, quantidade_real, conclusao_direta, hora_inicio, hora_fim, linha, data_programacao, formula_id, produto")
         .eq("status", "concluido")
+        .neq("eh_acerto", true)
         .eq("conclusao_direta", true)
         .gte("data_conclusao", dataInicio)
         .lte("data_conclusao", `${dataFim}T23:59:59.999`)

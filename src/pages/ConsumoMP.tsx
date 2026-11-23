@@ -312,6 +312,7 @@ export default function ConsumoMP({ perfilNome }: Props) {
         .from('ordens')
         .select('id, lote, produto, formula_id, status, quantidade')
         .neq('status', 'concluido')
+        .neq('eh_acerto', true)
         .or(`lote.ilike.%${acertoLoteBusca}%,produto.ilike.%${acertoLoteBusca}%`)
         .order('criado_em', { ascending: false })
         .limit(15);

@@ -43,6 +43,7 @@ export default function NovoAcerto({ perfilNome }: { perfilNome: string }) {
       const q = opBusca.trim();
       const { data } = await supabase.from('ordens')
         .select('id, lote, produto, formula_id, status, marca')
+        .neq('eh_acerto', true)
         .or(`lote.ilike.%${q}%,produto.ilike.%${q}%`)
         .order('criado_em', { ascending: false }).limit(15);
       setOpSug((data ?? []) as OrdemBusca[]); setShowOpSug(true);

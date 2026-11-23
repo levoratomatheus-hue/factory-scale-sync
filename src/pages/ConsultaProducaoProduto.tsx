@@ -466,6 +466,7 @@ export default function ConsultaProducaoProduto() {
     const { data, error } = await (supabase as any)
       .from('ordens')
       .select(FIELDS)
+      .neq('eh_acerto', true)
       .ilike('produto', `%${q}%`)
       .order('criado_em', { ascending: false })
       .limit(200);
@@ -488,6 +489,7 @@ export default function ConsultaProducaoProduto() {
       const { data } = await (supabase as any)
         .from('ordens')
         .select('produto')
+        .neq('eh_acerto', true)
         .ilike('produto', `%${v.trim()}%`)
         .order('produto')
         .limit(80); // busca mais do que mostra para deduplicar
