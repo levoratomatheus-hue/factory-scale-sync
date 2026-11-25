@@ -51,6 +51,7 @@ const ConferenciaEstoque            = lazy(() => import('./ConferenciaEstoque'))
 const ConsultaProducaoProduto       = lazy(() => import('./ConsultaProducaoProduto'));
 const ReunioesOperador              = lazy(() => import('./ReunioesOperador'));
 const GestaoReunioes                = lazy(() => import('./GestaoReunioes'));
+const GestaoRNC                     = lazy(() => import('./GestaoRNC'));
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { AlertaRelatorioMP } from '@/components/AlertaRelatorioMP';
@@ -93,7 +94,8 @@ type TabGestorId =
   | 'estoque_mp_pg'
   | 'historico_mov_mp'
   | 'conferencia_estoque'
-  | 'reunioes_gestao';
+  | 'reunioes_gestao'
+  | 'rnc';
 
 const gruposGestor = [
   {
@@ -133,6 +135,7 @@ const gruposGestor = [
     icon: ShieldCheck,
     items: [
       { id: 'liberacao' as TabGestorId, label: 'Liberação', icon: ShieldCheck },
+      { id: 'rnc' as TabGestorId, label: 'Reclamações (RNC)', icon: ClipboardList },
     ],
   },
   {
@@ -1412,6 +1415,9 @@ export default function Index() {
               )}
               {activeTab === 'reunioes_gestao' && (
                 <Suspense fallback={TAB_LOADING}><GestaoReunioes perfilNome={perfil.nome} /></Suspense>
+              )}
+              {activeTab === 'rnc' && (
+                <Suspense fallback={TAB_LOADING}><GestaoRNC perfilNome={perfil.nome} /></Suspense>
               )}
               {mountedTabs.has('analises') && (
                 <KeepAlive active={activeTab === 'analises'}>
