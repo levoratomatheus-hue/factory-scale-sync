@@ -5,7 +5,7 @@ import { parseObsItems, formatObsLine } from "@/lib/obsUtils";
 import { useFormula } from "@/hooks/useFormula";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CheckCircle2, Eye, FlaskConical, Loader2, PauseCircle, Play, Printer, RefreshCw, Scale } from "lucide-react";
+import { CheckCircle2, Eye, Factory, FlaskConical, Loader2, PauseCircle, Play, Printer, RefreshCw, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -308,6 +308,27 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
     await fetchOrdens();
   };
 
+  const liberarParaLinha = async (ordem: any) => {
+    if (!ordem.linha) {
+      toast({ title: "OP sem linha definida", description: "Defina a linha na programação antes de liberar.", variant: "destructive" });
+      return;
+    }
+    if (!window.confirm(`Liberar a OP ${ordem.lote} para a Linha ${ordem.linha} antes de terminar a pesagem?`)) return;
+    const { error } = await (supabase as any).from("ordens").update({ liberada_linha: true }).eq("id", ordem.id);
+    if (error) {
+      toast({ title: "Erro ao liberar para linha", description: error.message, variant: "destructive" });
+      return;
+    }
+    (supabase as any).from("historico").insert({
+      ordem_id: ordem.id,
+      status_anterior: ordem.status,
+      status_novo: ordem.status,
+      obs: `Liberada para a Linha ${ordem.linha} durante a pesagem`,
+    });
+    toast({ title: `OP liberada para a Linha ${ordem.linha}` });
+    await fetchOrdens();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -344,6 +365,18 @@ export default function PainelBalanca({ balanca }: PainelBalancaProps) {
                   <Eye className="h-3.5 w-3.5 mr-1" />
                   Ver
                 </Button>
+              )}
+              {isGestor && !emPesagem.requer_mistura && !(emPesagem as any).liberada_linha && (
+                <Button size="sm" variant="outline" onClick={() => liberarParaLinha(emPesagem)}>
+                  <Factory className="h-3.5 w-3.5 mr-1" />
+                  Liberar p/ linha
+                </Button>
+              )}
+              {(emPesagem as any).liberada_linha && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-semibold">
+                  <Factory className="h-3 w-3" />
+                  Liberada p/ Linha {emPesagem.linha}
+                </span>
               )}
               <Button
                 size="sm"

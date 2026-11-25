@@ -109,7 +109,12 @@ const OrdemFilaCard = memo(function OrdemFilaCard({
         {index + 1}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate">{ordem.produto}</div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm font-medium truncate">{ordem.produto}</span>
+          {aindaEmPesagem(ordem) && (
+            <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap">Em pesagem</span>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
           Lote {ordem.lote} · {formatKg(ordem.quantidade)} kg
           {ordem.tamanho_batelada > 0 && (
@@ -132,6 +137,11 @@ const OrdemFilaCard = memo(function OrdemFilaCard({
     </div>
   );
 });
+
+// OP liberada pelo gestor que ainda está na balança
+const aindaEmPesagem = (o: any) => o?.status === "pendente" || o?.status === "em_pesagem";
+// OP que a linha está produzindo (normal ou ainda em pesagem)
+const isEmLinha = (o: any) => o?.status === "em_linha" || (o?.linha_iniciada && aindaEmPesagem(o));
 
 const MOTIVOS: Record<string, string> = {
   manutencao: "Manutenção",
@@ -198,8 +208,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const [savingParada, setSavingParada] = useState(false);
   const [paradasListOpen, setParadasListOpen] = useState(false);
 
-  const emLinha = useMemo(() => ordens.find((o) => o.status === "em_linha"), [ordens]);
-  const emAberto = useMemo(() => ordens.filter((o) => o.status === "aguardando_linha"), [ordens]);
+  const emLinha = useMemo(() => ordens.find((o) => isEmLinha(o)), [ordens]);
+  const emAberto = useMemo(() => ordens.filter((o) => !isEmLinha(o)), [ordens]);
 
   const { itens, loading: loadingFormula } = useFormula(
     emLinha?.formula_id ?? null,
@@ -231,14 +241,14 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   const fetchOrdens = useCallback(async () => {
     const { data: allData } = await supabase
       .from("ordens")
-      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim, temperaturas, obs_carga_extra")
+      .select("id, produto, lote, quantidade, quantidade_real, status, posicao, linha, formula_id, tamanho_batelada, obs, obs_laboratorio, marca, requer_mistura, data_programacao, hora_inicio, hora_fim, temperaturas, obs_carga_extra, liberada_linha, linha_iniciada")
       .eq("linha", linha)
-      .in("status", ["em_linha", "aguardando_linha"])
+      .or("status.in.(em_linha,aguardando_linha),and(liberada_linha.eq.true,status.in.(pendente,em_pesagem))")
       .order("data_programacao", { ascending: true })
       .order("posicao", { ascending: true, nullsFirst: false });
 
-    const emLinhaData = (allData ?? []).filter((o: any) => o.status === "em_linha");
-    const aguardandoData = (allData ?? []).filter((o: any) => o.status === "aguardando_linha");
+    const emLinhaData = (allData ?? []).filter((o: any) => isEmLinha(o));
+    const aguardandoData = (allData ?? []).filter((o: any) => !isEmLinha(o));
 
     const allIds = (allData ?? []).map((o: any) => o.id);
     const hasRegHoje = new Set<string>();
@@ -263,8 +273,8 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
 
     const combinadas = [...emLinhaFiltradas, ...(aguardandoData ?? [])];
     const ordenadas = [...combinadas].sort((a: any, b: any) => {
-      if (a.status === "em_linha" && b.status !== "em_linha") return -1;
-      if (b.status === "em_linha" && a.status !== "em_linha") return 1;
+      if (isEmLinha(a) && !isEmLinha(b)) return -1;
+      if (isEmLinha(b) && !isEmLinha(a)) return 1;
       return 0;
     });
     setOrdens(ordenadas);
@@ -289,40 +299,43 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   }, [fetchOrdens]);
 
   const iniciarOrdem = useCallback(async (ordem: any) => {
-    const { error } = await supabase
-      .from("ordens")
-      .update({ status: "em_linha" })
-      .eq("id", ordem.id);
+    const pesando = aindaEmPesagem(ordem);
+    // Se ainda está na balança, só marca que a linha iniciou (a OP continua em pesagem)
+    const payload: any = pesando ? { linha_iniciada: true } : { status: "em_linha" };
+    const { error } = await supabase.from("ordens").update(payload).eq("id", ordem.id);
 
     if (error) {
       toast({ title: "Erro ao iniciar ordem", description: error.message, variant: "destructive" });
       return;
     }
 
-    supabase.from("historico").insert({
-      ordem_id: ordem.id,
-      status_anterior: "aguardando_linha",
-      status_novo: "em_linha",
-    });
+    if (!pesando) {
+      supabase.from("historico").insert({
+        ordem_id: ordem.id,
+        status_anterior: "aguardando_linha",
+        status_novo: "em_linha",
+      });
+    }
 
-    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "em_linha" } : o));
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, ...payload } : o));
   }, []);
 
   const voltarInicioLinha = async (ordem: any) => {
-    const { error } = await supabase
-      .from("ordens")
-      .update({ status: "aguardando_linha" } as any)
-      .eq("id", ordem.id);
+    const pesando = aindaEmPesagem(ordem);
+    const payload: any = pesando ? { linha_iniciada: false } : { status: "aguardando_linha" };
+    const { error } = await supabase.from("ordens").update(payload).eq("id", ordem.id);
     if (error) {
       toast({ title: "Erro ao voltar", description: error.message, variant: "destructive" });
       return;
     }
-    supabase.from("historico").insert({
-      ordem_id: ordem.id,
-      status_anterior: "em_linha",
-      status_novo: "aguardando_linha",
-    });
-    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, status: "aguardando_linha" } : o));
+    if (!pesando) {
+      supabase.from("historico").insert({
+        ordem_id: ordem.id,
+        status_anterior: "em_linha",
+        status_novo: "aguardando_linha",
+      });
+    }
+    setOrdens((prev) => prev.map((o) => o.id === ordem.id ? { ...o, ...payload } : o));
     toast({ title: "OP voltou para a fila da linha" });
   };
 
@@ -420,6 +433,14 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
   };
 
   const concluirOrdem = async (ordemId: string) => {
+    if (emLinha && aindaEmPesagem(emLinha)) {
+      toast({
+        title: "A pesagem ainda não terminou",
+        description: "Use Salvar Dia. A OP só pode ser concluída depois que a balança concluir a pesagem.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!horaFim) {
       toast({ title: "Informe a hora de fim antes de concluir", variant: "destructive" });
       return;
@@ -548,6 +569,9 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
               <span className="text-sm font-semibold text-muted-foreground shrink-0">Linha {linha}</span>
               <span className="text-muted-foreground/40 shrink-0">·</span>
               <StatusBadge status="em_linha" />
+              {aindaEmPesagem(emLinha) && (
+                <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-semibold whitespace-nowrap">Em pesagem</span>
+              )}
             </div>
             <span className="text-sm text-muted-foreground shrink-0">Lote {emLinha.lote}</span>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -871,9 +895,10 @@ export default function PainelLinha({ linha }: PainelLinhaProps) {
                 <Button
                   className="bg-status-done hover:bg-status-done/90 text-primary-foreground w-full sm:w-auto min-h-[44px] sm:min-h-0 sm:h-8 text-sm"
                   onClick={() => setConfirmOpen(true)}
+                  disabled={aindaEmPesagem(emLinha)}
                 >
                   <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Concluir
+                  {aindaEmPesagem(emLinha) ? "Aguardando fim da pesagem" : "Concluir"}
                 </Button>
               </div>
             </div>

@@ -9,7 +9,7 @@ export function useOrdens(date?: string) {
   const instanceId = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const fetchOrdens = useCallback(async () => {
-    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, posicao_balanca, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa, eh_acerto").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
+    let query = supabase.from("ordens").select("id, produto, lote, quantidade, status, posicao, posicao_balanca, balanca, linha, obs, marca, requer_mistura, orientacoes, formula_id, tamanho_batelada, data_programacao, hora_inicio, hora_fim, obs_linha, motivo_reprovacao, data_reprovacao, quantidade_real, temperaturas, bateladas_feitas, obs_pausa, eh_acerto, liberada_linha, linha_iniciada").order("posicao", { ascending: true, nullsFirst: false }).limit(500);
 
     if (date) {
       query = query.eq("data_programacao", today);
@@ -47,13 +47,21 @@ export function useOrdens(date?: string) {
     const ordem = ordens.find((o) => o.id === ordemId);
     if (!ordem) return `Ordem ${ordemId} não encontrada no estado local`;
 
-    const proximoStatus = ordem.requer_mistura === false
+    // Lê as marcações direto do banco (a linha pode ter iniciado agora há pouco)
+    const { data: fresh } = await (supabase as any)
+      .from("ordens").select("liberada_linha, linha_iniciada").eq("id", ordemId).single();
+
+    let proximoStatus = ordem.requer_mistura === false
       ? ((ordem as any).eh_acerto ? "aguardando_liberacao" : "aguardando_linha")
       : "aguardando_mistura";
+    if (fresh?.liberada_linha) {
+      // Liberada antes: se a linha já iniciou, continua em linha; senão vai pra fila da linha
+      proximoStatus = fresh.linha_iniciada ? "em_linha" : "aguardando_linha";
+    }
 
     const { error } = await supabase
       .from("ordens")
-      .update({ status: proximoStatus })
+      .update({ status: proximoStatus, liberada_linha: false, linha_iniciada: false } as any)
       .eq("id", ordemId);
 
     if (error) return error.message;
