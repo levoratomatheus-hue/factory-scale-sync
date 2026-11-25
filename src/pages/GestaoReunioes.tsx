@@ -4,8 +4,7 @@ import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Plus, CalendarDays, ChevronDown, Lock, Unlock, Trash2, Printer, Users } from 'lucide-react';
+import { Loader2, Plus, CalendarDays, ChevronDown, Lock, Unlock, Trash2, Printer, Users, X } from 'lucide-react';
 
 interface Reuniao { id: string; titulo: string; pauta: string | null; data: string; status: string; criado_em: string; }
 interface Presenca { id: string; operador_nome: string; assinatura: string | null; assinou_em: string; }
@@ -15,7 +14,7 @@ export default function GestaoReunioes({ perfilNome }: { perfilNome: string }) {
   const [loading, setLoading] = useState(true);
   const [titulo, setTitulo] = useState('');
   const [data, setData] = useState(() => new Date().toISOString().split('T')[0]);
-  const [pauta, setPauta] = useState('');
+  const [assuntos, setAssuntos] = useState<{ texto: string; ok: boolean }[]>([{ texto: '', ok: false }]);
   const [criando, setCriando] = useState(false);
   const [expandId, setExpandId] = useState<string | null>(null);
   const [presencas, setPresencas] = useState<Record<string, Presenca[]>>({});
@@ -34,12 +33,17 @@ export default function GestaoReunioes({ perfilNome }: { perfilNome: string }) {
     if (!titulo.trim()) { toast({ title: 'Informe o título', variant: 'destructive' }); return; }
     setCriando(true);
     const { error } = await (supabase as any).from('reunioes').insert({
-      titulo: titulo.trim(), pauta: pauta.trim() || null, data, status: 'aberta', criado_por: perfilNome,
+      titulo: titulo.trim(),
+      pauta: assuntos
+        .filter((a) => a.texto.trim())
+        .map((a) => (a.ok ? '✔ ' : '') + a.texto.trim())
+        .join('\n') || null,
+      data, status: 'aberta', criado_por: perfilNome,
     });
     setCriando(false);
     if (error) { toast({ title: 'Erro ao criar', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Reunião criada e aberta para assinatura!' });
-    setTitulo(''); setPauta(''); setData(new Date().toISOString().split('T')[0]);
+    setTitulo(''); setAssuntos([{ texto: '', ok: false }]); setData(new Date().toISOString().split('T')[0]);
     fetchReunioes();
   };
 
@@ -83,8 +87,24 @@ export default function GestaoReunioes({ perfilNome }: { perfilNome: string }) {
     if (r.pauta) {
       doc.setFontSize(11); doc.text('Pauta:', 14, y); y += 5;
       doc.setFontSize(10);
-      const linhas = doc.splitTextToSize(r.pauta, 180);
-      doc.text(linhas, 14, y); y += linhas.length * 5 + 4;
+      const assuntosPDF = r.pauta.split('\n').filter(Boolean);
+      for (const assunto of assuntosPDF) {
+        if (y > 255) { doc.addPage(); y = 15; }
+        const marcado = assunto.startsWith('✔ ');
+        const texto = marcado ? assunto.slice(2) : assunto;
+        // quadradinho (com ✓ desenhado se marcado)
+        doc.setDrawColor(80);
+        doc.rect(14, y - 3.5, 4, 4);
+        if (marcado) {
+          doc.line(14.8, y - 1.5, 15.8, y - 0.3);
+          doc.line(15.8, y - 0.3, 17.4, y - 3);
+        }
+        // texto do assunto (quebra se for longo)
+        const linhas = doc.splitTextToSize(texto, 80);
+        doc.text(linhas, 20, y);
+        y += linhas.length * 5 + 2;
+      }
+      y += 2;
     }
     doc.setFontSize(11); doc.text(`Participantes (${lista.length}):`, 14, y); y += 7;
     doc.setFontSize(10);
@@ -118,7 +138,43 @@ export default function GestaoReunioes({ perfilNome }: { perfilNome: string }) {
         </div>
         <div className="space-y-1.5">
           <Label>Pauta / assuntos</Label>
-          <Textarea rows={4} value={pauta} onChange={(e) => setPauta(e.target.value)} placeholder="Um assunto por linha…" />
+          <div className="space-y-2">
+            {assuntos.map((a, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={a.ok}
+                  onChange={(e) => setAssuntos((prev) => prev.map((x, j) => j === i ? { ...x, ok: e.target.checked } : x))}
+                  className="h-5 w-5 accent-primary shrink-0 cursor-pointer"
+                />
+                <input
+                  value={a.texto}
+                  onChange={(e) => setAssuntos((prev) => prev.map((x, j) => j === i ? { ...x, texto: e.target.value } : x))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setAssuntos((prev) => [...prev.slice(0, i + 1), { texto: '', ok: false }, ...prev.slice(i + 1)]);
+                    }
+                  }}
+                  placeholder={`Assunto ${i + 1}`}
+                  className="flex-1 bg-transparent border-0 border-b border-input px-1 py-1.5 text-sm focus:outline-none focus:border-primary"
+                />
+                {assuntos.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setAssuntos((prev) => prev.filter((_, j) => j !== i))}
+                    className="text-muted-foreground hover:text-destructive shrink-0"
+                    title="Remover assunto"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setAssuntos((prev) => [...prev, { texto: '', ok: false }])}>
+            <Plus className="h-4 w-4 mr-1" /> Adicionar assunto
+          </Button>
         </div>
         <Button onClick={criar} disabled={criando}>
           {criando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
