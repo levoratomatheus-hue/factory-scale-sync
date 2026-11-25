@@ -474,8 +474,16 @@ const SortableCard = memo(function SortableCard({
             {/* Status */}
             <StatusBadge status={ordem.status} className="text-[10px] px-1.5 py-0" />
 
+            {/* Iniciada na linha — aparece assim que o operador salva o início */}
+            {(ordem.status === "em_linha" || (ordem as any).linha_iniciada) && (ordem as any).hora_inicio && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded px-1.5 py-0.5">
+                <Clock className="h-2.5 w-2.5 shrink-0" />
+                Iniciada às {String((ordem as any).hora_inicio).slice(0, 5)}
+              </span>
+            )}
+
             {/* Aguardando registro */}
-            {(!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura") && (
+            {!(ordem as any).hora_inicio && (!registros || registros.length === 0) && (ordem.status === "em_linha" || ordem.status === "aguardando_linha" || ordem.status === "em_pesagem" || ordem.status === "aguardando_mistura") && (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5">
                 <Clock className="h-2.5 w-2.5 shrink-0" />
                 aguardando registro
@@ -796,7 +804,7 @@ export default function PainelProgramacao() {
 
   const fetchOrdens = useCallback(async (dataSel: string, showLoading = true) => {
     if (showLoading) setLoading(true);
-    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, data_reprovacao, tipo_op";
+    const fields = "id, produto, lote, quantidade, quantidade_real, status, posicao, linha, balanca, formula_id, tamanho_batelada, obs, obs_linha, obs_laboratorio, marca, requer_mistura, data_programacao, data_emissao, programacao_confirmada, criado_em, motivo_reprovacao, data_reprovacao, tipo_op, hora_inicio, linha_iniciada";
 
     // Round-trip 1: OPs programadas + IDs de ordens com registros nesta data + OPs reprovadas nesta data (paralelo)
     const [{ data: programadas }, { data: regsHoje }, { data: reprovadas }] = await Promise.all([
